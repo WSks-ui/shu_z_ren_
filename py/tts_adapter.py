@@ -262,11 +262,9 @@ class GSVTTTSEngine(TTSEngineBase):
             return response.content
 
 
-<<<<<<< HEAD
 class VolcengineTTSEngine(TTSEngineBase):
     """火山引擎 Volcengine TTS 引擎"""
-    
-    # 默认音色配置
+
     DEFAULT_VOICE = "zh_female_vv_uranus_bigtts"
 
     def __init__(
@@ -278,8 +276,7 @@ class VolcengineTTSEngine(TTSEngineBase):
         self.app_id = app_id
         self.access_key = access_key
         self.resource_id = resource_id
-        
-        # 验证必要参数
+
         if not self.app_id or not self.access_key:
             raise ValueError("火山引擎TTS需要app_id和access_key参数")
 
@@ -318,7 +315,7 @@ class VolcengineTTSEngine(TTSEngineBase):
         }
 
         collected_audio = bytearray()
-        
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             async with client.stream("POST", url, headers=headers, json=payload) as response:
                 response.raise_for_status()
@@ -339,8 +336,6 @@ class VolcengineTTSEngine(TTSEngineBase):
         return bytes(collected_audio)
 
 
-=======
->>>>>>> b355e12ba0fea89a5e6bda58856669df1b807470
 class TTSAdapter:
     """
     TTS 适配器主类
@@ -355,11 +350,8 @@ class TTSAdapter:
         "dashscope": DashScopeTTSEngine,
         "gsv": GSVTTTSEngine,
         "gpt-sovits": GSVTTTSEngine,
-<<<<<<< HEAD
         "volcengine": VolcengineTTSEngine,
         "volcano": VolcengineTTSEngine,
-=======
->>>>>>> b355e12ba0fea89a5e6bda58856669df1b807470
     }
 
     def __init__(self, default_engine: str = "edge", **default_kwargs):
