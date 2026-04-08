@@ -979,6 +979,12 @@ const handleRemoteInstall = (data) => {
         this.updateGlobalShortcut();
       }, 1000); // 延迟 500ms 确保主进程完全 Ready
     });
+
+    // 加载教育数字人数据
+    if (this.educationSettings?.enabled) {
+      this.loadGrowthData();
+      this.loadCollaborationRecords();
+    }
   },
   beforeUnmount() {
     this.stopEdgeScroll();
