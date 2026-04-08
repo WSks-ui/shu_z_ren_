@@ -2107,4 +2107,100 @@ main();`,
     currentAffectionForm: { userName: '' },
     isForceScrollToBottom: false,
     activeAgentTab: 'settings',
+
+    // ==================== 教育数字人系统 ====================
+    educationSettings: {
+      enabled: true,
+      currentSkill: null,  // 当前激活的技能
+      showEducationPanel: true,  // 显示教育面板
+    },
+    // 教育技能列表
+    educationSkills: [
+      {
+        id: 'research-assistant',
+        name: '科研助手',
+        icon: 'fa-solid fa-flask',
+        description: '苏格拉底式引导实验设计，培养科研思维',
+        enabled: true,
+      },
+      {
+        id: 'literature-review',
+        name: '文献综述',
+        icon: 'fa-solid fa-book-open',
+        description: 'PRISMA 系统综述方法，多数据库协同检索',
+        enabled: true,
+      },
+      {
+        id: 'paper-writing',
+        name: '论文写作',
+        icon: 'fa-solid fa-pen-fancy',
+        description: '学术论文写作指导，支持多种引用格式',
+        enabled: true,
+      },
+      {
+        id: 'academic-tutoring',
+        name: '虚拟导师',
+        icon: 'fa-solid fa-graduation-cap',
+        description: '个性化学习支持，答疑解惑',
+        enabled: true,
+      }
+    ],
+    // 成长系统数据
+    growthSystem: {
+      level: 1,
+      exp: 0,
+      totalExp: 0,
+      achievements: [],
+      stats: {
+        papersReviewed: 0,      // 阅读文献数
+        papersWritten: 0,       // 撰写论文数
+        experimentsDesigned: 0, // 设计实验数
+        questionsAsked: 0,      // 提问数
+        learningHours: 0,       // 学习时长
+      }
+    },
+    // 等级经验配置
+    levelConfig: {
+      baseExp: 100,
+      multiplier: 1.5,
+      maxLevel: 50,
+    },
+    // 成就系统
+    achievementsList: [
+      { id: 'first_paper', name: '初出茅庐', description: '完成第一篇论文', icon: 'fa-solid fa-scroll', unlocked: false },
+      { id: 'review_10', name: '博闻强识', description: '阅读10篇文献', icon: 'fa-solid fa-book', unlocked: false },
+      { id: 'review_50', name: '学富五车', description: '阅读50篇文献', icon: 'fa-solid fa-books', unlocked: false },
+      { id: 'experiment_5', name: '实验达人', description: '设计5个实验', icon: 'fa-solid fa-vial', unlocked: false },
+      { id: 'level_10', name: '学者之路', description: '达到10级', icon: 'fa-solid fa-award', unlocked: false },
+      { id: 'level_25', name: '学术精英', description: '达到25级', icon: 'fa-solid fa-trophy', unlocked: false },
+      { id: 'hours_10', name: '勤奋好学', description: '累计学习10小时', icon: 'fa-solid fa-clock', unlocked: false },
+      { id: 'hours_100', name: '孜孜不倦', description: '累计学习100小时', icon: 'fa-solid fa-hourglass', unlocked: false },
+    ],
+    // 人机协作记录
+    collaborationRecords: {
+      papers: [],       // 论文写作记录
+      experiments: [],  // 实验设计记录
+      reviews: [],      // 文献综述记录
+      sessions: [],     // 学习会话记录
+    },
+    // 当前协作会话
+    currentCollaboration: {
+      type: null,       // 'paper' | 'experiment' | 'review' | 'tutoring'
+      title: '',
+      startTime: null,
+      content: '',
+      aiContributions: [],
+      humanContributions: [],
+    },
+    // 情绪状态
+    emotionState: {
+      current: 'neutral',  // neutral, happy, thinking, curious, encouraging
+      intensity: 0.5,
+      history: [],
+    },
+    // 教育面板显示状态
+    showEducationDialog: false,
+    educationActiveTab: 'skills',  // skills | growth | records
+    selectedEducationSkill: null,
+
 };

@@ -467,6 +467,12 @@ function updateElement(el, rawMarkdown, formatFn) {
             </el-icon>
             <template #title>{{ t('chat') }}</template>
           </el-menu-item>
+          <el-menu-item index="education" v-if="educationSettings.enabled">
+            <el-icon>
+              <i class="fa-solid fa-graduation-cap"></i>
+            </el-icon>
+            <template #title>教育数字人</template>
+          </el-menu-item>
           <el-menu-item index="model-config" id="model-config">
             <el-icon>
               <i class="fa-solid fa-hexagon-nodes"></i>
@@ -2407,6 +2413,258 @@ function updateElement(el, rawMarkdown, formatFn) {
             </div>
           </div>
         </el-dialog>
+
+        <!-- 教育数字人面板 -->
+        <div v-show="activeMenu === 'education'" class="page education-container">
+          <div class="education-layout">
+            <!-- 顶部标题栏 -->
+            <div class="education-header">
+              <h2><i class="fa-solid fa-graduation-cap"></i> 教育数字人</h2>
+              <div class="education-stats">
+                <el-tag type="success">Lv.{{ growthSystem.level }}</el-tag>
+                <el-progress
+                  :percentage="(growthSystem.exp / getExpForNextLevel()) * 100"
+                  :show-text="false"
+                  style="width: 100px; margin-left: 10px;">
+                </el-progress>
+                <span class="exp-text">{{ growthSystem.exp }}/{{ getExpForNextLevel() }} EXP</span>
+              </div>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="education-content">
+              <!-- 左侧：技能选择 -->
+              <div class="education-sidebar">
+                <h3><i class="fa-solid fa-wand-magic-sparkles"></i> 教育技能</h3>
+                <div class="skill-list">
+                  <div
+                    v-for="skill in educationSkills"
+                    :key="skill.id"
+                    class="skill-card"
+                    :class="{
+                      'active': educationSettings.currentSkill === skill.id,
+                      'disabled': !skill.enabled
+                    }"
+                    @click="switchEducationSkill(skill.id)">
+                    <div class="skill-icon">
+                      <i :class="skill.icon"></i>
+                    </div>
+                    <div class="skill-info">
+                      <h4>{{ skill.name }}</h4>
+                      <p>{{ skill.description }}</p>
+                    </div>
+                    <el-icon v-if="educationSettings.currentSkill === skill.id" class="check-icon">
+                      <i class="fa-solid fa-check"></i>
+                    </el-icon>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 右侧：功能区 -->
+              <div class="education-main">
+                <el-tabs v-model="educationActiveTab">
+                  <!-- 技能面板 -->
+                  <el-tab-pane label="技能面板" name="skills">
+                    <div v-if="selectedEducationSkill" class="skill-panel">
+                      <div class="skill-header">
+                        <i :class="selectedEducationSkill.icon" class="skill-header-icon"></i>
+                        <div>
+                          <h3>{{ selectedEducationSkill.name }}</h3>
+                          <p>{{ selectedEducationSkill.description }}</p>
+                        </div>
+                      </div>
+
+                      <!-- 技能说明 -->
+                      <div class="skill-guide">
+                        <el-alert
+                          title="使用提示"
+                          type="info"
+                          :closable="false"
+                          show-icon>
+                          <template v-if="selectedEducationSkill.id === 'research-assistant'">
+                            <p>我将通过苏格拉底式提问引导你设计实验方案。</p>
+                            <p>准备好你的研究问题，让我们开始探索吧！</p>
+                          </template>
+                          <template v-else-if="selectedEducationSkill.id === 'literature-review'">
+                            <p>我将帮助你进行系统性文献综述。</p>
+                            <p>告诉我你的研究主题，我会检索多个学术数据库。</p>
+                          </template>
+                          <template v-else-if="selectedEducationSkill.id === 'paper-writing'">
+                            <p>我将协助你撰写学术论文。</p>
+                            <p>支持 APA、GB/T 7714、IEEE 等引用格式。</p>
+                          </template>
+                          <template v-else-if="selectedEducationSkill.id === 'academic-tutoring'">
+                            <p>我是你的虚拟导师，随时为你答疑解惑。</p>
+                            <p>可以问我任何学习相关的问题！</p>
+                          </template>
+                        </el-alert>
+                      </div>
+
+                      <!-- 快速操作 -->
+                      <div class="quick-actions">
+                        <el-button type="primary" @click="activeMenu = 'home'; userInput = '你好，我想使用' + selectedEducationSkill.name + '功能'">
+                          <i class="fa-solid fa-play"></i> 开始对话
+                        </el-button>
+                        <el-button @click="showEducationDialog = true">
+                          <i class="fa-solid fa-history"></i> 查看记录
+                        </el-button>
+                      </div>
+                    </div>
+                    <div v-else class="no-skill-selected">
+                      <i class="fa-solid fa-hand-pointer"></i>
+                      <p>请从左侧选择一个技能开始</p>
+                    </div>
+                  </el-tab-pane>
+
+                  <!-- 成长系统 -->
+                  <el-tab-pane label="成长系统" name="growth">
+                    <div class="growth-panel">
+                      <!-- 等级展示 -->
+                      <div class="level-display">
+                        <div class="level-circle">
+                          <span class="level-number">{{ growthSystem.level }}</span>
+                          <span class="level-label">LEVEL</span>
+                        </div>
+                        <div class="level-info">
+                          <div class="level-progress">
+                            <el-progress
+                              :percentage="(growthSystem.exp / getExpForNextLevel()) * 100"
+                              :stroke-width="20"
+                              :format="() => growthSystem.exp + ' / ' + getExpForNextLevel() + ' EXP'">
+                            </el-progress>
+                          </div>
+                          <p class="total-exp">累计经验: {{ growthSystem.totalExp }}</p>
+                        </div>
+                      </div>
+
+                      <!-- 统计数据 -->
+                      <div class="stats-grid">
+                        <div class="stat-card">
+                          <i class="fa-solid fa-book"></i>
+                          <div class="stat-value">{{ growthSystem.stats.papersReviewed }}</div>
+                          <div class="stat-label">阅读文献</div>
+                        </div>
+                        <div class="stat-card">
+                          <i class="fa-solid fa-pen"></i>
+                          <div class="stat-value">{{ growthSystem.stats.papersWritten }}</div>
+                          <div class="stat-label">撰写论文</div>
+                        </div>
+                        <div class="stat-card">
+                          <i class="fa-solid fa-flask"></i>
+                          <div class="stat-value">{{ growthSystem.stats.experimentsDesigned }}</div>
+                          <div class="stat-label">设计实验</div>
+                        </div>
+                        <div class="stat-card">
+                          <i class="fa-solid fa-comments"></i>
+                          <div class="stat-value">{{ growthSystem.stats.questionsAsked }}</div>
+                          <div class="stat-label">提问数</div>
+                        </div>
+                      </div>
+
+                      <!-- 成就展示 -->
+                      <div class="achievements-section">
+                        <h3><i class="fa-solid fa-trophy"></i> 成就 ({{ growthSystem.achievements.length }}/{{ achievementsList.length }})</h3>
+                        <div class="achievements-grid">
+                          <div
+                            v-for="achievement in achievementsList"
+                            :key="achievement.id"
+                            class="achievement-item"
+                            :class="{ 'unlocked': achievement.unlocked }">
+                            <el-tooltip :content="achievement.description" placement="top">
+                              <div class="achievement-icon">
+                                <i :class="achievement.icon"></i>
+                              </div>
+                            </el-tooltip>
+                            <span class="achievement-name">{{ achievement.name }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </el-tab-pane>
+
+                  <!-- 协作记录 -->
+                  <el-tab-pane label="协作记录" name="records">
+                    <div class="records-panel">
+                      <el-tabs type="border-card">
+                        <el-tab-pane label="论文写作">
+                          <div v-if="collaborationRecords.papers.length === 0" class="empty-records">
+                            <i class="fa-solid fa-file-lines"></i>
+                            <p>暂无论文写作记录</p>
+                          </div>
+                          <div v-else class="records-list">
+                            <div v-for="(record, index) in collaborationRecords.papers" :key="index" class="record-item">
+                              <div class="record-header">
+                                <span class="record-title">{{ record.title || '未命名论文' }}</span>
+                                <span class="record-time">{{ formatDate(record.startTime) }}</span>
+                              </div>
+                              <div class="record-stats">
+                                <span><i class="fa-solid fa-robot"></i> AI贡献: {{ record.aiContributions.length }}</span>
+                                <span><i class="fa-solid fa-user"></i> 用户贡献: {{ record.humanContributions.length }}</span>
+                                <span><i class="fa-solid fa-clock"></i> {{ formatDuration(record.duration || 0) }}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </el-tab-pane>
+                        <el-tab-pane label="实验设计">
+                          <div v-if="collaborationRecords.experiments.length === 0" class="empty-records">
+                            <i class="fa-solid fa-vial"></i>
+                            <p>暂无实验设计记录</p>
+                          </div>
+                          <div v-else class="records-list">
+                            <div v-for="(record, index) in collaborationRecords.experiments" :key="index" class="record-item">
+                              <div class="record-header">
+                                <span class="record-title">{{ record.title || '未命名实验' }}</span>
+                                <span class="record-time">{{ formatDate(record.startTime) }}</span>
+                              </div>
+                              <div class="record-stats">
+                                <span><i class="fa-solid fa-robot"></i> AI贡献: {{ record.aiContributions.length }}</span>
+                                <span><i class="fa-solid fa-user"></i> 用户贡献: {{ record.humanContributions.length }}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </el-tab-pane>
+                        <el-tab-pane label="文献综述">
+                          <div v-if="collaborationRecords.reviews.length === 0" class="empty-records">
+                            <i class="fa-solid fa-book-open"></i>
+                            <p>暂无文献综述记录</p>
+                          </div>
+                          <div v-else class="records-list">
+                            <div v-for="(record, index) in collaborationRecords.reviews" :key="index" class="record-item">
+                              <div class="record-header">
+                                <span class="record-title">{{ record.title || '文献综述' }}</span>
+                                <span class="record-time">{{ formatDate(record.startTime) }}</span>
+                              </div>
+                              <div class="record-stats">
+                                <span><i class="fa-solid fa-file-alt"></i> 文献数: {{ record.aiContributions.filter(c => c.type === 'paper').length }}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </el-tab-pane>
+                        <el-tab-pane label="学习会话">
+                          <div v-if="collaborationRecords.sessions.length === 0" class="empty-records">
+                            <i class="fa-solid fa-comments"></i>
+                            <p>暂无学习会话记录</p>
+                          </div>
+                          <div v-else class="records-list">
+                            <div v-for="(record, index) in collaborationRecords.sessions" :key="index" class="record-item">
+                              <div class="record-header">
+                                <span class="record-title">学习会话 #{{ index + 1 }}</span>
+                                <span class="record-time">{{ formatDate(record.startTime) }}</span>
+                              </div>
+                              <div class="record-stats">
+                                <span><i class="fa-solid fa-clock"></i> {{ formatDuration(record.duration || 0) }}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </el-tab-pane>
+                      </el-tabs>
+                    </div>
+                  </el-tab-pane>
+                </el-tabs>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div v-show="activeMenu === 'role'" class="page agent-suite-container">
           <div class="suite-layout">

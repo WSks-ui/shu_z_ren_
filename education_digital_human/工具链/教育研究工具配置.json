@@ -1,7 +1,7 @@
 {
   "name": "教育研究工具链",
-  "version": "1.0.0",
-  "description": "教育数字人专用工具链配置",
+  "version": "2.0.0",
+  "description": "教育数字人专用工具链配置 - 增强版",
   "tools": {
     "webSearch": {
       "enabled": true,
@@ -16,7 +16,31 @@
     },
     "arxiv": {
       "enabled": true,
-      "comment": "检索学术论文预印本"
+      "comment": "检索学术论文预印本，适合计算机科学、物理等领域"
+    },
+    "semanticScholar": {
+      "enabled": true,
+      "comment": "Semantic Scholar 学术搜索，支持引用分析和作者信息，覆盖2亿+论文"
+    },
+    "crossref": {
+      "enabled": true,
+      "comment": "CrossRef 文献查询，最大的DOI注册机构，适合查找正式发表的论文"
+    },
+    "openalex": {
+      "enabled": true,
+      "comment": "OpenAlex 开放学图谱，包含2.5亿+文献，支持开放获取筛选"
+    },
+    "paperCitations": {
+      "enabled": true,
+      "comment": "获取论文引用信息，了解学术影响力"
+    },
+    "doiMetadata": {
+      "enabled": true,
+      "comment": "根据DOI获取文献详细元数据"
+    },
+    "researchTrends": {
+      "enabled": true,
+      "comment": "分析研究主题发展趋势，包括论文数量变化和增长率"
     },
     "code": {
       "enabled": true,
@@ -26,8 +50,8 @@
     "knowledgeBase": {
       "enabled": true,
       "when": "after_thinking",
-      "top_n": 3,
-      "comment": "使用教育研究方法知识库"
+      "top_n": 5,
+      "comment": "使用教育研究方法、学术写作规范等知识库"
     },
     "time": {
       "enabled": true,
@@ -49,7 +73,7 @@
     "enabled": true,
     "engine": "edgetts",
     "edgettsLanguage": "zh-CN",
-    "edgettsVoice": "XiaoxiaoNeural",
+    "edgettsVoice": "YunxiNeural",
     "edgettsRate": 1.0,
     "comment": "语音合成，便于听觉学习"
   },
@@ -58,5 +82,15 @@
     "engine": "webSpeech",
     "webSpeechLanguage": "zh-CN",
     "comment": "语音识别，支持语音提问"
+  },
+  "skillsSettings": {
+    "enabled": true,
+    "availableSkills": [
+      "research-assistant",
+      "literature-review",
+      "paper-writing",
+      "academic-tutoring"
+    ],
+    "comment": "教育技能模块"
   }
 }

@@ -10057,3 +10057,444 @@ code {
 :deep(.checkbox-no-label .el-checkbox__label) {
   display: none;
 }
+
+/* ==================== 教育数字人样式 ==================== */
+.education-container {
+  height: 100%;
+  overflow: hidden;
+}
+
+.education-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-color);
+}
+
+.education-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--el-bg-color);
+}
+
+.education-header h2 {
+  margin: 0;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.education-header h2 i {
+  color: var(--el-color-primary);
+}
+
+.education-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.exp-text {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-left: 8px;
+}
+
+.education-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.education-sidebar {
+  width: 280px;
+  border-right: 1px solid var(--border-color);
+  padding: 16px;
+  overflow-y: auto;
+  background: var(--el-bg-color);
+}
+
+.education-sidebar h3 {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skill-card {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--el-bg-color-page);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.skill-card:hover {
+  background: var(--el-color-primary-light-9);
+}
+
+.skill-card.active {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.skill-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.skill-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--el-color-primary-light-7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+}
+
+.skill-icon i {
+  font-size: 18px;
+  color: var(--el-color-primary);
+}
+
+.skill-info {
+  flex: 1;
+}
+
+.skill-info h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.skill-info p {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.check-icon {
+  color: var(--el-color-primary);
+}
+
+.education-main {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.skill-panel {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.skill-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.skill-header-icon {
+  font-size: 32px;
+  color: var(--el-color-primary);
+}
+
+.skill-header h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.skill-header p {
+  margin: 4px 0 0 0;
+  color: var(--el-text-color-secondary);
+}
+
+.skill-guide {
+  margin-bottom: 24px;
+}
+
+.skill-guide .el-alert p {
+  margin: 4px 0;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.no-skill-selected {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--el-text-color-secondary);
+}
+
+.no-skill-selected i {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.no-skill-selected p {
+  font-size: 16px;
+}
+
+/* 成长系统面板 */
+.growth-panel {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.level-display {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 24px;
+  background: linear-gradient(135deg, var(--el-color-primary-light-9) 0%, var(--el-bg-color) 100%);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.level-circle {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--el-color-primary) 0%, var(--el-color-primary-light-3) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.level-number {
+  font-size: 28px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.level-label {
+  font-size: 10px;
+  opacity: 0.8;
+  margin-top: 4px;
+}
+
+.level-info {
+  flex: 1;
+}
+
+.level-progress {
+  margin-bottom: 8px;
+}
+
+.total-exp {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  text-align: center;
+  padding: 16px;
+  background: var(--el-bg-color);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.stat-card i {
+  font-size: 24px;
+  color: var(--el-color-primary);
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.achievements-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.achievements-section h3 i {
+  color: #f1c40f;
+}
+
+.achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.achievement-item {
+  text-align: center;
+  padding: 12px;
+  background: var(--el-bg-color);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  opacity: 0.4;
+  transition: all 0.3s;
+}
+
+.achievement-item.unlocked {
+  opacity: 1;
+  border-color: #f1c40f;
+  background: linear-gradient(135deg, #fff9e6 0%, var(--el-bg-color) 100%);
+}
+
+.achievement-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--el-bg-color-page);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 8px;
+}
+
+.achievement-item.unlocked .achievement-icon {
+  background: linear-gradient(135deg, #f1c40f 0%, #f39c12 100%);
+}
+
+.achievement-icon i {
+  font-size: 16px;
+}
+
+.achievement-item.unlocked .achievement-icon i {
+  color: white;
+}
+
+.achievement-name {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+
+.achievement-item.unlocked .achievement-name {
+  color: var(--el-text-color-primary);
+  font-weight: 500;
+}
+
+/* 协作记录面板 */
+.records-panel {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.empty-records {
+  text-align: center;
+  padding: 40px;
+  color: var(--el-text-color-secondary);
+}
+
+.empty-records i {
+  font-size: 40px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.record-item {
+  padding: 16px;
+  background: var(--el-bg-color);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.record-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.record-title {
+  font-weight: 500;
+}
+
+.record-time {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.record-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.record-stats span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .education-content {
+    flex-direction: column;
+  }
+
+  .education-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    max-height: 200px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .level-display {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .achievements-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  }
+}
