@@ -1753,10 +1753,17 @@ let vue_methods = {
     // ==========================================
     // 1. 用户动作入口与调度函数（可直接替换）
     // ==========================================
-    async sendMessage(role = 'user') { 
+    async sendMessage(role = 'user') {
         // 基础校验
         if (!this.userInput.trim() && (!this.files || this.files.length === 0) && (!this.images || this.images.length === 0)) return;
         if (this.isTyping) return;
+
+        // 教育数字人：记录用户贡献
+        if (this.educationSettings?.enabled && this.currentCollaboration?.type) {
+          this.recordHumanContribution(this.userInput, 'text');
+          // 更新对话统计
+          this.growthSystem.stats.conversations++;
+        }
 
         // 处理 TTS/Read 中断
         if (this.readState.isPlaying && this.ttsSettings.enabled) { 
@@ -1911,6 +1918,18 @@ let vue_methods = {
             this.isTyping = false;
             this.isSending = false;
             this.abortController = null;
+
+            // 教育数字人：记录 AI 贡献
+            if (this.educationSettings?.enabled && this.currentCollaboration?.type) {
+              const lastMessage = this.messages[this.messages.length - 1];
+              if (lastMessage && lastMessage.role === 'assistant') {
+                this.recordAIContribution(lastMessage.content, 'text');
+                // 分析 AI 回复的情绪
+                const emotionResult = this.analyzeTextEmotion(lastMessage.content);
+                this.updateEmotionState(emotionResult.emotion, emotionResult.intensity);
+              }
+            }
+
             await this.autoSaveSettings();
             await this.saveConversations();
         }
@@ -16395,6 +16414,506 @@ closeTaskCenter() {
         showNotification(this.t('autoDisableTtsSettings'), 'warning');
       }
       this.autoSaveSettings();
+    },
+
+    // ==================== 教育数字人系统方法 ====================
+
+    // 切换教育技能
+    async switchEducationSkill(skillId) {
+      const skill = this.educationSkills.find(s => s.id === skillId);
+      if (skill && skill.enabled) {
+        // 如果有正在进行的会话，先结束
+        if (this.currentCollaboration.type) {
+          this.endCollaborationSession();
+        }
+
+        this.educationSettings.currentSkill = skillId;
+        this.selectedEducationSkill = skill;
+
+        // 记录技能使用
+        try {
+          await fetch('/api/education/skills/record_usage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skill_id: skillId })
+          });
+        } catch (e) {
+          console.log('Failed to record skill usage:', e);
+        }
+
+        // 开始新的协作会话
+        this.startCollaborationSession(skillId);
+        this.$message.success(`已切换到「${skill.name}」模式`);
+      }
+    },
+
+    // 开始协作会话
+    async startCollaborationSession(type) {
+      const typeMap = {
+        'research-assistant': 'experiment',
+        'literature-review': 'review',
+        'paper-writing': 'paper',
+        'academic-tutoring': 'tutoring'
+      };
+      const sessionType = typeMap[type] || type;
+      const sessionId = `${sessionType}_${Date.now()}`;
+
+      this.currentCollaboration = {
+        id: sessionId,
+        type: sessionType,
+        title: '',
+        startTime: new Date().toISOString(),
+        content: '',
+        aiContributions: [],
+        humanContributions: [],
+      };
+
+      // 通知后端创建新会话
+      try {
+        await fetch('/api/education/collaboration/start_session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_type: sessionType, session_id: sessionId })
+        });
+      } catch (e) {
+        console.log('Failed to start collaboration session:', e);
+      }
+    },
+
+    // 记录 AI 贡献
+    async recordAIContribution(content, type = 'text') {
+      if (this.currentCollaboration.type) {
+        const contribution = {
+          timestamp: new Date().toISOString(),
+          type: type,
+          content: content.substring(0, 500),
+        };
+        this.currentCollaboration.aiContributions.push(contribution);
+
+        // 通知后端
+        try {
+          await fetch('/api/education/collaboration/add_contribution', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: this.currentCollaboration.id,
+              session_type: this.currentCollaboration.type,
+              is_ai: true,
+              content: contribution.content,
+              contribution_type: type
+            })
+          });
+        } catch (e) {
+          console.log('Failed to record AI contribution:', e);
+        }
+      }
+    },
+
+    // 记录用户贡献
+    async recordHumanContribution(content, type = 'text') {
+      if (this.currentCollaboration.type) {
+        const contribution = {
+          timestamp: new Date().toISOString(),
+          type: type,
+          content: content.substring(0, 500),
+        };
+        this.currentCollaboration.humanContributions.push(contribution);
+
+        // 通知后端
+        try {
+          await fetch('/api/education/collaboration/add_contribution', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: this.currentCollaboration.id,
+              session_type: this.currentCollaboration.type,
+              is_ai: false,
+              content: contribution.content,
+              contribution_type: type
+            })
+          });
+        } catch (e) {
+          console.log('Failed to record human contribution:', e);
+        }
+      }
+    },
+
+    // 结束协作会话
+    async endCollaborationSession() {
+      if (this.currentCollaboration.type && this.currentCollaboration.startTime) {
+        const record = {
+          ...this.currentCollaboration,
+          endTime: new Date().toISOString(),
+          duration: Math.floor((new Date() - new Date(this.currentCollaboration.startTime)) / 1000 / 60),
+        };
+
+        // 通知后端结束会话
+        try {
+          await fetch('/api/education/collaboration/end_session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: this.currentCollaboration.id,
+              session_type: this.currentCollaboration.type,
+              summary: record.title || ''
+            })
+          });
+        } catch (e) {
+          console.log('Failed to end collaboration session:', e);
+        }
+
+        // 根据类型保存到不同列表并更新经验
+        switch (this.currentCollaboration.type) {
+          case 'paper':
+            this.collaborationRecords.papers.push(record);
+            this.growthSystem.stats.papersWritten++;
+            await this.addExp(50);
+            break;
+          case 'experiment':
+            this.collaborationRecords.experiments.push(record);
+            this.growthSystem.stats.experimentsDesigned++;
+            await this.addExp(30);
+            break;
+          case 'review':
+            this.collaborationRecords.reviews.push(record);
+            this.growthSystem.stats.papersRead++;
+            await this.addExp(20);
+            break;
+          case 'tutoring':
+            this.collaborationRecords.sessions.push(record);
+            this.growthSystem.stats.tutoringSessions++;
+            await this.addExp(10);
+            break;
+        }
+
+        // 保存到后端
+        await this.saveCollaborationRecords();
+        this.checkAchievements();
+
+        // 重置当前会话
+        this.currentCollaboration = {
+          id: null,
+          type: null,
+          title: '',
+          startTime: null,
+          content: '',
+          aiContributions: [],
+          humanContributions: [],
+        };
+      }
+    },
+
+    // 添加经验值
+    async addExp(amount) {
+      this.growthSystem.exp += amount;
+      this.growthSystem.totalExp += amount;
+
+      // 检查升级
+      while (this.growthSystem.exp >= this.getExpForNextLevel()) {
+        this.growthSystem.exp -= this.getExpForNextLevel();
+        this.growthSystem.level++;
+        this.$message.success(`恭喜升级！当前等级: ${this.growthSystem.level}`);
+
+        // 触发情绪变化
+        this.updateEmotionState('excited', 0.8);
+
+        if (this.growthSystem.level % 5 === 0) {
+          await this.saveGrowthData();
+        }
+      }
+
+      // 定期保存
+      if (this.growthSystem.totalExp % 100 < amount) {
+        await this.saveGrowthData();
+      }
+    },
+
+    // 获取下一级所需经验
+    getExpForNextLevel() {
+      return Math.floor(this.levelConfig.baseExp * Math.pow(this.levelConfig.multiplier, this.growthSystem.level - 1));
+    },
+
+    // 检查成就
+    checkAchievements() {
+      const stats = this.growthSystem.stats;
+
+      // 检查各项成就
+      if (stats.papersWritten >= 1 && !this.hasAchievement('first_paper')) {
+        this.unlockAchievement('first_paper');
+      }
+      if (stats.papersReviewed >= 10 && !this.hasAchievement('review_10')) {
+        this.unlockAchievement('review_10');
+      }
+      if (stats.papersReviewed >= 50 && !this.hasAchievement('review_50')) {
+        this.unlockAchievement('review_50');
+      }
+      if (stats.experimentsDesigned >= 5 && !this.hasAchievement('experiment_5')) {
+        this.unlockAchievement('experiment_5');
+      }
+      if (this.growthSystem.level >= 10 && !this.hasAchievement('level_10')) {
+        this.unlockAchievement('level_10');
+      }
+      if (this.growthSystem.level >= 25 && !this.hasAchievement('level_25')) {
+        this.unlockAchievement('level_25');
+      }
+    },
+
+    // 检查是否已获得成就
+    hasAchievement(achievementId) {
+      return this.growthSystem.achievements.includes(achievementId);
+    },
+
+    // 解锁成就
+    async unlockAchievement(achievementId) {
+      if (!this.hasAchievement(achievementId)) {
+        this.growthSystem.achievements.push(achievementId);
+        const achievement = this.achievementsList.find(a => a.id === achievementId);
+        if (achievement) {
+          achievement.unlocked = true;
+          this.$notify({
+            title: '成就解锁！',
+            message: `${achievement.name}: ${achievement.description}`,
+            type: 'success',
+            duration: 5000,
+          });
+
+          // 触发情绪变化
+          this.updateEmotionState('proud', 0.7);
+        }
+
+        // 通知后端
+        try {
+          await fetch('/api/education/achievements/unlock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ achievement_id: achievementId })
+          });
+        } catch (e) {
+          console.log('Failed to unlock achievement on server:', e);
+        }
+
+        await this.saveGrowthData();
+      }
+    },
+
+    // 更新情绪状态
+    updateEmotionState(emotion, intensity = 0.5) {
+      this.emotionState.current = emotion;
+      this.emotionState.intensity = Math.max(0, Math.min(1, intensity));
+      this.emotionState.history.push({
+        emotion: emotion,
+        intensity: intensity,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 限制历史记录长度
+      if (this.emotionState.history.length > 100) {
+        this.emotionState.history = this.emotionState.history.slice(-50);
+      }
+
+      // 发送情绪到 VRM 数字人
+      this.sendEmotionToVRM(emotion, intensity);
+    },
+
+    // 发送情绪到 VRM
+    sendEmotionToVRM(emotion, intensity) {
+      // 完整的情绪映射到 VRM 表情
+      // VRM 支持的表情: 'surprised', 'happy', 'angry', 'sad', 'neutral', 'relaxed'
+      const emotionMap = {
+        'neutral': { expression: 'neutral', weight: 1.0 },
+        'happy': { expression: 'happy', weight: intensity },
+        'sad': { expression: 'sad', weight: intensity },
+        'angry': { expression: 'angry', weight: intensity },
+        'surprised': { expression: 'surprised', weight: Math.min(intensity, 0.5) },
+        'relaxed': { expression: 'relaxed', weight: intensity },
+        'thinking': { expression: 'relaxed', weight: 0.3 },
+        'curious': { expression: 'surprised', weight: Math.min(intensity * 0.5, 0.3) },
+        'encouraging': { expression: 'happy', weight: Math.min(intensity * 0.7, 0.5) },
+        'confused': { expression: 'sad', weight: 0.2 },
+        'excited': { expression: 'happy', weight: Math.min(intensity, 0.8) },
+        'worried': { expression: 'sad', weight: Math.min(intensity * 0.5, 0.4) },
+        'confident': { expression: 'relaxed', weight: 0.5 },
+        'proud': { expression: 'happy', weight: 0.6 },
+      };
+
+      const mappedEmotion = emotionMap[emotion] || emotionMap['neutral'];
+
+      // 发送到后端 VRM 控制接口
+      fetch(`${this.partyURL}/vrm_emotion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expression: mappedEmotion.expression,
+          weight: mappedEmotion.weight
+        })
+      }).catch(err => console.log('VRM emotion update failed:', err));
+
+      // 同时记录到后端
+      fetch('/api/education/emotion/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emotion, intensity })
+      }).catch(err => console.log('Emotion record failed:', err));
+    },
+
+    // 分析文本情绪
+    analyzeTextEmotion(text) {
+      // 扩展的情绪关键词分析
+      const emotionKeywords = {
+        happy: ['开心', '高兴', '太好了', '谢谢', '感谢', '棒', '优秀', '成功', '解决了', 'happy', 'great', 'thanks', '太棒了', '非常好', '完美', '不错', '厉害'],
+        sad: ['难过', '伤心', '抱歉', '遗憾', '失败', 'sad', 'sorry', '遗憾', '失望', '错误', '问题'],
+        angry: ['生气', '愤怒', '讨厌', '烦', 'angry', 'hate', '烦躁'],
+        surprised: ['哇', '天哪', '没想到', '惊喜', '意外', 'surprised', 'wow', 'amazing', '不可思议'],
+        thinking: ['为什么', '如何', '怎么', '思考', '分析', '研究', 'why', 'how', 'think', '考虑', '探索', '了解'],
+        curious: ['什么是', '能不能', '可以吗', '有趣', '好奇', 'what', 'can', 'interesting', '想知道', '请问'],
+        encouraging: ['加油', '继续', '不错', '很好', '努力', 'good', 'great', 'keep', '能行', '相信', '支持'],
+        excited: ['太棒了', '激动', '期待', '兴奋', 'excited', 'amazing', 'wonderful', '太好了'],
+        confident: ['确定', '肯定', '相信', '一定', 'definitely', 'sure', 'confident'],
+        confused: ['不理解', '困惑', '糊涂', '不明白', 'confused', 'unclear', '什么意思'],
+      };
+
+      let maxScore = 0;
+      let detectedEmotion = 'neutral';
+
+      for (const [emotion, keywords] of Object.entries(emotionKeywords)) {
+        let score = 0;
+        for (const keyword of keywords) {
+          const regex = new RegExp(keyword, 'gi');
+          const matches = text.match(regex);
+          if (matches) {
+            score += matches.length;
+          }
+        }
+        if (score > maxScore) {
+          maxScore = score;
+          detectedEmotion = emotion;
+        }
+      }
+
+      return {
+        emotion: detectedEmotion,
+        intensity: Math.min(1, maxScore * 0.2 + 0.3)
+      };
+    },
+
+    // 保存成长数据到后端
+    async saveGrowthData() {
+      const data = {
+        level: this.growthSystem.level,
+        exp: this.growthSystem.exp,
+        totalExp: this.growthSystem.totalExp,
+        achievements: this.growthSystem.achievements,
+        stats: this.growthSystem.stats,
+      };
+      try {
+        await fetch('/api/education/growth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+      } catch (e) {
+        console.error('Failed to save growth data:', e);
+        // 降级到本地存储
+        localStorage.setItem('education_growth', JSON.stringify(data));
+      }
+    },
+
+    // 从后端加载成长数据
+    async loadGrowthData() {
+      try {
+        const response = await fetch('/api/education/growth');
+        if (response.ok) {
+          const data = await response.json();
+          this.growthSystem = {
+            ...this.growthSystem,
+            level: data.level || 1,
+            exp: data.exp || 0,
+            totalExp: data.totalExp || 0,
+            achievements: data.achievements || [],
+            stats: { ...this.growthSystem.stats, ...(data.stats || {}) }
+          };
+          // 同步成就状态
+          this.growthSystem.achievements.forEach(id => {
+            const achievement = this.achievementsList.find(a => a.id === id);
+            if (achievement) achievement.unlocked = true;
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load growth data from server:', e);
+        // 降级到本地存储
+        try {
+          const saved = localStorage.getItem('education_growth');
+          if (saved) {
+            const data = JSON.parse(saved);
+            this.growthSystem = { ...this.growthSystem, ...data };
+          }
+        } catch (e2) {
+          console.error('Failed to load from localStorage:', e2);
+        }
+      }
+    },
+
+    // 保存协作记录到后端
+    async saveCollaborationRecords() {
+      try {
+        await fetch('/api/education/collaboration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.collaborationRecords)
+        });
+      } catch (e) {
+        console.error('Failed to save collaboration records:', e);
+        // 降级到本地存储
+        localStorage.setItem('education_collaboration', JSON.stringify(this.collaborationRecords));
+      }
+    },
+
+    // 从后端加载协作记录
+    async loadCollaborationRecords() {
+      try {
+        const response = await fetch('/api/education/collaboration');
+        if (response.ok) {
+          const data = await response.json();
+          this.collaborationRecords = {
+            papers: data.papers || [],
+            experiments: data.experiments || [],
+            reviews: data.reviews || [],
+            sessions: data.sessions || []
+          };
+        }
+      } catch (e) {
+        console.error('Failed to load collaboration records from server:', e);
+        // 降级到本地存储
+        try {
+          const saved = localStorage.getItem('education_collaboration');
+          if (saved) {
+            this.collaborationRecords = JSON.parse(saved);
+          }
+        } catch (e2) {
+          console.error('Failed to load from localStorage:', e2);
+        }
+      }
+    },
+
+    // 获取教育统计摘要
+    getEducationSummary() {
+      return {
+        level: this.growthSystem.level,
+        exp: this.growthSystem.exp,
+        nextLevelExp: this.getExpForNextLevel(),
+        totalExp: this.growthSystem.totalExp,
+        achievements: this.growthSystem.achievements.length,
+        totalAchievements: this.achievementsList.length,
+        stats: { ...this.growthSystem.stats },
+      };
+    },
+
+    // 格式化时长
+    formatDuration(minutes) {
+      if (minutes < 60) return `${minutes}分钟`;
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return mins > 0 ? `${hours}小时${mins}分钟` : `${hours}小时`;
     },
 
 }
