@@ -970,6 +970,14 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         get_wikipedia_section_content,
         search_arxiv_papers
     )
+    from py.academic_tools import (
+        search_semantic_scholar,
+        get_paper_citations,
+        search_crossref,
+        get_doi_metadata,
+        search_openalex,
+        analyze_research_trends
+    )
     from py.autoBehavior import auto_behavior
     from py.tts_tool import handle_tts_tool_call
 
@@ -1085,6 +1093,13 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         "get_wikipedia_summary_and_sections": get_wikipedia_summary_and_sections,
         "get_wikipedia_section_content": get_wikipedia_section_content,
         "search_arxiv_papers": search_arxiv_papers,
+        # 学术工具 - 教育数字人专用
+        "search_semantic_scholar": search_semantic_scholar,
+        "get_paper_citations": get_paper_citations,
+        "search_crossref": search_crossref,
+        "get_doi_metadata": get_doi_metadata,
+        "search_openalex": search_openalex,
+        "analyze_research_trends": analyze_research_trends,
         "auto_behavior": auto_behavior,
         "claude_code_async": claude_code_async,
         "qwen_code_async": qwen_code_async,
@@ -2703,8 +2718,18 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
             timer_weather_tool,
             wikipedia_summary_tool,
             wikipedia_section_tool,
-            arxiv_tool 
-        ) 
+            arxiv_tool
+        )
+        from py.academic_tools import (
+            semantic_scholar_tool,
+            paper_citations_tool,
+            crossref_tool,
+            doi_metadata_tool,
+            openalex_tool,
+            research_trends_tool,
+            ACADEMIC_TOOLS,
+            ACADEMIC_FUNCTIONS
+        )
         from py.autoBehavior import auto_behavior_tool
         from py.cli_tool import claude_code_tool,qwen_code_tool,get_tools_for_mode,get_local_tools_for_mode
         from py.cdp_tool import all_cdp_tools
@@ -2839,6 +2864,8 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
             tools.extend(random_topics_tools)
         if settings["tools"]["arxiv"]['enabled']:
             tools.append(arxiv_tool)
+        # 学术工具 - 教育数字人专用
+        tools.extend(ACADEMIC_TOOLS)
         if settings['text2imgSettings']['enabled']:
             if settings['text2imgSettings']['engine'] == 'pollinations':
                 tools.append(pollinations_image_tool)
@@ -4964,6 +4991,8 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
         tools.append(wikipedia_section_tool)
     if settings["tools"]["arxiv"]['enabled']:
         tools.append(arxiv_tool)
+    # 学术工具 - 教育数字人专用
+    tools.extend(ACADEMIC_TOOLS)
     if settings['text2imgSettings']['enabled']:
         if settings['text2imgSettings']['engine'] == 'pollinations':
             tools.append(pollinations_image_tool)
@@ -5784,6 +5813,14 @@ async def execute_tool_manually(request: Request):
         get_wikipedia_section_content,
         search_arxiv_papers
     )
+    from py.academic_tools import (
+        search_semantic_scholar,
+        get_paper_citations,
+        search_crossref,
+        get_doi_metadata,
+        search_openalex,
+        analyze_research_trends
+    )
     from py.autoBehavior import auto_behavior
 
     # Docker CLI 工具（原有）
@@ -5898,6 +5935,13 @@ async def execute_tool_manually(request: Request):
         "get_wikipedia_summary_and_sections": get_wikipedia_summary_and_sections,
         "get_wikipedia_section_content": get_wikipedia_section_content,
         "search_arxiv_papers": search_arxiv_papers,
+        # 学术工具 - 教育数字人专用
+        "search_semantic_scholar": search_semantic_scholar,
+        "get_paper_citations": get_paper_citations,
+        "search_crossref": search_crossref,
+        "get_doi_metadata": get_doi_metadata,
+        "search_openalex": search_openalex,
+        "analyze_research_trends": analyze_research_trends,
         "auto_behavior": auto_behavior,
         "claude_code_async": claude_code_async,
         "qwen_code_async": qwen_code_async,
@@ -9913,6 +9957,34 @@ async def vrm_config():
     settings = await load_settings()
     return {"VRMConfig": settings.get("VRMConfig", {})}
 
+# VRM 表情控制端点 - 用于教育数字人情绪映射
+@app.post("/vrm_emotion")
+async def set_vrm_emotion(data: dict):
+    """
+    设置 VRM 数字人表情
+    接收格式: {"expression": "happy", "weight": 0.8}
+    """
+    expression = data.get("expression", "neutral")
+    weight = data.get("weight", 1.0)
+
+    # 通过 WebSocket 广播到所有连接的 VRM 客户端
+    message = {
+        "type": "emotion",
+        "data": {
+            "expression": expression,
+            "weight": weight
+        }
+    }
+
+    # 广播到 WebSocket 连接
+    for connection in active_connections:
+        try:
+            await connection.send_json(message)
+        except Exception:
+            pass
+
+    return {"status": "success", "expression": expression, "weight": weight}
+
 from py.live_router import router as live_router, ws_router as live_ws_router
 
 # 2. 分别挂载
@@ -10503,6 +10575,9 @@ app.include_router(embedding_router)
 
 from py.affection_api import router as affection_router
 app.include_router(affection_router)
+
+from py.education_api import router as education_router
+app.include_router(education_router)
 
 mcp = FastApiMCP(
     app,
