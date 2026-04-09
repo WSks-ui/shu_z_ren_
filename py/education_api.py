@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 教育数字人系统 API
-包含成长系统、协作记录、情绪状态、对话系统等功能的持久化接口
+包含成长系统、协作记录、情绪状态、对话系统、语音交互等功能的持久化接口
 """
 
 import json
 import os
 import httpx
+import base64
+import asyncio
 from pathlib import Path
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, WebSocket, WebSocketDisconnect
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -988,3 +990,504 @@ async def get_dashboard():
         "collaborationSessions": total_sessions,
         "skillUsage": growth_data.get("skillUsage", {})
     }
+
+
+# ==================== 语音交互 API ====================
+
+class VoiceChatRequest(BaseModel):
+    """语音对话请求"""
+    audio_data: str  # base64 编码的音频数据
+    skill_id: Optional[str] = None
+    session_id: Optional[str] = None
+    language: str = "zh"
+    digital_human_type: str = "vrm"  # "vrm" 或 "tencent"
+    tencent_session_id: Optional[str] = None  # 腾讯数智人会话 ID
+
+
+class VoiceChatResponse(BaseModel):
+    """语音对话响应"""
+    text: str  # 识别的文本
+    response: str  # AI回复文本
+    audio_data: Optional[str] = None  # base64 编码的音频响应（仅 VRM 模式）
+    emotion: Optional[str] = None
+    exp_gained: int = 0
+    digital_human_driven: bool = False  # 是否已驱动数字人播报
+
+
+@router.post("/voice/chat")
+async def voice_chat(request: VoiceChatRequest = Body(...)):
+    """
+    语音对话接口
+    1. 接收音频数据，使用 Sherpa ASR 进行语音识别
+    2. 调用 LLM 生成回复
+    3. 根据数字人类型选择输出方式：
+       - 腾讯数智人：直接驱动数字人播报，不返回 audio_data
+       - VRM 数字人：使用 TTS 合成音频返回
+    """
+    try:
+        # 1. 解码音频数据
+        audio_bytes = base64.b64decode(request.audio_data)
+
+        # 2. 语音识别 (Sherpa ASR)
+        recognized_text = await _recognize_speech(audio_bytes, request.language)
+
+        if not recognized_text or not recognized_text.strip():
+            return VoiceChatResponse(
+                text="",
+                response="抱歉，我没有听清，请再说一次。",
+                exp_gained=0
+            )
+
+        # 3. 调用 LLM 获取回复
+        chat_response = await _get_llm_response(
+            message=recognized_text,
+            skill_id=request.skill_id,
+            session_id=request.session_id
+        )
+
+        response_text = chat_response["response"]
+        audio_data = None
+        digital_human_driven = False
+
+        # 4. 根据数字人类型处理语音输出
+        if request.digital_human_type == "tencent" and request.tencent_session_id:
+            # 腾讯数智人：直接驱动数字人播报，不生成独立音频
+            try:
+                await _drive_tencent_digital_human(
+                    session_id=request.tencent_session_id,
+                    text=response_text
+                )
+                digital_human_driven = True
+            except Exception as e:
+                print(f"驱动腾讯数智人失败: {e}")
+                # 失败时降级到 TTS
+                audio_data = await _synthesize_speech(response_text, request.language)
+        else:
+            # VRM 或无数字人：使用 TTS 合成音频
+            audio_data = await _synthesize_speech(response_text, request.language)
+
+        # 5. 保存对话历史
+        if request.session_id:
+            await _save_voice_chat_history(
+                session_id=request.session_id,
+                user_message=recognized_text,
+                assistant_message=response_text,
+                skill_id=request.skill_id
+            )
+
+        return VoiceChatResponse(
+            text=recognized_text,
+            response=response_text,
+            audio_data=audio_data,
+            emotion=chat_response.get("emotion"),
+            exp_gained=chat_response.get("exp_gained", 10),
+            digital_human_driven=digital_human_driven
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"语音对话失败: {str(e)}")
+
+
+@router.post("/voice/recognize")
+async def voice_recognize(request: Dict[str, Any] = Body(...)):
+    """
+    单独的语音识别接口
+    """
+    try:
+        audio_data = request.get("audio_data", "")
+        language = request.get("language", "zh")
+        audio_bytes = base64.b64decode(audio_data)
+        text = await _recognize_speech(audio_bytes, language)
+        return {"text": text, "success": True}
+    except Exception as e:
+        return {"text": "", "success": False, "error": str(e)}
+
+
+@router.post("/voice/synthesize")
+async def voice_synthesize(request: Dict[str, Any] = Body(...)):
+    """
+    单独的语音合成接口
+    """
+    try:
+        text = request.get("text", "")
+        language = request.get("language", "zh")
+        engine = request.get("engine", "edge")
+        voice_id = request.get("voice_id", "default")
+        audio_bytes = await _synthesize_speech(text, language, engine, voice_id)
+        return {"audio_data": audio_bytes, "success": True}
+    except Exception as e:
+        return {"audio_data": None, "success": False, "error": str(e)}
+
+
+@router.websocket("/ws/voice")
+async def websocket_voice_chat(websocket: WebSocket):
+    """
+    WebSocket 语音对话接口
+    实现实时语音交互
+
+    消息协议:
+    - 客户端 -> 服务端:
+      { "type": "audio", "data": "base64_audio", "language": "zh" }
+      { "type": "text", "data": "文本消息", "skill_id": "...", "session_id": "..." }
+      { "type": "config", "skill_id": "...", "session_id": "...", "digital_human_type": "vrm", "tencent_session_id": "..." }
+
+    - 服务端 -> 客户端:
+      { "type": "recognized", "text": "识别的文本" }
+      { "type": "response", "text": "AI回复" }
+      { "type": "audio", "data": "base64_audio" }  // 仅 VRM 模式
+      { "type": "digital_human_driven", "success": true }  // 腾讯模式
+      { "type": "emotion", "emotion": "happy" }
+      { "type": "error", "message": "错误信息" }
+    """
+    await websocket.accept()
+
+    session_config = {
+        "skill_id": None,
+        "session_id": "voice_" + datetime.now().strftime("%Y%m%d_%H%M%S"),
+        "language": "zh",
+        "digital_human_type": "vrm",
+        "tencent_session_id": None
+    }
+
+    try:
+        while True:
+            # 接收消息
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            msg_type = message.get("type")
+
+            if msg_type == "config":
+                # 更新会话配置
+                session_config["skill_id"] = message.get("skill_id")
+                session_config["session_id"] = message.get("session_id", session_config["session_id"])
+                session_config["language"] = message.get("language", "zh")
+                session_config["digital_human_type"] = message.get("digital_human_type", "vrm")
+                session_config["tencent_session_id"] = message.get("tencent_session_id")
+                await websocket.send_json({"type": "config", "status": "ok"})
+
+            elif msg_type == "audio":
+                # 语音识别
+                audio_data = message.get("data", "")
+                language = message.get("language", session_config["language"])
+
+                try:
+                    audio_bytes = base64.b64decode(audio_data)
+                    recognized_text = await _recognize_speech(audio_bytes, language)
+
+                    await websocket.send_json({
+                        "type": "recognized",
+                        "text": recognized_text
+                    })
+
+                    if recognized_text and recognized_text.strip():
+                        # 获取 AI 回复
+                        response = await _get_llm_response(
+                            message=recognized_text,
+                            skill_id=session_config["skill_id"],
+                            session_id=session_config["session_id"]
+                        )
+
+                        # 发送回复文本
+                        await websocket.send_json({
+                            "type": "response",
+                            "text": response["response"]
+                        })
+
+                        # 发送情绪
+                        if response.get("emotion"):
+                            await websocket.send_json({
+                                "type": "emotion",
+                                "emotion": response["emotion"]
+                            })
+
+                        # 合成语音
+                        audio_response = await _synthesize_speech(response["response"], language)
+                        await websocket.send_json({
+                            "type": "audio",
+                            "data": audio_response
+                        })
+
+                        # 保存历史
+                        await _save_voice_chat_history(
+                            session_id=session_config["session_id"],
+                            user_message=recognized_text,
+                            assistant_message=response["response"],
+                            skill_id=session_config["skill_id"]
+                        )
+
+                except Exception as e:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"语音处理失败: {str(e)}"
+                    })
+
+            elif msg_type == "text":
+                # 直接处理文本消息
+                text_data = message.get("data", "")
+
+                try:
+                    response = await _get_llm_response(
+                        message=text_data,
+                        skill_id=session_config["skill_id"],
+                        session_id=session_config["session_id"]
+                    )
+
+                    await websocket.send_json({
+                        "type": "response",
+                        "text": response["response"]
+                    })
+
+                    # 合成语音
+                    audio_response = await _synthesize_speech(
+                        response["response"],
+                        session_config["language"]
+                    )
+                    await websocket.send_json({
+                        "type": "audio",
+                        "data": audio_response
+                    })
+
+                except Exception as e:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e)
+                    })
+
+    except WebSocketDisconnect:
+        print(f"WebSocket 语音连接断开: {session_config['session_id']}")
+    except Exception as e:
+        print(f"WebSocket 错误: {e}")
+
+
+# ==================== 辅助函数 ====================
+
+async def _recognize_speech(audio_bytes: bytes, language: str = "zh") -> str:
+    """使用 Sherpa ASR 进行语音识别"""
+    try:
+        from py.sherpa_asr import sherpa_recognize
+        # 根据语言选择模型
+        model_map = {
+            "zh": "sherpa-onnx-sense-voice-zh-en-ja-ko-yue",
+            "en": "sherpa-onnx-sense-voice-zh-en-ja-ko-yue",
+            "ja": "sherpa-onnx-sense-voice-zh-en-ja-ko-yue",
+            "ko": "sherpa-onnx-sense-voice-zh-en-ja-ko-yue",
+            "yue": "sherpa-onnx-sense-voice-zh-en-ja-ko-yue"
+        }
+        model_name = model_map.get(language, "sherpa-onnx-sense-voice-zh-en-ja-ko-yue")
+        text = await sherpa_recognize(audio_bytes, model_name)
+        return text or ""
+    except Exception as e:
+        print(f"语音识别失败: {e}")
+        raise RuntimeError(f"语音识别失败: {e}")
+
+
+async def _synthesize_speech(
+    text: str,
+    language: str = "zh",
+    engine: str = "edge",
+    voice_id: str = "default"
+) -> str:
+    """使用 TTS 适配器合成语音，返回 base64 编码"""
+    try:
+        from py.tts_adapter import tts_adapter
+
+        # 获取语音设置
+        try:
+            from py.get_setting import get_settings_path
+            settings_path = get_settings_path()
+            if settings_path.exists():
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                    engine = settings.get("tts_engine", engine)
+                    voice_id = settings.get("tts_voice", voice_id)
+            else:
+                settings = {}
+        except Exception:
+            settings = {}
+
+        # 合成音频
+        audio_bytes = await tts_adapter.synthesize(
+            text=text,
+            engine=engine,
+            voice_id=voice_id,
+            language=language
+        )
+
+        # 返回 base64 编码
+        return base64.b64encode(audio_bytes).decode('utf-8')
+
+    except Exception as e:
+        print(f"语音合成失败: {e}")
+        # 返回空字符串而不是抛出异常，允许文本对话继续
+        return ""
+
+
+async def _get_llm_response(
+    message: str,
+    skill_id: str = None,
+    session_id: str = None
+) -> Dict[str, Any]:
+    """调用 LLM 获取回复"""
+    # 获取系统设置
+    try:
+        from py.get_setting import get_settings_path
+        settings_path = get_settings_path()
+        if settings_path.exists():
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+        else:
+            settings = {}
+    except Exception:
+        settings = {}
+
+    # 构建消息
+    messages = []
+
+    # 添加技能系统提示词
+    if skill_id and skill_id in SKILL_PROMPTS:
+        messages.append({
+            "role": "system",
+            "content": SKILL_PROMPTS[skill_id]
+        })
+    else:
+        messages.append({
+            "role": "system",
+            "content": """你是一位友好的教育数字人助手，帮助用户学习和研究。
+请用简洁、专业的语言回答问题，必要时提供学习建议。
+由于是语音交互，请保持回复简洁，适合朗读。"""
+        })
+
+    # 添加用户消息
+    messages.append({"role": "user", "content": message})
+
+    # 获取 API 配置
+    api_key = settings.get("api_key", "")
+    base_url = settings.get("base_url", "https://api.openai.com/v1")
+    model = settings.get("model", "gpt-3.5-turbo")
+
+    if not api_key:
+        # 模拟模式
+        mock_response = "您好！我是教育数字人助手。要启用完整功能，请在主界面配置 API Key。"
+        return {
+            "response": mock_response,
+            "emotion": "neutral",
+            "exp_gained": 5
+        }
+
+    # 调用 LLM API
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{base_url.rstrip('/')}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": settings.get("temperature", 0.7),
+                    "max_tokens": settings.get("max_tokens", 1024)  # 语音交互用较短的回复
+                }
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                assistant_message = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+                # 分析情绪
+                emotion = analyze_emotion(assistant_message)
+
+                # 更新统计
+                await update_chat_stats(skill_id)
+
+                return {
+                    "response": assistant_message,
+                    "emotion": emotion,
+                    "exp_gained": 10
+                }
+            else:
+                error_detail = response.json().get("error", {}).get("message", "API 调用失败")
+                raise Exception(error_detail)
+
+    except httpx.TimeoutException:
+        raise Exception("API 请求超时")
+    except Exception as e:
+        raise Exception(f"对话失败: {str(e)}")
+
+
+async def _drive_tencent_digital_human(session_id: str, text: str) -> bool:
+    """
+    驱动腾讯数智人播报文本
+
+    Args:
+        session_id: 腾讯数智人会话 ID
+        text: 要播报的文本
+
+    Returns:
+        是否成功驱动
+    """
+    try:
+        from py.tencent_digital_human import client as tencent_client
+
+        result = await tencent_client.drive_text(
+            session_id=session_id,
+            text=text,
+            interrupt=True
+        )
+
+        # 检查是否成功
+        if result.get("ErrCode") == 0:
+            return True
+        else:
+            print(f"腾讯数智人驱动失败: {result.get('ErrMsg', '未知错误')}")
+            return False
+
+    except Exception as e:
+        print(f"驱动腾讯数智人异常: {e}")
+        return False
+
+
+async def _save_voice_chat_history(
+    session_id: str,
+    user_message: str,
+    assistant_message: str,
+    skill_id: str = None
+):
+    """保存语音对话历史"""
+    # 保存到聊天历史
+    data = _read_json_file(CHAT_HISTORY_FILE, {"sessions": {}})
+
+    data.setdefault("sessions", {})
+    data["sessions"].setdefault(session_id, [])
+
+    # 添加用户消息
+    data["sessions"][session_id].append({
+        "role": "user",
+        "content": user_message,
+        "timestamp": datetime.now().isoformat(),
+        "type": "voice"
+    })
+
+    # 添加助手消息
+    data["sessions"][session_id].append({
+        "role": "assistant",
+        "content": assistant_message,
+        "timestamp": datetime.now().isoformat(),
+        "type": "voice"
+    })
+
+    # 限制历史长度
+    if len(data["sessions"][session_id]) > 100:
+        data["sessions"][session_id] = data["sessions"][session_id][-100:]
+
+    _write_json_file(CHAT_HISTORY_FILE, data)
+
+    # 同时记录协作贡献
+    if skill_id:
+        await _auto_record_collaboration(
+            session_id=session_id,
+            skill_id=skill_id,
+            user_message=user_message,
+            ai_message=assistant_message
+        )

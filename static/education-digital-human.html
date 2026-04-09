@@ -737,6 +737,54 @@
       box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
     }
 
+    /* 语音按钮样式 */
+    .voice-btn {
+      width: 50px;
+      height: 50px;
+      min-width: 50px;
+      border-radius: 50%;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .voice-btn.recording {
+      background: var(--danger-color);
+      animation: voice-pulse 1.5s infinite;
+    }
+
+    @keyframes voice-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      50% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+    }
+
+    .voice-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: rgba(239, 68, 68, 0.1);
+      border-radius: 20px;
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: var(--danger-color);
+    }
+
+    .voice-status .recording-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--danger-color);
+      border-radius: 50%;
+      animation: pulse 1s infinite;
+    }
+
+    .chat-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
     .chat-input-wrapper button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -1374,6 +1422,12 @@
             </div>
 
             <div class="chat-input-area">
+              <!-- 语音录制状态提示 -->
+              <div v-if="isRecording" class="voice-status">
+                <span class="recording-dot"></span>
+                正在录音... 点击麦克风按钮停止
+              </div>
+
               <div class="chat-input-wrapper">
                 <textarea
                   v-model="chatInput"
@@ -1381,9 +1435,22 @@
                   @keydown.enter.ctrl="sendMessage"
                   rows="2"
                 ></textarea>
-                <button @click="sendMessage" :disabled="!chatInput.trim() || isTyping">
-                  <i class="fa-solid fa-paper-plane"></i> 发送
-                </button>
+                <div class="chat-buttons">
+                  <!-- 语音按钮 -->
+                  <button
+                    class="voice-btn"
+                    :class="{ recording: isRecording }"
+                    @click="toggleVoiceRecording"
+                    :disabled="isTyping"
+                    title="按住说话或点击切换"
+                  >
+                    <i :class="isRecording ? 'fa-solid fa-stop' : 'fa-solid fa-microphone'"></i>
+                  </button>
+                  <!-- 发送按钮 -->
+                  <button @click="sendMessage" :disabled="!chatInput.trim() || isTyping">
+                    <i class="fa-solid fa-paper-plane"></i> 发送
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1460,6 +1527,13 @@
           { key: 'review', label: '文献综述' },
           { key: 'tutoring', label: '学习辅导' }
         ];
+
+        // 语音录制相关状态
+        const isRecording = ref(false);
+        const mediaRecorder = ref(null);
+        const audioChunks = ref([]);
+        const voiceWebSocket = ref(null);
+        const audioContext = ref(null);
 
         // 技能详情数据
         const skillDetails = {
@@ -1860,6 +1934,239 @@
           }
         };
 
+        // ==================== 语音交互功能 ====================
+
+        const toggleVoiceRecording = async () => {
+          if (isRecording.value) {
+            // 停止录音
+            stopRecording();
+          } else {
+            // 开始录音
+            await startRecording();
+          }
+        };
+
+        const startRecording = async () => {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                sampleRate: 16000
+              }
+            });
+
+            // 创建 MediaRecorder
+            const options = { mimeType: 'audio/webm' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+              options.mimeType = 'audio/mp4';
+            }
+
+            mediaRecorder.value = new MediaRecorder(stream, options);
+            audioChunks.value = [];
+
+            mediaRecorder.value.ondataavailable = (event) => {
+              if (event.data.size > 0) {
+                audioChunks.value.push(event.data);
+              }
+            };
+
+            mediaRecorder.value.onstop = async () => {
+              // 停止所有音轨
+              stream.getTracks().forEach(track => track.stop());
+
+              // 处理录音
+              const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' });
+              await sendVoiceMessage(audioBlob);
+            };
+
+            mediaRecorder.value.start();
+            isRecording.value = true;
+
+          } catch (error) {
+            console.error('无法访问麦克风:', error);
+            alert('无法访问麦克风，请确保已授予权限。');
+          }
+        };
+
+        const stopRecording = () => {
+          if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
+            mediaRecorder.value.stop();
+          }
+          isRecording.value = false;
+        };
+
+        const sendVoiceMessage = async (audioBlob) => {
+          isTyping.value = true;
+
+          try {
+            // 将音频转换为 base64
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+              const base64Audio = e.target.result.split(',')[1];
+
+              try {
+                // 构建请求参数，根据数字人类型决定路由
+                const requestBody = {
+                  audio_data: base64Audio,
+                  skill_id: currentSkill.value,
+                  session_id: sessionId.value,
+                  language: 'zh',
+                  digital_human_type: digitalHumanType.value
+                };
+
+                // 如果是腾讯数智人，传递会话 ID
+                if (digitalHumanType.value === 'tencent' && tencentSession.value.sessionId) {
+                  requestBody.tencent_session_id = tencentSession.value.sessionId;
+                }
+
+                const response = await fetch('/api/education/voice/chat', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                  // 添加用户消息（识别的文本）
+                  if (data.text) {
+                    messages.value.push({
+                      role: 'user',
+                      content: `🎤 ${data.text}`,
+                      timestamp: new Date().toISOString()
+                    });
+                  }
+
+                  // 添加助手回复
+                  messages.value.push({
+                    role: 'assistant',
+                    content: data.response,
+                    timestamp: new Date().toISOString()
+                  });
+
+                  // 仅 VRM 模式播放音频响应（腾讯数智人已自动播报）
+                  if (data.audio_data && digitalHumanType.value === 'vrm') {
+                    playAudioResponse(data.audio_data);
+                  }
+
+                  // 显示数字人驱动状态
+                  if (data.digital_human_driven) {
+                    console.log('腾讯数智人已驱动播报');
+                  }
+
+                  // 更新经验值
+                  if (data.exp_gained) {
+                    growth.value.exp += data.exp_gained;
+                    growth.value.totalExp += data.exp_gained;
+
+                    while (growth.value.exp >= expForNextLevel.value) {
+                      growth.value.exp -= expForNextLevel.value;
+                      growth.value.level++;
+                    }
+
+                    growth.value.stats.conversations = (growth.value.stats.conversations || 0) + 1;
+                  }
+
+                  await nextTick();
+                  scrollToBottom();
+                } else {
+                  throw new Error(data.detail || '语音对话失败');
+                }
+              } catch (error) {
+                messages.value.push({
+                  role: 'assistant',
+                  content: `抱歉，语音处理出现问题：${error.message}`,
+                  timestamp: new Date().toISOString()
+                });
+              }
+
+              isTyping.value = false;
+            };
+
+            reader.readAsDataURL(audioBlob);
+
+          } catch (error) {
+            console.error('发送语音消息失败:', error);
+            isTyping.value = false;
+          }
+        };
+
+        const playAudioResponse = (base64Audio) => {
+          try {
+            const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+            audio.play().catch(e => console.log('自动播放被阻止，需要用户交互'));
+          } catch (error) {
+            console.error('播放音频失败:', error);
+          }
+        };
+
+        // WebSocket 语音连接（可选，用于实时交互）
+        const connectVoiceWebSocket = () => {
+          const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/education/ws/voice`;
+
+          voiceWebSocket.value = new WebSocket(wsUrl);
+
+          voiceWebSocket.value.onopen = () => {
+            console.log('语音 WebSocket 已连接');
+            // 发送配置
+            voiceWebSocket.value.send(JSON.stringify({
+              type: 'config',
+              skill_id: currentSkill.value,
+              session_id: sessionId.value,
+              language: 'zh'
+            }));
+          };
+
+          voiceWebSocket.value.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            switch (data.type) {
+              case 'recognized':
+                // 显示识别的文本
+                messages.value.push({
+                  role: 'user',
+                  content: `🎤 ${data.text}`,
+                  timestamp: new Date().toISOString()
+                });
+                break;
+
+              case 'response':
+                // 显示 AI 回复
+                messages.value.push({
+                  role: 'assistant',
+                  content: data.text,
+                  timestamp: new Date().toISOString()
+                });
+                break;
+
+              case 'audio':
+                // 播放音频
+                playAudioResponse(data.data);
+                break;
+
+              case 'emotion':
+                // 处理情绪（可以用于数字人表情）
+                console.log('Emotion:', data.emotion);
+                break;
+
+              case 'error':
+                console.error('WebSocket 错误:', data.message);
+                break;
+            }
+
+            nextTick(() => scrollToBottom());
+          };
+
+          voiceWebSocket.value.onerror = (error) => {
+            console.error('WebSocket 错误:', error);
+          };
+
+          voiceWebSocket.value.onclose = () => {
+            console.log('语音 WebSocket 已断开');
+          };
+        };
+
         // 加载数据
         const loadData = async () => {
           try {
@@ -1919,6 +2226,7 @@
           chatInput,
           messages,
           isTyping,
+          isRecording,
           chatMessages,
           tencentSession,
           growth,
@@ -1947,6 +2255,7 @@
           selectSkill,
           startConversation,
           sendMessage,
+          toggleVoiceRecording,
           formatMessage,
           formatTime,
           getTypeIcon,
