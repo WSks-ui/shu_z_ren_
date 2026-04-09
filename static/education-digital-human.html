@@ -2109,13 +2109,21 @@
 
           voiceWebSocket.value.onopen = () => {
             console.log('语音 WebSocket 已连接');
-            // 发送配置
-            voiceWebSocket.value.send(JSON.stringify({
+            // 发送配置，包含数字人类型信息
+            const configMsg = {
               type: 'config',
               skill_id: currentSkill.value,
               session_id: sessionId.value,
-              language: 'zh'
-            }));
+              language: 'zh',
+              digital_human_type: digitalHumanType.value
+            };
+
+            // 如果是腾讯数智人，传递会话 ID
+            if (digitalHumanType.value === 'tencent' && tencentSession.value.sessionId) {
+              configMsg.tencent_session_id = tencentSession.value.sessionId;
+            }
+
+            voiceWebSocket.value.send(JSON.stringify(configMsg));
           };
 
           voiceWebSocket.value.onmessage = (event) => {
@@ -2141,8 +2149,17 @@
                 break;
 
               case 'audio':
-                // 播放音频
+                // 播放音频（仅 VRM 模式会收到）
                 playAudioResponse(data.data);
+                break;
+
+              case 'digital_human_driven':
+                // 腾讯数智人驱动状态
+                if (data.success) {
+                  console.log('腾讯数智人已驱动播报');
+                } else {
+                  console.warn('腾讯数智人驱动失败');
+                }
                 break;
 
               case 'emotion':

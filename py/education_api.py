@@ -1200,12 +1200,24 @@ async def websocket_voice_chat(websocket: WebSocket):
                                 "emotion": response["emotion"]
                             })
 
-                        # 合成语音
-                        audio_response = await _synthesize_speech(response["response"], language)
-                        await websocket.send_json({
-                            "type": "audio",
-                            "data": audio_response
-                        })
+                        # 根据数字人类型处理语音输出
+                        if session_config["digital_human_type"] == "tencent" and session_config["tencent_session_id"]:
+                            # 腾讯数智人：直接驱动数字人播报
+                            success = await _drive_tencent_digital_human(
+                                session_id=session_config["tencent_session_id"],
+                                text=response["response"]
+                            )
+                            await websocket.send_json({
+                                "type": "digital_human_driven",
+                                "success": success
+                            })
+                        else:
+                            # VRM 或无数字人：合成音频返回
+                            audio_response = await _synthesize_speech(response["response"], language)
+                            await websocket.send_json({
+                                "type": "audio",
+                                "data": audio_response
+                            })
 
                         # 保存历史
                         await _save_voice_chat_history(
@@ -1237,15 +1249,27 @@ async def websocket_voice_chat(websocket: WebSocket):
                         "text": response["response"]
                     })
 
-                    # 合成语音
-                    audio_response = await _synthesize_speech(
-                        response["response"],
-                        session_config["language"]
-                    )
-                    await websocket.send_json({
-                        "type": "audio",
-                        "data": audio_response
-                    })
+                    # 根据数字人类型处理语音输出
+                    if session_config["digital_human_type"] == "tencent" and session_config["tencent_session_id"]:
+                        # 腾讯数智人：直接驱动数字人播报
+                        success = await _drive_tencent_digital_human(
+                            session_id=session_config["tencent_session_id"],
+                            text=response["response"]
+                        )
+                        await websocket.send_json({
+                            "type": "digital_human_driven",
+                            "success": success
+                        })
+                    else:
+                        # VRM 或无数字人：合成音频返回
+                        audio_response = await _synthesize_speech(
+                            response["response"],
+                            session_config["language"]
+                        )
+                        await websocket.send_json({
+                            "type": "audio",
+                            "data": audio_response
+                        })
 
                 except Exception as e:
                     await websocket.send_json({
