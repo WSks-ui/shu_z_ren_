@@ -198,3 +198,9 @@ runtime/
 一键更新(update).sh
 
 nodejs/
+
+# 数据库文件（包含敏感信息如 API Key）
+*.db
+*.sqlite
+super_agent_party.db
+conversations.db

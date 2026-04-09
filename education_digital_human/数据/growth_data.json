@@ -1,7 +1,7 @@
 {
   "level": 2,
-  "exp": 130,
-  "totalExp": 230,
+  "exp": 140,
+  "totalExp": 240,
   "achievements": [
     "first_paper"
   ],
@@ -11,7 +11,7 @@
     "experimentsDesigned": 2,
     "questionsAsked": 0,
     "learningHours": 0,
-    "conversations": 4,
+    "conversations": 5,
     "papers_read": 0,
     "experiments_designed": 0,
     "papers_written": 0,
@@ -25,9 +25,15 @@
       "emotion": "excited",
       "intensity": 0.8,
       "timestamp": "2026-04-09T10:05:49.908341"
+    },
+    {
+      "emotion": "excited",
+      "intensity": 0.8,
+      "timestamp": "2026-04-09T17:11:37.719693"
     }
   ],
   "skillUsage": {
-    "research-assistant": 2
+    "research-assistant": 2,
+    "literature-review": 1
   }
 }

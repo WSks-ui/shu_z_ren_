@@ -76,6 +76,17 @@
         }
       ],
       "summary": null
+    },
+    {
+      "id": "experiment_1775725896743",
+      "type": "experiment",
+      "title": "",
+      "startTime": "2026-04-09T09:11:36.743Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T09:11:37.651Z",
+      "duration": 0
     }
   ],
   "reviews": [
@@ -144,6 +155,37 @@
       "humanContributions": [],
       "endTime": "2026-04-09T02:06:53.969Z",
       "duration": 0
+    },
+    {
+      "id": "session_1775725759202",
+      "type": "review",
+      "title": "你好",
+      "startTime": "2026-04-09T17:10:29.031574",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "您好！我是教育数字人助手。要启用完整对话功能，请在主界面配置 API Key。\n\n您可以前往「设置」页面配置语言模型 API。",
+          "type": "text",
+          "timestamp": "2026-04-09T17:10:29.031582"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "你好",
+          "type": "text",
+          "timestamp": "2026-04-09T17:10:29.031584"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "review_1775725897695",
+      "type": "review",
+      "startTime": "2026-04-09T17:11:37.725047",
+      "endTime": null,
+      "aiContributions": [],
+      "humanContributions": [],
+      "summary": null
     }
   ],
   "sessions": [
