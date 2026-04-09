@@ -1,0 +1,33 @@
+{
+  "level": 2,
+  "exp": 120,
+  "totalExp": 220,
+  "achievements": [
+    "first_paper"
+  ],
+  "stats": {
+    "papersReviewed": 0,
+    "papersWritten": 2,
+    "experimentsDesigned": 2,
+    "questionsAsked": 0,
+    "learningHours": 0,
+    "conversations": 3,
+    "papers_read": 0,
+    "experiments_designed": 0,
+    "papers_written": 0,
+    "tutoring_sessions": 0,
+    "hours_spent": 0,
+    "papersRead": null,
+    "tutoringSessions": null
+  },
+  "emotionHistory": [
+    {
+      "emotion": "excited",
+      "intensity": 0.8,
+      "timestamp": "2026-04-09T10:05:49.908341"
+    }
+  ],
+  "skillUsage": {
+    "research-assistant": 1
+  }
+}

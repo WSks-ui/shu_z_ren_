@@ -1,0 +1,171 @@
+{
+  "papers": [
+    {
+      "id": "paper_1775700327840",
+      "type": "paper",
+      "title": "",
+      "startTime": "2026-04-09T02:05:27.840Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:05:28.751Z",
+      "duration": 0
+    },
+    {
+      "id": "paper_1775700332221",
+      "type": "paper",
+      "title": "",
+      "startTime": "2026-04-09T02:05:32.221Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:05:33.285Z",
+      "duration": 0
+    },
+    {
+      "id": "paper_1775700414017",
+      "type": "paper",
+      "startTime": "2026-04-09T10:06:54.086281",
+      "endTime": null,
+      "aiContributions": [],
+      "humanContributions": [],
+      "summary": null
+    }
+  ],
+  "experiments": [
+    {
+      "id": "experiment_1775700324008",
+      "type": "experiment",
+      "title": "",
+      "startTime": "2026-04-09T02:05:24.008Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:05:26.837Z",
+      "duration": 0
+    },
+    {
+      "id": "experiment_1775700343659",
+      "type": "experiment",
+      "title": "",
+      "startTime": "2026-04-09T02:05:43.659Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:05:44.585Z",
+      "duration": 0
+    },
+    {
+      "id": "test_auto_002",
+      "type": "experiment",
+      "title": "如何设计一个关于大语言模型的实验？",
+      "startTime": "2026-04-09T14:05:44.463158",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "您好！我是教育数字人助手。要启用完整对话功能，请在主界面配置 API Key。\n\n您可以前往「设置」页面配置语言模型 API。",
+          "type": "text",
+          "timestamp": "2026-04-09T14:05:44.463166"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "如何设计一个关于大语言模型的实验？",
+          "type": "text",
+          "timestamp": "2026-04-09T14:05:44.463167"
+        }
+      ],
+      "summary": null
+    }
+  ],
+  "reviews": [
+    {
+      "id": "review_1775700335782",
+      "type": "review",
+      "title": "",
+      "startTime": "2026-04-09T02:05:35.782Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:05:36.647Z",
+      "duration": 0
+    },
+    {
+      "id": "review_1775700341218",
+      "type": "review",
+      "title": "",
+      "startTime": "2026-04-09T02:05:41.218Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:05:42.264Z",
+      "duration": 0
+    },
+    {
+      "id": "review_1775700345005",
+      "type": "review",
+      "title": "",
+      "startTime": "2026-04-09T02:05:45.005Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:05:45.639Z",
+      "duration": 0
+    },
+    {
+      "id": "review_1775700346255",
+      "type": "review",
+      "title": "",
+      "startTime": "2026-04-09T02:05:46.255Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:05:49.880Z",
+      "duration": 0
+    },
+    {
+      "id": "review_1775700389271",
+      "type": "review",
+      "title": "",
+      "startTime": "2026-04-09T02:06:29.271Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:06:30.497Z",
+      "duration": 0
+    },
+    {
+      "id": "review_1775700412446",
+      "type": "review",
+      "title": "",
+      "startTime": "2026-04-09T02:06:52.446Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:06:53.969Z",
+      "duration": 0
+    }
+  ],
+  "sessions": [
+    {
+      "id": "tutoring_1775700337590",
+      "type": "tutoring",
+      "title": "",
+      "startTime": "2026-04-09T02:05:37.590Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T02:05:38.953Z",
+      "duration": 0
+    },
+    {
+      "id": "tutoring_1775700414996",
+      "type": "tutoring",
+      "startTime": "2026-04-09T10:06:55.000424",
+      "endTime": null,
+      "aiContributions": [],
+      "humanContributions": [],
+      "summary": null
+    }
+  ]
+}

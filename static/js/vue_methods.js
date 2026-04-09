@@ -16711,8 +16711,18 @@ closeTaskCenter() {
         this.emotionState.history = this.emotionState.history.slice(-50);
       }
 
-      // 发送情绪到 VRM 数字人
-      this.sendEmotionToVRM(emotion, intensity);
+      // 根据当前数字人类型发送情绪
+      this.sendEmotionToDigitalHuman(emotion, intensity);
+    },
+
+    // 统一发送情绪到数字人（根据当前类型选择VRM或腾讯）
+    async sendEmotionToDigitalHuman(emotion, intensity) {
+      if (this.digitalHumanType === 'tencent' && this.tencentDigitalHuman.isConnected) {
+        return await this.sendEmotionToTencent(emotion, intensity);
+      } else {
+        // 使用VRM
+        this.sendEmotionToVRM(emotion, intensity);
+      }
     },
 
     // 发送情绪到 VRM
@@ -16914,6 +16924,141 @@ closeTaskCenter() {
       const hours = Math.floor(minutes / 60);
       const mins = minutes % 60;
       return mins > 0 ? `${hours}小时${mins}分钟` : `${hours}小时`;
+    },
+
+    // ==================== 腾讯数智人方法 ====================
+
+    // 创建腾讯数智人会话
+    async createTencentSession() {
+      try {
+        this.tencentDigitalHuman.status = 'connecting';
+        const response = await fetch('/api/tencent_digital_human/create_session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            driver_type: this.tencentDigitalHuman.driverType,
+            protocol: this.tencentDigitalHuman.protocol,
+            video_profile: this.tencentDigitalHuman.videoProfile
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.ErrCode === 0 || data.SessionId) {
+          this.tencentDigitalHuman.sessionId = data.SessionId;
+          this.tencentDigitalHuman.playUrl = data.PlayUrl;
+          this.tencentDigitalHuman.status = 'connected';
+          this.tencentDigitalHuman.isConnected = true;
+          this.$message.success('腾讯数智人会话创建成功');
+          return data;
+        } else {
+          throw new Error(data.ErrMsg || '创建会话失败');
+        }
+      } catch (error) {
+        this.tencentDigitalHuman.status = 'error';
+        this.tencentDigitalHuman.lastError = error.message;
+        this.$message.error(`创建会话失败: ${error.message}`);
+        return null;
+      }
+    },
+
+    // 关闭腾讯数智人会话
+    async closeTencentSession() {
+      if (!this.tencentDigitalHuman.sessionId) return;
+
+      try {
+        await fetch('/api/tencent_digital_human/close_session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: this.tencentDigitalHuman.sessionId })
+        });
+
+        this.tencentDigitalHuman.sessionId = null;
+        this.tencentDigitalHuman.playUrl = null;
+        this.tencentDigitalHuman.isConnected = false;
+        this.tencentDigitalHuman.status = 'disconnected';
+        this.$message.info('腾讯数智人会话已关闭');
+      } catch (error) {
+        console.error('关闭会话失败:', error);
+      }
+    },
+
+    // 发送文本到腾讯数智人
+    async sendTextToTencent(text, interrupt = false) {
+      if (!this.tencentDigitalHuman.sessionId) {
+        console.warn('腾讯数智人会话未创建');
+        return null;
+      }
+
+      try {
+        const response = await fetch('/api/tencent_digital_human/drive_text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: this.tencentDigitalHuman.sessionId,
+            text: text,
+            interrupt: interrupt
+          })
+        });
+        return await response.json();
+      } catch (error) {
+        console.error('发送文本失败:', error);
+        return null;
+      }
+    },
+
+    // 发送情绪到腾讯数智人
+    async sendEmotionToTencent(emotion, intensity = 0.5) {
+      if (!this.tencentDigitalHuman.sessionId) {
+        return null;
+      }
+
+      try {
+        const response = await fetch('/api/tencent_digital_human/drive_emotion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: this.tencentDigitalHuman.sessionId,
+            emotion: emotion,
+            intensity: intensity
+          })
+        });
+        return await response.json();
+      } catch (error) {
+        console.error('发送情绪失败:', error);
+        return null;
+      }
+    },
+
+    // 统一发送文本到数字人
+    async sendTextToDigitalHuman(text, interrupt = false) {
+      if (this.digitalHumanType === 'tencent' && this.tencentDigitalHuman.isConnected) {
+        return await this.sendTextToTencent(text, interrupt);
+      }
+      // VRM不需要单独发送文本，通过TTS驱动
+    },
+
+    // 切换数字人类型
+    switchDigitalHumanType(type) {
+      if (type === this.digitalHumanType) return;
+
+      // 关闭当前类型的连接
+      if (this.digitalHumanType === 'tencent' && this.tencentDigitalHuman.isConnected) {
+        this.closeTencentSession();
+      }
+
+      this.digitalHumanType = type;
+      this.$message.success(`已切换到${type === 'tencent' ? '腾讯数智人' : 'VRM数字人'}`);
+    },
+
+    // 检查腾讯数智人健康状态
+    async checkTencentHealth() {
+      try {
+        const response = await fetch('/api/tencent_digital_human/health');
+        return await response.json();
+      } catch (error) {
+        return { status: 'error', message: error.message };
+      }
     },
 
 }

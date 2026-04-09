@@ -2203,4 +2203,23 @@ main();`,
     educationActiveTab: 'skills',  // skills | growth | records
     selectedEducationSkill: null,
 
+    // ==================== 腾讯数智人系统 ====================
+    tencentDigitalHuman: {
+      enabled: true,
+      sessionId: null,
+      playUrl: null,
+      isConnected: false,
+      driverType: 1,  // 1=文本驱动, 3=音频驱动
+      protocol: 'webrtc',  // webrtc 或 trtc
+      videoProfile: '720p',
+      status: 'disconnected',  // disconnected, connecting, connected, error
+      lastError: null,
+    },
+    // 数智人设置面板
+    showTencentDigitalHumanSettings: false,
+    // 数字人类型选择: 'vrm' 或 'tencent'
+    digitalHumanType: 'vrm',
+    // 腾讯数智人测试文本
+    tencentTestText: '',
+
 };

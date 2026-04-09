@@ -2421,6 +2421,11 @@ function updateElement(el, rawMarkdown, formatFn) {
             <div class="education-header">
               <h2><i class="fa-solid fa-graduation-cap"></i> 教育数字人</h2>
               <div class="education-stats">
+                <!-- 数字人类型切换 -->
+                <el-radio-group v-model="digitalHumanType" size="small" style="margin-right: 15px;">
+                  <el-radio-button label="vrm">VRM</el-radio-button>
+                  <el-radio-button label="tencent">腾讯数智人</el-radio-button>
+                </el-radio-group>
                 <el-tag type="success">Lv.{{ growthSystem.level }}</el-tag>
                 <el-progress
                   :percentage="(growthSystem.exp / getExpForNextLevel()) * 100"
@@ -2428,6 +2433,66 @@ function updateElement(el, rawMarkdown, formatFn) {
                   style="width: 100px; margin-left: 10px;">
                 </el-progress>
                 <span class="exp-text">{{ growthSystem.exp }}/{{ getExpForNextLevel() }} EXP</span>
+              </div>
+            </div>
+
+            <!-- 腾讯数智人播放器 -->
+            <div v-if="digitalHumanType === 'tencent'" class="tencent-digital-human-player">
+              <div class="player-header">
+                <h3><i class="fa-solid fa-robot"></i> 腾讯智能数智人</h3>
+                <div class="player-controls">
+                  <el-button
+                    v-if="!tencentDigitalHuman.isConnected"
+                    type="primary"
+                    size="small"
+                    @click="createTencentSession"
+                    :loading="tencentDigitalHuman.status === 'connecting'">
+                    <i class="fa-solid fa-plug"></i> 连接
+                  </el-button>
+                  <el-button
+                    v-else
+                    type="danger"
+                    size="small"
+                    @click="closeTencentSession">
+                    <i class="fa-solid fa-plug-circle-xmark"></i> 断开
+                  </el-button>
+                  <el-tag :type="tencentDigitalHuman.isConnected ? 'success' : 'info'" size="small">
+                    {{ tencentDigitalHuman.status === 'connected' ? '已连接' :
+                       tencentDigitalHuman.status === 'connecting' ? '连接中...' :
+                       tencentDigitalHuman.status === 'error' ? '连接失败' : '未连接' }}
+                  </el-tag>
+                </div>
+              </div>
+              <div class="player-container">
+                <div v-if="tencentDigitalHuman.playUrl" class="video-wrapper">
+                  <video
+                    :src="tencentDigitalHuman.playUrl"
+                    autoplay
+                    muted
+                    playsinline
+                    style="width: 100%; height: 100%; object-fit: contain;">
+                  </video>
+                </div>
+                <div v-else class="player-placeholder">
+                  <i class="fa-solid fa-video" style="font-size: 48px; opacity: 0.3;"></i>
+                  <p>点击"连接"启动数字人</p>
+                </div>
+              </div>
+              <div class="player-footer">
+                <el-input
+                  v-model="tencentTestText"
+                  placeholder="输入文本让数字人播报..."
+                  size="small"
+                  style="flex: 1; margin-right: 10px;"
+                  @keyup.enter="sendTextToTencent(tencentTestText, true); tencentTestText = ''">
+                </el-input>
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="sendTextToTencent(tencentTestText, true); tencentTestText = ''"
+                  :disabled="!tencentDigitalHuman.isConnected">
+                  <i class="fa-solid fa-paper-plane"></i> 发送
+                </el-button>
               </div>
             </div>
 

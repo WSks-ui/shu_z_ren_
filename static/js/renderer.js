@@ -985,6 +985,9 @@ const handleRemoteInstall = (data) => {
       this.loadGrowthData();
       this.loadCollaborationRecords();
     }
+
+    // 检查腾讯数智人健康状态
+    this.checkTencentHealth().catch(() => {});
   },
   beforeUnmount() {
     this.stopEdgeScroll();

@@ -10579,6 +10579,9 @@ app.include_router(affection_router)
 from py.education_api import router as education_router
 app.include_router(education_router)
 
+from py.tencent_digital_human import router as tencent_digital_human_router
+app.include_router(tencent_digital_human_router)
+
 mcp = FastApiMCP(
     app,
     name="Agent party MCP - chat with multiple agents",
