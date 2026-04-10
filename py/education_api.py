@@ -171,6 +171,26 @@ class EmotionState(BaseModel):
     history: List[Dict[str, Any]] = []
 
 
+class ExportCollaborationRequest(BaseModel):
+    """导出协作记录请求"""
+    session_id: str
+    format: str = "word"
+    include_history: bool = True
+
+
+class ExportAllCollaborationsRequest(BaseModel):
+    """导出所有协作记录请求"""
+    format: str = "word"
+    session_type: Optional[str] = None
+    session_ids: Optional[List[str]] = None  # 选择性导出指定会话
+    include_chat_history: bool = False  # 是否包含聊天记录详情
+
+
+class ExportReportRequest(BaseModel):
+    """导出学习报告请求"""
+    format: str = "word"
+
+
 # ==================== 辅助函数 ====================
 
 # 最大记录数常量
@@ -822,6 +842,7 @@ class ChatRequest(BaseModel):
     skill_id: Optional[str] = None
     session_id: Optional[str] = None
     history: List[Dict[str, str]] = []
+    files: Optional[List[str]] = None  # 上传文件的服务器路径列表
 
 
 class ChatResponse(BaseModel):
@@ -905,8 +926,64 @@ async def education_chat(request: ChatRequest = Body(...)):
             "content": msg.get("content", "")
         })
 
-    # 添加当前消息
-    messages.append({"role": "user", "content": request.message})
+    # 添加当前消息（支持文件附件）
+    user_content = []
+
+    # 处理文件附件
+    if request.files:
+        import base64
+        import mimetypes
+        from py.get_setting import UPLOAD_FILES_DIR
+        from urllib.parse import urlparse
+
+        for file_path in request.files:
+            try:
+                local_path = None
+                # 将 URL 转换为本地路径
+                if file_path.startswith('http://') or file_path.startswith('https://'):
+                    parsed = urlparse(file_path)
+                    url_path = parsed.path
+                    if url_path.startswith('/uploaded_files/'):
+                        filename = os.path.basename(url_path)
+                        local_path = os.path.join(UPLOAD_FILES_DIR, filename)
+
+                if local_path and os.path.exists(local_path):
+                    with open(local_path, 'rb') as f:
+                        file_bytes = f.read()
+                    mime_type = mimetypes.guess_type(local_path)[0] or 'application/octet-stream'
+                elif not file_path.startswith('http://') and not file_path.startswith('https://') and os.path.exists(file_path):
+                    with open(file_path, 'rb') as f:
+                        file_bytes = f.read()
+                    mime_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+                else:
+                    print(f"[文件] 文件不存在: {file_path}")
+                    continue
+
+                if mime_type.startswith('image/'):
+                    b64_data = base64.b64encode(file_bytes).decode('utf-8')
+                    user_content.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}
+                    })
+                elif mime_type == 'application/pdf':
+                    try:
+                        from py.load_files import handle_pdf_enhanced
+                        pdf_text = await handle_pdf_enhanced(file_bytes)
+                        user_content.append({
+                            "type": "text",
+                            "text": f"\n[PDF文件内容]\n{pdf_text[:3000]}\n[/PDF文件内容]"
+                        })
+                    except Exception as e:
+                        user_content.append({"type": "text", "text": f"\n[PDF文件处理失败: {str(e)}]"})
+            except Exception as e:
+                print(f"[文件] 处理文件失败 {file_path}: {e}")
+
+    user_content.append({"type": "text", "text": request.message})
+
+    if len(user_content) > 1:
+        messages.append({"role": "user", "content": user_content})
+    else:
+        messages.append({"role": "user", "content": request.message})
 
     # 获取 API 配置 - 优先使用选中提供商的配置
     api_key = settings.get("api_key", "")
@@ -1062,18 +1139,25 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
             base_system_prompt = """你是一位友好的教育数字人助手，帮助用户学习和研究。
 请用简洁、专业的语言回答问题，必要时提供学习建议。"""
 
-        # RAG: 检索知识库获取上下文
+        # RAG: 检索知识库获取上下文（仅在向量库已存在时执行）
         rag_context = ""
         rag_sources = []
         try:
-            t_rag = time.time()
-            kb = await get_education_kb()
-            kb_results = await kb.search(request.message, k=3)
+            # 检查向量库是否存在，避免每次请求都尝试构建
+            from py.edu_knowledge_base import EDUCATION_VECTOR_DIR
+            index_path = EDUCATION_VECTOR_DIR / "index"
 
-            if kb_results:
-                rag_context = kb.get_context_for_chat(kb_results, max_length=1500)
-                rag_sources = [r["metadata"].get("file_name", "") for r in kb_results if r.get("metadata", {}).get("file_name")]
-                print(f"[RAG-流式] 知识库检索耗时: {time.time() - t_rag:.3f}s, 找到 {len(kb_results)} 条相关内容")
+            if index_path.with_suffix(".faiss").exists():
+                t_rag = time.time()
+                kb = await get_education_kb()
+                kb_results = await kb.search(request.message, k=3)
+
+                if kb_results:
+                    rag_context = kb.get_context_for_chat(kb_results, max_length=1500)
+                    rag_sources = [r["metadata"].get("file_name", "") for r in kb_results if r.get("metadata", {}).get("file_name")]
+                    print(f"[RAG-流式] 知识库检索耗时: {time.time() - t_rag:.3f}s, 找到 {len(kb_results)} 条相关内容")
+            else:
+                print(f"[RAG-流式] 向量库不存在，跳过知识库检索")
         except Exception as e:
             print(f"[RAG-流式] 知识库检索失败: {e}")
 
@@ -1107,8 +1191,84 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
                 "content": msg.get("content", "")
             })
 
-        # 添加当前消息
-        messages.append({"role": "user", "content": request.message})
+        # 添加当前消息（支持文件附件）
+        user_content = []
+
+        # 处理文件附件
+        if request.files:
+            import base64
+            import mimetypes
+            from py.get_setting import UPLOAD_FILES_DIR
+            from urllib.parse import urlparse
+
+            for file_path in request.files:
+                try:
+                    local_path = None
+                    # 将 URL 转换为本地路径
+                    if file_path.startswith('http://') or file_path.startswith('https://'):
+                        parsed = urlparse(file_path)
+                        url_path = parsed.path  # e.g. /uploaded_files/xxx.png
+                        if url_path.startswith('/uploaded_files/'):
+                            filename = os.path.basename(url_path)
+                            local_path = os.path.join(UPLOAD_FILES_DIR, filename)
+
+                    if local_path and os.path.exists(local_path):
+                        with open(local_path, 'rb') as f:
+                            file_bytes = f.read()
+                        mime_type = mimetypes.guess_type(local_path)[0] or 'application/octet-stream'
+                    elif not file_path.startswith('http://') and not file_path.startswith('https://') and os.path.exists(file_path):
+                        with open(file_path, 'rb') as f:
+                            file_bytes = f.read()
+                        mime_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+                    else:
+                        print(f"[文件] 文件不存在: {file_path}")
+                        continue
+
+                    if mime_type.startswith('image/'):
+                        # 图片文件：转为 base64 添加到多模态消息
+                        b64_data = base64.b64encode(file_bytes).decode('utf-8')
+                        user_content.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{b64_data}"
+                            }
+                        })
+                    elif mime_type == 'application/pdf':
+                        # PDF 文件：提取文本
+                        try:
+                            from py.load_files import handle_pdf_enhanced
+                            pdf_text = await handle_pdf_enhanced(file_bytes)
+                            user_content.append({
+                                "type": "text",
+                                "text": f"\n[PDF文件内容]\n{pdf_text[:3000]}\n[/PDF文件内容]"
+                            })
+                        except Exception as e:
+                            print(f"[文件] PDF提取失败: {e}")
+                            user_content.append({
+                                "type": "text",
+                                "text": f"\n[PDF文件处理失败: {str(e)}]"
+                            })
+                    else:
+                        # 其他文件类型：尝试读取文本
+                        try:
+                            text = file_bytes.decode('utf-8', errors='ignore')[:3000]
+                            user_content.append({
+                                "type": "text",
+                                "text": f"\n[文件内容 - {file_path}]\n{text}\n[/文件内容]"
+                            })
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"[文件] 处理文件失败 {file_path}: {e}")
+
+        # 添加文本消息
+        user_content.append({"type": "text", "text": request.message})
+
+        # 如果有文件附件，使用多模态格式；否则使用普通文本格式
+        if len(user_content) > 1:
+            messages.append({"role": "user", "content": user_content})
+        else:
+            messages.append({"role": "user", "content": request.message})
 
         # 获取 API 配置
         api_key = settings.get("api_key", "")
@@ -1252,6 +1412,13 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
                             try:
                                 chunk = json.loads(line[6:])
                                 delta = chunk.get("choices", [{}])[0].get("delta", {})
+
+                                # 处理思考过程 (reasoning_content) - 实时输出
+                                reasoning_content = delta.get("reasoning_content", "")
+                                if reasoning_content:
+                                    yield f"data: {json.dumps({'reasoning_content': reasoning_content, 'done': False}, ensure_ascii=False)}\n\n"
+
+                                # 处理最终回答 (content)
                                 content = delta.get("content", "")
                                 if content:
                                     full_response += content
@@ -1277,6 +1444,13 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
                                 try:
                                     chunk = json.loads(line[6:])
                                     delta = chunk.get("choices", [{}])[0].get("delta", {})
+
+                                    # 处理思考过程 (reasoning_content) - 实时输出
+                                    reasoning_content = delta.get("reasoning_content", "")
+                                    if reasoning_content:
+                                        yield f"data: {json.dumps({'reasoning_content': reasoning_content, 'done': False}, ensure_ascii=False)}\n\n"
+
+                                    # 处理最终回答 (content)
                                     content = delta.get("content", "")
                                     if content:
                                         full_response += content
@@ -2739,6 +2913,7 @@ async def list_knowledge_files():
 
 from io import BytesIO
 from fastapi.responses import StreamingResponse
+from urllib.parse import quote
 
 # 导出相关库
 try:
@@ -2751,48 +2926,6 @@ except ImportError:
     DOCX_AVAILABLE = False
     print("[导出功能] python-docx 未安装，Word 导出不可用")
 
-try:
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-    from reportlab.lib import colors
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
-    print("[导出功能] reportlab 未安装，PDF 导出不可用")
-
-
-# 注册中文字体（如果可用）
-def _register_chinese_fonts():
-    """注册中文字体"""
-    font_paths = [
-        # Windows
-        "C:/Windows/Fonts/msyh.ttc",  # 微软雅黑
-        "C:/Windows/Fonts/simhei.ttf",  # 黑体
-        "C:/Windows/Fonts/simsun.ttc",  # 宋体
-        # macOS
-        "/System/Library/Fonts/PingFang.ttc",
-        "/System/Library/Fonts/STHeiti Light.ttc",
-        # Linux
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    ]
-
-    for font_path in font_paths:
-        if Path(font_path).exists():
-            try:
-                pdfmetrics.registerFont(TTFont('Chinese', font_path))
-                return 'Chinese'
-            except Exception:
-                continue
-    return None
-
-
-CHINESE_FONT = _register_chinese_fonts() if PDF_AVAILABLE else None
-
 
 @router.get("/export/formats")
 async def get_export_formats():
@@ -2800,148 +2933,151 @@ async def get_export_formats():
     formats = []
     if DOCX_AVAILABLE:
         formats.append({"id": "word", "name": "Word 文档", "extension": ".docx"})
-    if PDF_AVAILABLE:
-        formats.append({"id": "pdf", "name": "PDF 文档", "extension": ".pdf"})
     return {"formats": formats}
 
 
 @router.post("/collaboration/export")
-async def export_collaboration(
-    session_id: str = Body(...),
-    format: str = Body(default="word"),
-    include_history: bool = Body(default=True)
-):
+async def export_collaboration(request: ExportCollaborationRequest):
     """
     导出协作记录
 
     Args:
-        session_id: 协作会话 ID
-        format: 导出格式 (word/pdf)
-        include_history: 是否包含完整对话历史
+        request: 导出请求，包含 session_id, format, include_history
 
     Returns:
         文件下载流
     """
-    await ensure_storage()
-    cache = await get_cache()
+    try:
+        session_id = request.session_id
+        format = request.format
+        include_history = request.include_history
 
-    # 获取协作数据
-    data = await cache.get("collaboration", {
-        "papers": [], "experiments": [], "reviews": [], "sessions": []
-    })
+        await ensure_storage()
+        cache = await get_cache()
 
-    # 查找指定会话
-    session = None
-    session_type = None
-    type_mapping = {
-        "paper": "papers",
-        "experiment": "experiments",
-        "review": "reviews",
-        "tutoring": "sessions"
-    }
+        # 获取协作数据
+        data = await cache.get("collaboration", {
+            "papers": [], "experiments": [], "reviews": [], "sessions": []
+        })
 
-    for stype, skey in type_mapping.items():
-        for s in data.get(skey, []):
-            if s.get("id") == session_id:
-                session = s
-                session_type = stype
+        # 查找指定会话
+        session = None
+        session_type = None
+        type_mapping = {
+            "paper": "papers",
+            "experiment": "experiments",
+            "review": "reviews",
+            "tutoring": "sessions"
+        }
+
+        for stype, skey in type_mapping.items():
+            for s in data.get(skey, []):
+                if s.get("id") == session_id:
+                    session = s
+                    session_type = stype
+                    break
+            if session:
                 break
-        if session:
-            break
 
-    if not session:
-        raise HTTPException(status_code=404, detail="协作会话不存在")
+        if not session:
+            raise HTTPException(status_code=404, detail="协作会话不存在")
 
-    # 生成文档
-    if format == "pdf":
-        if not PDF_AVAILABLE:
-            raise HTTPException(status_code=400, detail="PDF 导出功能不可用，请安装 reportlab")
-        file_bytes = await _generate_collaboration_pdf(session, session_type, include_history)
-        filename = f"协作记录_{session_id}.pdf"
-        media_type = "application/pdf"
-    else:
+        # 生成文档
         if not DOCX_AVAILABLE:
             raise HTTPException(status_code=400, detail="Word 导出功能不可用，请安装 python-docx")
         file_bytes = await _generate_collaboration_docx(session, session_type, include_history)
         filename = f"协作记录_{session_id}.docx"
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
-    # 返回文件流
-    return StreamingResponse(
-        BytesIO(file_bytes),
-        media_type=media_type,
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        }
-    )
+        # 返回文件流
+        encoded_filename = quote(filename)
+        return StreamingResponse(
+            BytesIO(file_bytes),
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[导出错误] export_collaboration: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"导出失败: {str(e)}")
 
 
 @router.post("/collaboration/export_all")
-async def export_all_collaborations(
-    format: str = Body(default="word"),
-    session_type: str = Body(default=None)
-):
+async def export_all_collaborations(request: ExportAllCollaborationsRequest):
     """
     导出所有协作记录
 
     Args:
-        format: 导出格式 (word/pdf)
-        session_type: 筛选类型 (paper/experiment/review/tutoring)，为空则导出全部
+        request: 导出请求，包含 format, session_type, session_ids, include_chat_history
 
     Returns:
         文件下载流
     """
-    await ensure_storage()
-    cache = await get_cache()
+    try:
+        session_type = request.session_type
+        session_ids = request.session_ids
+        include_chat_history = request.include_chat_history
 
-    data = await cache.get("collaboration", {
-        "papers": [], "experiments": [], "reviews": [], "sessions": []
-    })
+        await ensure_storage()
+        cache = await get_cache()
 
-    # 筛选会话
-    all_sessions = []
-    type_names = {
-        "papers": "论文写作",
-        "experiments": "实验设计",
-        "reviews": "文献综述",
-        "sessions": "虚拟辅导"
-    }
+        data = await cache.get("collaboration", {
+            "papers": [], "experiments": [], "reviews": [], "sessions": []
+        })
 
-    for skey, sname in type_names.items():
-        if session_type:
-            # 只导出指定类型
-            stype_map = {"paper": "papers", "experiment": "experiments", "review": "reviews", "tutoring": "sessions"}
-            if skey != stype_map.get(session_type):
-                continue
+        # 筛选会话
+        all_sessions = []
+        type_names = {
+            "papers": "论文写作",
+            "experiments": "实验设计",
+            "reviews": "文献综述",
+            "sessions": "虚拟辅导"
+        }
 
-        for s in data.get(skey, []):
-            s["_type_name"] = sname
-            all_sessions.append(s)
+        for skey, sname in type_names.items():
+            if session_type:
+                # 只导出指定类型
+                stype_map = {"paper": "papers", "experiment": "experiments", "review": "reviews", "tutoring": "sessions"}
+                if skey != stype_map.get(session_type):
+                    continue
 
-    if not all_sessions:
-        raise HTTPException(status_code=404, detail="没有可导出的协作记录")
+            for s in data.get(skey, []):
+                # 如果指定了 session_ids，只导出这些会话
+                if session_ids and s.get("id") not in session_ids:
+                    continue
+                s["_type_name"] = sname
+                all_sessions.append(s)
 
-    # 生成文档
-    if format == "pdf":
-        if not PDF_AVAILABLE:
-            raise HTTPException(status_code=400, detail="PDF 导出功能不可用")
-        file_bytes = await _generate_all_collaborations_pdf(all_sessions)
-        filename = f"协作记录汇总_{datetime.now().strftime('%Y%m%d')}.pdf"
-        media_type = "application/pdf"
-    else:
+        if not all_sessions:
+            raise HTTPException(status_code=404, detail="没有可导出的协作记录")
+
+        # 生成文档
         if not DOCX_AVAILABLE:
             raise HTTPException(status_code=400, detail="Word 导出功能不可用")
-        file_bytes = await _generate_all_collaborations_docx(all_sessions)
+        file_bytes = await _generate_all_collaborations_docx(all_sessions, include_chat_history)
         filename = f"协作记录汇总_{datetime.now().strftime('%Y%m%d')}.docx"
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
-    return StreamingResponse(
-        BytesIO(file_bytes),
-        media_type=media_type,
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        }
-    )
+        encoded_filename = quote(filename)
+        return StreamingResponse(
+            BytesIO(file_bytes),
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[导出错误] export_all_collaborations: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"导出失败: {str(e)}")
 
 
 async def _generate_collaboration_docx(session: dict, session_type: str, include_history: bool) -> bytes:
@@ -2959,17 +3095,39 @@ async def _generate_collaboration_docx(session: dict, session_type: str, include
     title = doc.add_heading(type_names.get(session_type, "协作记录"), level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # 基本信息
+    # 会话标题（如果有）
+    if session.get("title"):
+        p = doc.add_paragraph()
+        p.add_run(session.get("title")).bold = True
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    doc.add_paragraph()
+
+    # 基本信息 - 简化表格
     doc.add_heading("基本信息", level=1)
 
-    info_table = doc.add_table(rows=4, cols=2)
+    start_time = session.get("startTime", "")
+    end_time = session.get("endTime", "进行中")
+
+    # 计算时长
+    duration_text = ""
+    if start_time and end_time and end_time != "进行中":
+        try:
+            from datetime import datetime as dt
+            start = dt.fromisoformat(start_time.replace("Z", "+00:00"))
+            end = dt.fromisoformat(end_time.replace("Z", "+00:00"))
+            duration_minutes = int((end - start).total_seconds() / 60)
+            duration_text = f"{duration_minutes} 分钟"
+        except:
+            duration_text = session.get("duration", "")
+
+    info_table = doc.add_table(rows=3, cols=2)
     info_table.style = 'Table Grid'
 
     info_data = [
-        ("会话 ID", session.get("id", "")),
-        ("开始时间", session.get("startTime", "")),
-        ("结束时间", session.get("endTime", "进行中")),
-        ("摘要", session.get("summary", "暂无摘要"))
+        ("开始时间", start_time[:19] if start_time else ""),
+        ("结束时间", end_time[:19] if end_time and end_time != "进行中" else "进行中"),
+        ("协作时长", duration_text or "未记录")
     ]
 
     for i, (label, value) in enumerate(info_data):
@@ -2978,41 +3136,40 @@ async def _generate_collaboration_docx(session: dict, session_type: str, include
 
     doc.add_paragraph()
 
-    # 协作统计
+    # 协作统计 - 简化
     doc.add_heading("协作统计", level=1)
 
-    ai_count = len(session.get("aiContributions", []))
-    human_count = len(session.get("humanContributions", []))
+    ai_contribs = session.get("aiContributions", [])
+    human_contribs = session.get("humanContributions", [])
+    ai_count = len(ai_contribs)
+    human_count = len(human_contribs)
     total = ai_count + human_count
 
-    stats_table = doc.add_table(rows=4, cols=2)
-    stats_table.style = 'Table Grid'
+    # 使用简洁的段落形式
+    p = doc.add_paragraph()
+    p.add_run(f"总交互次数: ").bold = True
+    p.add_run(f"{total} 次  |  ")
+    p.add_run(f"AI: ").bold = True
+    p.add_run(f"{ai_count} 次  |  ")
+    p.add_run(f"用户: ").bold = True
+    p.add_run(f"{human_count} 次")
 
-    stats_data = [
-        ("AI 贡献次数", str(ai_count)),
-        ("用户贡献次数", str(human_count)),
-        ("总交互次数", str(total)),
-        ("协作比例", f"AI {round(ai_count/total*100, 1) if total > 0 else 0}% / 用户 {round(human_count/total*100, 1) if total > 0 else 0}%")
-    ]
-
-    for i, (label, value) in enumerate(stats_data):
-        stats_table.rows[i].cells[0].text = label
-        stats_table.rows[i].cells[1].text = value
+    if total > 0:
+        p2 = doc.add_paragraph()
+        p2.add_run(f"协作比例: AI {round(ai_count/total*100, 1)}% / 用户 {round(human_count/total*100, 1)}%")
 
     doc.add_paragraph()
 
-    # 协作历史
-    if include_history:
-        doc.add_heading("协作历史", level=1)
+    # 协作历史 - 优化格式
+    if include_history and total > 0:
+        doc.add_heading("对话记录", level=1)
 
         # 合并并按时间排序
         all_contributions = []
-        for c in session.get("aiContributions", []):
-            c["role"] = "AI"
-            all_contributions.append(c)
-        for c in session.get("humanContributions", []):
-            c["role"] = "用户"
-            all_contributions.append(c)
+        for c in ai_contribs:
+            all_contributions.append({**c, "role": "AI"})
+        for c in human_contribs:
+            all_contributions.append({**c, "role": "用户"})
 
         all_contributions.sort(key=lambda x: x.get("timestamp", ""))
 
@@ -3021,18 +3178,35 @@ async def _generate_collaboration_docx(session: dict, session_type: str, include
             content = c.get("content", "")
             timestamp = c.get("timestamp", "")
 
-            p = doc.add_paragraph()
-            p.add_run(f"[{i}] {role}").bold = True
-            p.add_run(f" ({timestamp})")
+            # 格式化时间
+            time_str = timestamp[11:16] if len(timestamp) > 16 else timestamp
 
-            doc.add_paragraph(content)
-            doc.add_paragraph()  # 空行
+            # 使用不同样式区分角色
+            p = doc.add_paragraph()
+            role_run = p.add_run(f"【{role}】")
+            role_run.bold = True
+            if role == "AI":
+                role_run.font.color.rgb = None  # 默认颜色
+            else:
+                from docx.shared import RGBColor
+                role_run.font.color.rgb = RGBColor(0, 100, 0)  # 绿色表示用户
+
+            p.add_run(f" {time_str}")
+
+            # 内容段落
+            content_p = doc.add_paragraph(content)
+            content_p.paragraph_format.left_indent = Pt(20)
+            content_p.paragraph_format.space_after = Pt(8)
+
+    # 摘要（如果有）
+    if session.get("summary"):
+        doc.add_heading("摘要", level=1)
+        doc.add_paragraph(session.get("summary"))
 
     # 导出信息
     doc.add_paragraph()
     p = doc.add_paragraph()
     p.add_run(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}").italic = True
-    p.add_run("\n由教育数字人系统生成").italic = True
 
     # 保存到字节流
     buffer = BytesIO()
@@ -3041,277 +3215,113 @@ async def _generate_collaboration_docx(session: dict, session_type: str, include
     return buffer.getvalue()
 
 
-async def _generate_collaboration_pdf(session: dict, session_type: str, include_history: bool) -> bytes:
-    """生成单个协作记录的 PDF 文档"""
-    buffer = BytesIO()
-
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=2*cm,
-        leftMargin=2*cm,
-        topMargin=2*cm,
-        bottomMargin=2*cm
-    )
-
-    styles = getSampleStyleSheet()
-
-    # 创建中文样式
-    if CHINESE_FONT:
-        title_style = ParagraphStyle(
-            'ChineseTitle',
-            parent=styles['Title'],
-            fontName=CHINESE_FONT,
-            fontSize=18
-        )
-        heading_style = ParagraphStyle(
-            'ChineseHeading',
-            parent=styles['Heading1'],
-            fontName=CHINESE_FONT,
-            fontSize=14
-        )
-        normal_style = ParagraphStyle(
-            'ChineseNormal',
-            parent=styles['Normal'],
-            fontName=CHINESE_FONT,
-            fontSize=10
-        )
-    else:
-        title_style = styles['Title']
-        heading_style = styles['Heading1']
-        normal_style = styles['Normal']
-
-    elements = []
-
-    # 标题
-    type_names = {
-        "paper": "论文写作协作",
-        "experiment": "实验设计协作",
-        "review": "文献综述协作",
-        "tutoring": "虚拟导师辅导"
-    }
-    elements.append(Paragraph(type_names.get(session_type, "协作记录"), title_style))
-    elements.append(Spacer(1, 0.5*cm))
-
-    # 基本信息
-    elements.append(Paragraph("基本信息", heading_style))
-
-    info_data = [
-        ["会话 ID", session.get("id", "")],
-        ["开始时间", session.get("startTime", "")],
-        ["结束时间", session.get("endTime", "进行中")],
-        ["摘要", session.get("summary", "暂无摘要")]
-    ]
-
-    info_table = Table(info_data, colWidths=[4*cm, 10*cm])
-    info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ]))
-    elements.append(info_table)
-    elements.append(Spacer(1, 0.5*cm))
-
-    # 协作统计
-    elements.append(Paragraph("协作统计", heading_style))
-
-    ai_count = len(session.get("aiContributions", []))
-    human_count = len(session.get("humanContributions", []))
-    total = ai_count + human_count
-
-    stats_data = [
-        ["AI 贡献次数", str(ai_count)],
-        ["用户贡献次数", str(human_count)],
-        ["总交互次数", str(total)],
-        ["协作比例", f"AI {round(ai_count/total*100, 1) if total > 0 else 0}% / 用户 {round(human_count/total*100, 1) if total > 0 else 0}%"]
-    ]
-
-    stats_table = Table(stats_data, colWidths=[4*cm, 10*cm])
-    stats_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-    ]))
-    elements.append(stats_table)
-    elements.append(Spacer(1, 0.5*cm))
-
-    # 协作历史
-    if include_history:
-        elements.append(Paragraph("协作历史", heading_style))
-
-        all_contributions = []
-        for c in session.get("aiContributions", []):
-            c["role"] = "AI"
-            all_contributions.append(c)
-        for c in session.get("humanContributions", []):
-            c["role"] = "用户"
-            all_contributions.append(c)
-
-        all_contributions.sort(key=lambda x: x.get("timestamp", ""))
-
-        for i, c in enumerate(all_contributions, 1):
-            role = c.get("role", "未知")
-            content = c.get("content", "")
-            timestamp = c.get("timestamp", "")
-
-            elements.append(Paragraph(f"<b>[{i}] {role}</b> ({timestamp})", normal_style))
-            elements.append(Paragraph(content[:500] + ("..." if len(content) > 500 else ""), normal_style))
-            elements.append(Spacer(1, 0.3*cm))
-
-    # 导出信息
-    elements.append(Spacer(1, 1*cm))
-    elements.append(Paragraph(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", normal_style))
-    elements.append(Paragraph("由教育数字人系统生成", normal_style))
-
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-
-async def _generate_all_collaborations_docx(sessions: list) -> bytes:
+async def _generate_all_collaborations_docx(sessions: list, include_chat_history: bool = False) -> bytes:
     """生成所有协作记录汇总的 Word 文档"""
-    doc = Document()
+    try:
+        doc = Document()
 
-    # 标题
-    title = doc.add_heading("协作记录汇总", level=0)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # 标题
+        title = doc.add_heading("协作记录汇总", level=0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    doc.add_paragraph(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    doc.add_paragraph(f"共 {len(sessions)} 条协作记录")
-    doc.add_paragraph()
+        doc.add_paragraph(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        doc.add_paragraph(f"共 {len(sessions)} 条协作记录")
+        doc.add_paragraph()
 
-    # 汇总统计
-    doc.add_heading("汇总统计", level=1)
+        # 汇总统计 - 简化
+        doc.add_heading("汇总统计", level=1)
 
-    total_ai = sum(len(s.get("aiContributions", [])) for s in sessions)
-    total_human = sum(len(s.get("humanContributions", [])) for s in sessions)
-    total = total_ai + total_human
+        total_ai = sum(len(s.get("aiContributions", [])) for s in sessions)
+        total_human = sum(len(s.get("humanContributions", [])) for s in sessions)
+        total = total_ai + total_human
 
-    stats_table = doc.add_table(rows=3, cols=2)
-    stats_table.style = 'Table Grid'
-    stats_data = [
-        ("总会话数", str(len(sessions))),
-        ("总交互次数", str(total)),
-        ("协作比例", f"AI {total_ai} 次 ({round(total_ai/total*100, 1) if total > 0 else 0}%) / 用户 {total_human} 次 ({round(total_human/total*100, 1) if total > 0 else 0}%)")
-    ]
-    for i, (label, value) in enumerate(stats_data):
-        stats_table.rows[i].cells[0].text = label
-        stats_table.rows[i].cells[1].text = value
-
-    doc.add_paragraph()
-
-    # 各会话详情
-    doc.add_heading("会话列表", level=1)
-
-    for i, session in enumerate(sessions, 1):
-        type_name = session.get("_type_name", "未知类型")
-        title_text = session.get("title", "无标题")
-        start_time = session.get("startTime", "")
-
+        # 使用简洁段落
         p = doc.add_paragraph()
-        p.add_run(f"{i}. [{type_name}] {title_text}").bold = True
-
-        ai_count = len(session.get("aiContributions", []))
-        human_count = len(session.get("humanContributions", []))
-
-        doc.add_paragraph(f"   开始时间: {start_time}")
-        doc.add_paragraph(f"   交互次数: AI {ai_count} 次 / 用户 {human_count} 次")
-
-        if session.get("summary"):
-            doc.add_paragraph(f"   摘要: {session.get('summary')}")
+        p.add_run(f"总会话数: ").bold = True
+        p.add_run(f"{len(sessions)} 个  |  ")
+        p.add_run(f"总交互: ").bold = True
+        p.add_run(f"{total} 次  |  ")
+        p.add_run(f"AI: ").bold = True
+        p.add_run(f"{total_ai} 次  |  ")
+        p.add_run(f"用户: ").bold = True
+        p.add_run(f"{total_human} 次")
 
         doc.add_paragraph()
 
-    # 页脚
-    p = doc.add_paragraph()
-    p.add_run("由教育数字人系统生成").italic = True
+        # 各会话详情
+        doc.add_heading("会话详情", level=1)
 
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer.getvalue()
+        for i, session in enumerate(sessions, 1):
+            type_name = session.get("_type_name", "未知类型")
+            title_text = session.get("title", "") or "无标题"
+            start_time = session.get("startTime", "")
+            end_time = session.get("endTime", "")
 
+            # 会话标题
+            p = doc.add_paragraph()
+            p.add_run(f"{i}. [{type_name}] ").bold = True
+            p.add_run(title_text)
 
-async def _generate_all_collaborations_pdf(sessions: list) -> bytes:
-    """生成所有协作记录汇总的 PDF 文档"""
-    buffer = BytesIO()
+            # 基本信息 - 简化
+            time_str = start_time[:16] if start_time else ""
+            end_str = end_time[:16] if end_time and end_time != "进行中" else "进行中"
 
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=2*cm,
-        leftMargin=2*cm,
-        topMargin=2*cm,
-        bottomMargin=2*cm
-    )
+            ai_count = len(session.get("aiContributions", []))
+            human_count = len(session.get("humanContributions", []))
 
-    styles = getSampleStyleSheet()
+            info_p = doc.add_paragraph()
+            info_p.add_run(f"   时间: {time_str} ~ {end_str}  |  交互: AI {ai_count}/用户 {human_count}")
 
-    if CHINESE_FONT:
-        title_style = ParagraphStyle('ChineseTitle', parent=styles['Title'], fontName=CHINESE_FONT, fontSize=18)
-        heading_style = ParagraphStyle('ChineseHeading', parent=styles['Heading1'], fontName=CHINESE_FONT, fontSize=14)
-        normal_style = ParagraphStyle('ChineseNormal', parent=styles['Normal'], fontName=CHINESE_FONT, fontSize=10)
-    else:
-        title_style = styles['Title']
-        heading_style = styles['Heading1']
-        normal_style = styles['Normal']
+            # 摘要（如果有）
+            if session.get("summary"):
+                summary_p = doc.add_paragraph()
+                summary_p.add_run(f"   摘要: ").italic = True
+                summary_p.add_run(session.get("summary"))
 
-    elements = []
+            # 聊天记录（如果请求）
+            if include_chat_history and (ai_count + human_count) > 0:
+                chat_p = doc.add_paragraph()
+                chat_p.add_run("   对话记录:").italic = True
 
-    # 标题
-    elements.append(Paragraph("协作记录汇总", title_style))
-    elements.append(Spacer(1, 0.3*cm))
-    elements.append(Paragraph(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", normal_style))
-    elements.append(Paragraph(f"共 {len(sessions)} 条协作记录", normal_style))
-    elements.append(Spacer(1, 0.5*cm))
+                # 合并并排序
+                all_contribs = []
+                for c in session.get("aiContributions", []):
+                    all_contribs.append({**c, "role": "AI"})
+                for c in session.get("humanContributions", []):
+                    all_contribs.append({**c, "role": "用户"})
+                all_contribs.sort(key=lambda x: x.get("timestamp", ""))
 
-    # 汇总统计
-    elements.append(Paragraph("汇总统计", heading_style))
+                for c in all_contribs:
+                    role = c.get("role", "")
+                    content = c.get("content", "")
+                    ts = c.get("timestamp", "")
+                    time_short = ts[11:16] if len(ts) > 16 else ts
 
-    total_ai = sum(len(s.get("aiContributions", [])) for s in sessions)
-    total_human = sum(len(s.get("humanContributions", [])) for s in sessions)
-    total = total_ai + total_human
+                    # 缩进的对话行
+                    chat_line = doc.add_paragraph()
+                    chat_line.paragraph_format.left_indent = Pt(30)
+                    chat_line.add_run(f"[{role}] {time_short}: ").bold = (role == "用户")
+                    # 截断过长的内容
+                    if len(content) > 500:
+                        chat_line.add_run(content[:500] + "...")
+                    else:
+                        chat_line.add_run(content)
 
-    stats_data = [
-        ["总会话数", str(len(sessions))],
-        ["总交互次数", str(total)],
-        ["协作比例", f"AI {total_ai} 次 / 用户 {total_human} 次"]
-    ]
+            doc.add_paragraph()  # 会话间空行
 
-    stats_table = Table(stats_data, colWidths=[4*cm, 10*cm])
-    stats_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-    ]))
-    elements.append(stats_table)
-    elements.append(Spacer(1, 0.5*cm))
+        # 页脚
+        p = doc.add_paragraph()
+        p.add_run("由教育数字人系统生成").italic = True
 
-    # 会话列表
-    elements.append(Paragraph("会话列表", heading_style))
-
-    for i, session in enumerate(sessions, 1):
-        type_name = session.get("_type_name", "未知类型")
-        title_text = session.get("title", "无标题")
-
-        elements.append(Paragraph(f"<b>{i}. [{type_name}] {title_text}</b>", normal_style))
-
-        ai_count = len(session.get("aiContributions", []))
-        human_count = len(session.get("humanContributions", []))
-
-        elements.append(Paragraph(f"   交互次数: AI {ai_count} 次 / 用户 {human_count} 次", normal_style))
-        elements.append(Spacer(1, 0.2*cm))
-
-    elements.append(Spacer(1, 1*cm))
-    elements.append(Paragraph("由教育数字人系统生成", normal_style))
-
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer.getvalue()
+    except Exception as e:
+        print(f"[导出错误] _generate_all_collaborations_docx: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 # ==================== 学习报告生成 API ====================
@@ -3323,73 +3333,80 @@ async def generate_learning_report():
 
     汇总成长数据、协作统计、技能使用、成就等信息
     """
-    await ensure_storage()
-    cache = await get_cache()
+    try:
+        await ensure_storage()
+        cache = await get_cache()
 
-    # 获取各类数据
-    growth_data = await cache.get("growth", {
-        "level": 1, "exp": 0, "totalExp": 0, "achievements": [], "stats": {}, "skillUsage": {}
-    })
+        # 获取各类数据
+        growth_data = await cache.get("growth", {
+            "level": 1, "exp": 0, "totalExp": 0, "achievements": [], "stats": {}, "skillUsage": {}
+        })
 
-    collab_data = await cache.get("collaboration", {
-        "papers": [], "experiments": [], "reviews": [], "sessions": []
-    })
+        collab_data = await cache.get("collaboration", {
+            "papers": [], "experiments": [], "reviews": [], "sessions": []
+        })
 
-    achievement_data = await cache.get("achievement", {"unlocked": [], "history": []})
+        achievement_data = await cache.get("achievement", {"unlocked": [], "history": []})
 
-    # 计算统计数据
-    total_sessions = sum(len(collab_data.get(k, [])) for k in ["papers", "experiments", "reviews", "sessions"])
+        # 计算统计数据
+        total_sessions = sum(len(collab_data.get(k, [])) for k in ["papers", "experiments", "reviews", "sessions"])
 
-    total_ai_contrib = 0
-    total_human_contrib = 0
-    for key in ["papers", "experiments", "reviews", "sessions"]:
-        for session in collab_data.get(key, []):
-            total_ai_contrib += len(session.get("aiContributions", []))
-            total_human_contrib += len(session.get("humanContributions", []))
+        total_ai_contrib = 0
+        total_human_contrib = 0
+        for key in ["papers", "experiments", "reviews", "sessions"]:
+            for session in collab_data.get(key, []):
+                total_ai_contrib += len(session.get("aiContributions", []))
+                total_human_contrib += len(session.get("humanContributions", []))
 
-    # 技能使用统计
-    skill_usage = growth_data.get("skillUsage", {})
-    skill_names = {
-        "research-assistant": "科研助手",
-        "literature-review": "文献综述",
-        "paper-writing": "论文写作",
-        "academic-tutoring": "虚拟导师"
-    }
+        # 技能使用统计
+        skill_usage = growth_data.get("skillUsage", {})
+        skill_names = {
+            "research-assistant": "科研助手",
+            "literature-review": "文献综述",
+            "paper-writing": "论文写作",
+            "academic-tutoring": "虚拟导师"
+        }
 
-    # 成就统计
-    unlocked_count = len(achievement_data.get("unlocked", []))
+        # 成就统计
+        unlocked_count = len(achievement_data.get("unlocked", []))
 
-    # 构建报告
-    report = {
-        "generatedAt": datetime.now().isoformat(),
-        "summary": {
-            "level": growth_data.get("level", 1),
-            "totalExp": growth_data.get("totalExp", 0),
-            "currentExp": growth_data.get("exp", 0),
-            "expForNextLevel": growth_data.get("level", 1) * 100
-        },
-        "stats": growth_data.get("stats", {}),
-        "collaboration": {
-            "totalSessions": total_sessions,
-            "aiContributions": total_ai_contrib,
-            "humanContributions": total_human_contrib,
-            "collaborationRatio": {
-                "ai": round(total_ai_contrib / (total_ai_contrib + total_human_contrib) * 100, 1) if (total_ai_contrib + total_human_contrib) > 0 else 0,
-                "human": round(total_human_contrib / (total_ai_contrib + total_human_contrib) * 100, 1) if (total_ai_contrib + total_human_contrib) > 0 else 0
-            }
-        },
-        "skills": {
-            "usage": {skill_names.get(k, k): v for k, v in skill_usage.items()},
-            "mostUsed": max(skill_usage.items(), key=lambda x: x[1])[0] if skill_usage else None
-        },
-        "achievements": {
-            "unlockedCount": unlocked_count,
-            "recentUnlocks": achievement_data.get("history", [])[-5:]  # 最近5个成就
-        },
-        "recommendations": _generate_recommendations(growth_data, skill_usage, total_sessions)
-    }
+        # 构建报告
+        report = {
+            "generatedAt": datetime.now().isoformat(),
+            "summary": {
+                "level": growth_data.get("level", 1),
+                "totalExp": growth_data.get("totalExp", 0),
+                "currentExp": growth_data.get("exp", 0),
+                "expForNextLevel": growth_data.get("level", 1) * 100
+            },
+            "stats": growth_data.get("stats", {}),
+            "collaboration": {
+                "totalSessions": total_sessions,
+                "aiContributions": total_ai_contrib,
+                "humanContributions": total_human_contrib,
+                "collaborationRatio": {
+                    "ai": round(total_ai_contrib / (total_ai_contrib + total_human_contrib) * 100, 1) if (total_ai_contrib + total_human_contrib) > 0 else 0,
+                    "human": round(total_human_contrib / (total_ai_contrib + total_human_contrib) * 100, 1) if (total_ai_contrib + total_human_contrib) > 0 else 0
+                }
+            },
+            "skills": {
+                "usage": {skill_names.get(k, k): v for k, v in skill_usage.items()},
+                "mostUsed": max(skill_usage.items(), key=lambda x: x[1])[0] if skill_usage else None
+            },
+            "achievements": {
+                "unlockedCount": unlocked_count,
+                "recentUnlocks": achievement_data.get("history", [])[-5:]  # 最近5个成就
+            },
+            "recommendations": _generate_recommendations(growth_data, skill_usage, total_sessions)
+        }
 
-    return report
+        return report
+
+    except Exception as e:
+        print(f"[教育API] 生成学习报告失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"生成学习报告失败: {str(e)}")
 
 
 def _generate_recommendations(growth_data: dict, skill_usage: dict, total_sessions: int) -> list:
@@ -3438,12 +3455,12 @@ def _generate_recommendations(growth_data: dict, skill_usage: dict, total_sessio
 
 
 @router.post("/report/export")
-async def export_learning_report(format: str = Body(default="word")):
+async def export_learning_report(request: ExportReportRequest):
     """
     导出学习报告
 
     Args:
-        format: 导出格式 (word/pdf)
+        request: 导出请求，包含 format
 
     Returns:
         文件下载流
@@ -3451,24 +3468,18 @@ async def export_learning_report(format: str = Body(default="word")):
     # 获取报告数据
     report = await generate_learning_report()
 
-    if format == "pdf":
-        if not PDF_AVAILABLE:
-            raise HTTPException(status_code=400, detail="PDF 导出功能不可用")
-        file_bytes = await _generate_report_pdf(report)
-        filename = f"学习报告_{datetime.now().strftime('%Y%m%d')}.pdf"
-        media_type = "application/pdf"
-    else:
-        if not DOCX_AVAILABLE:
-            raise HTTPException(status_code=400, detail="Word 导出功能不可用")
-        file_bytes = await _generate_report_docx(report)
-        filename = f"学习报告_{datetime.now().strftime('%Y%m%d')}.docx"
-        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    if not DOCX_AVAILABLE:
+        raise HTTPException(status_code=400, detail="Word 导出功能不可用")
+    file_bytes = await _generate_report_docx(report)
+    filename = f"学习报告_{datetime.now().strftime('%Y%m%d')}.docx"
+    media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
+    encoded_filename = quote(filename)
     return StreamingResponse(
         BytesIO(file_bytes),
         media_type=media_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
         }
     )
 
@@ -3597,113 +3608,3 @@ async def _generate_report_docx(report: dict) -> bytes:
     doc.save(buffer)
     buffer.seek(0)
     return buffer.getvalue()
-
-
-async def _generate_report_pdf(report: dict) -> bytes:
-    """生成学习报告 PDF 文档"""
-    buffer = BytesIO()
-
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=2*cm,
-        leftMargin=2*cm,
-        topMargin=2*cm,
-        bottomMargin=2*cm
-    )
-
-    styles = getSampleStyleSheet()
-
-    if CHINESE_FONT:
-        title_style = ParagraphStyle('ChineseTitle', parent=styles['Title'], fontName=CHINESE_FONT, fontSize=18)
-        heading_style = ParagraphStyle('ChineseHeading', parent=styles['Heading1'], fontName=CHINESE_FONT, fontSize=14)
-        normal_style = ParagraphStyle('ChineseNormal', parent=styles['Normal'], fontName=CHINESE_FONT, fontSize=10)
-    else:
-        title_style = styles['Title']
-        heading_style = styles['Heading1']
-        normal_style = styles['Normal']
-
-    elements = []
-
-    # 标题
-    elements.append(Paragraph("学习报告", title_style))
-    elements.append(Spacer(1, 0.3*cm))
-    elements.append(Paragraph(f"生成时间: {report.get('generatedAt', '')}", normal_style))
-    elements.append(Spacer(1, 0.5*cm))
-
-    # 成长概览
-    elements.append(Paragraph("成长概览", heading_style))
-
-    summary = report.get("summary", {})
-    summary_data = [
-        ["当前等级", f"Lv.{summary.get('level', 1)}"],
-        ["累计经验", f"{summary.get('totalExp', 0)} 点"],
-        ["当前经验", f"{summary.get('currentExp', 0)} / {summary.get('expForNextLevel', 100)} 点"],
-    ]
-
-    summary_table = Table(summary_data, colWidths=[4*cm, 10*cm])
-    summary_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-    ]))
-    elements.append(summary_table)
-    elements.append(Spacer(1, 0.5*cm))
-
-    # 学习统计
-    elements.append(Paragraph("学习统计", heading_style))
-
-    stats = report.get("stats", {})
-    stats_data = [
-        ["对话次数", str(stats.get("conversations", 0))],
-        ["阅读文献", f"{stats.get('papers_read', 0)} 篇"],
-        ["设计实验", f"{stats.get('experiments_designed', 0)} 个"],
-        ["学习时长", f"{round(stats.get('hours_spent', 0), 1)} 小时"]
-    ]
-
-    stats_table = Table(stats_data, colWidths=[4*cm, 10*cm])
-    stats_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-    ]))
-    elements.append(stats_table)
-    elements.append(Spacer(1, 0.5*cm))
-
-    # 协作统计
-    elements.append(Paragraph("协作统计", heading_style))
-
-    collab = report.get("collaboration", {})
-    ratio = collab.get("collaborationRatio", {})
-    collab_data = [
-        ["协作会话", f"{collab.get('totalSessions', 0)} 次"],
-        ["AI 贡献", f"{collab.get('aiContributions', 0)} 次 ({ratio.get('ai', 0)}%)"],
-        ["用户贡献", f"{collab.get('humanContributions', 0)} 次 ({ratio.get('human', 0)}%)"]
-    ]
-
-    collab_table = Table(collab_data, colWidths=[4*cm, 10*cm])
-    collab_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-    ]))
-    elements.append(collab_table)
-    elements.append(Spacer(1, 0.5*cm))
-
-    # 学习建议
-    elements.append(Paragraph("学习建议", heading_style))
-
-    recommendations = report.get("recommendations", [])
-    for rec in recommendations:
-        elements.append(Paragraph(f"• {rec}", normal_style))
-
-    elements.append(Spacer(1, 1*cm))
-    elements.append(Paragraph("由教育数字人系统生成", normal_style))
-
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
-

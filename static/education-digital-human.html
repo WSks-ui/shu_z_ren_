@@ -771,6 +771,11 @@
       border-left: 3px solid var(--primary-color);
     }
 
+    .collab-card.selected {
+      border-left: 3px solid var(--success-color);
+      background: linear-gradient(90deg, rgba(67, 233, 123, 0.1), transparent);
+    }
+
     .collab-icon {
       width: 50px;
       height: 50px;
@@ -1096,6 +1101,40 @@
       margin-bottom: 5px;
     }
 
+    /* 思考过程样式 */
+    .reasoning-block {
+      background: rgba(102, 126, 234, 0.1);
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      border-radius: 8px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+
+    .reasoning-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--primary-color);
+      background: rgba(102, 126, 234, 0.05);
+      transition: background 0.2s;
+    }
+
+    .reasoning-header:hover {
+      background: rgba(102, 126, 234, 0.15);
+    }
+
+    .reasoning-content {
+      padding: 12px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      white-space: pre-wrap;
+      border-top: 1px solid rgba(102, 126, 234, 0.2);
+    }
+
     .message-content {
       font-size: 15px;
     }
@@ -1136,6 +1175,33 @@
     @keyframes typing {
       0%, 60%, 100% { transform: translateY(0); }
       30% { transform: translateY(-10px); }
+    }
+
+    /* 打字机效果样式 */
+    .typewriter-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.2em;
+      background: var(--primary-color);
+      margin-left: 2px;
+      animation: cursor-blink 0.8s infinite;
+      vertical-align: text-bottom;
+    }
+
+    @keyframes cursor-blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    .message-content.typing::after {
+      content: '';
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: var(--primary-color);
+      margin-left: 2px;
+      animation: cursor-blink 0.8s infinite;
+      vertical-align: text-bottom;
     }
 
     .chat-input-area {
@@ -1485,20 +1551,113 @@
       background: #3d3d5c;
     }
 
-    /* 响应式 */
+    /* ==================== 响应式布局 ==================== */
+
+    /* 大屏幕桌面 (> 1200px) - 默认样式已处理 */
+
+    /* 中等屏幕桌面 (1024px - 1200px) */
     @media (max-width: 1200px) {
+      .left-panel {
+        width: 50%;
+        min-width: 380px;
+      }
+
+      .skill-card {
+        padding: 18px;
+      }
+    }
+
+    /* 平板设备 (768px - 1024px) */
+    @media (max-width: 1024px) and (min-width: 768px) {
+      .left-panel {
+        width: 50%;
+        min-width: 320px;
+      }
+
+      .right-panel {
+        width: 50%;
+      }
+
+      .avatar-header h1 {
+        font-size: 20px;
+      }
+
+      .skill-card {
+        padding: 15px;
+      }
+
+      .skill-icon {
+        width: 50px;
+        height: 50px;
+      }
+
+      .tabs-header {
+        flex-wrap: wrap;
+      }
+
+      .tab-btn {
+        padding: 14px 8px;
+        font-size: 13px;
+      }
+
+      .message {
+        max-width: 90%;
+        padding: 12px 15px;
+      }
+    }
+
+    /* 小平板/大手机 (600px - 768px) */
+    @media (max-width: 768px) and (min-width: 600px) {
       .app-container {
         flex-direction: column;
       }
 
       .left-panel {
         width: 100%;
+        height: 35vh;
         min-width: auto;
-        height: 40vh;
+      }
+
+      .right-panel {
+        height: 65vh;
+      }
+
+      .avatar-header {
+        padding: 15px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .avatar-header h1 {
+        font-size: 18px;
+      }
+
+      .avatar-type-switch {
+        flex-direction: row;
+        gap: 5px;
+        width: 100%;
+        justify-content: center;
+      }
+
+      .avatar-type-btn {
+        flex: 1;
+        max-width: 150px;
+      }
+
+      .tabs-header {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .tab-btn {
+        min-width: 80px;
+        font-size: 12px;
+        padding: 12px 10px;
       }
 
       .skills-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
       }
 
       .stats-grid {
@@ -1508,6 +1667,619 @@
       .achievements-grid {
         grid-template-columns: repeat(2, 1fr);
       }
+
+      .message {
+        max-width: 92%;
+      }
+    }
+
+    /* 手机适配 (< 600px) */
+    @media (max-width: 600px) {
+      .app-container {
+        flex-direction: column;
+      }
+
+      .left-panel {
+        width: 100%;
+        height: 30vh;
+        min-width: auto;
+      }
+
+      .right-panel {
+        height: 70vh;
+      }
+
+      .avatar-header {
+        padding: 12px;
+        flex-wrap: wrap;
+      }
+
+      .avatar-header h1 {
+        font-size: 16px;
+      }
+
+      .settings-link {
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+
+      .avatar-type-switch {
+        width: 100%;
+        justify-content: center;
+        margin-top: 8px;
+      }
+
+      .avatar-type-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+
+      .avatar-controls {
+        flex-wrap: wrap;
+        padding: 10px;
+        gap: 8px;
+      }
+
+      .avatar-controls input {
+        width: 100%;
+        margin-bottom: 5px;
+        padding: 10px 14px;
+        font-size: 13px;
+      }
+
+      .avatar-controls button {
+        flex: 1;
+        padding: 10px 16px;
+        font-size: 13px;
+      }
+
+      .tabs-header {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+      }
+
+      .tab-btn {
+        min-width: 70px;
+        font-size: 11px;
+        padding: 10px 6px;
+      }
+
+      .tab-btn i {
+        margin-right: 4px;
+        font-size: 12px;
+      }
+
+      .tab-content {
+        padding: 12px;
+      }
+
+      .skills-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      .skill-card {
+        padding: 12px;
+      }
+
+      .skill-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+      }
+
+      .skill-card h3 {
+        font-size: 14px;
+      }
+
+      .skill-card p {
+        font-size: 12px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .stat-card {
+        padding: 12px;
+      }
+
+      .stat-value {
+        font-size: 20px;
+      }
+
+      .achievements-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+
+      .achievement-card {
+        padding: 10px;
+      }
+
+      .message {
+        max-width: 95%;
+        padding: 10px 14px;
+        font-size: 14px;
+      }
+
+      .chat-input-area {
+        padding: 12px;
+      }
+
+      .chat-input-wrapper {
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .chat-input-wrapper textarea {
+        min-height: 60px;
+        padding: 12px 16px;
+        font-size: 14px;
+      }
+
+      .chat-input-wrapper button {
+        width: 100%;
+        padding: 12px 20px;
+      }
+
+      .chat-buttons {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .voice-btn {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        font-size: 18px;
+      }
+
+      .collab-card {
+        flex-direction: column;
+        padding: 15px;
+      }
+
+      .collab-icon {
+        width: 40px;
+        height: 40px;
+      }
+
+      .modal-content {
+        width: 95%;
+        padding: 20px;
+        max-height: 85vh;
+      }
+    }
+
+    /* 触摸设备优化 */
+    @media (hover: none) and (pointer: coarse) {
+      .btn-primary, .btn-secondary, .tab-btn, .skill-card {
+        min-height: 44px; /* iOS 推荐触摸目标大小 */
+      }
+
+      .skill-card, .collab-card {
+        cursor: pointer;
+      }
+
+      /* 禁用 hover 效果，改为 active */
+      .btn-primary:hover {
+        transform: none;
+        box-shadow: none;
+      }
+
+      .btn-primary:active {
+        transform: scale(0.98);
+      }
+
+      .btn-secondary:hover {
+        transform: none;
+      }
+
+      .btn-secondary:active {
+        transform: scale(0.98);
+      }
+
+      .skill-card:hover {
+        transform: none;
+      }
+
+      .skill-card:active {
+        transform: scale(0.98);
+      }
+    }
+
+    /* 文件上传按钮样式 */
+    .upload-btn {
+      width: 50px;
+      height: 50px;
+      min-width: 50px;
+      border-radius: 50%;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .upload-btn:hover {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: white;
+    }
+
+    /* 手写公式按钮样式 */
+    .handwrite-btn {
+      width: 50px;
+      height: 50px;
+      min-width: 50px;
+      border-radius: 50%;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: linear-gradient(135deg, #10b981, #059669);
+      border: none;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .handwrite-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+    }
+
+    /* 已上传文件列表 */
+    .uploaded-files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .uploaded-file-tag {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--text-color);
+    }
+
+    .uploaded-file-tag i {
+      font-size: 14px;
+    }
+
+    .uploaded-file-tag .remove-file {
+      cursor: pointer;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+
+    .uploaded-file-tag .remove-file:hover {
+      color: var(--danger-color);
+    }
+
+    .uploaded-file-tag.pdf-file {
+      border-color: var(--primary-color);
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    .uploaded-file-tag.pdf-file .preview-btn {
+      cursor: pointer;
+      color: var(--primary-color);
+      margin-left: 4px;
+    }
+
+    .uploaded-file-tag.pdf-file .preview-btn:hover {
+      color: var(--secondary-color);
+    }
+
+    /* 手写对话框样式 */
+    .handwrite-dialog-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 3000;
+    }
+
+    .handwrite-dialog {
+      background: var(--card-bg);
+      border-radius: 20px;
+      width: 90%;
+      max-width: 600px;
+      padding: 25px;
+      border: 1px solid var(--border-color);
+    }
+
+    .handwrite-dialog-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .handwrite-dialog-header h3 {
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .handwrite-canvas-container {
+      background: white;
+      border-radius: 12px;
+      padding: 10px;
+      margin-bottom: 15px;
+    }
+
+    .handwrite-canvas {
+      width: 100%;
+      height: 250px;
+      border: 2px dashed #ddd;
+      border-radius: 8px;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    .handwrite-toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .handwrite-toolbar button {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-color);
+      color: var(--text-color);
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.3s;
+    }
+
+    .handwrite-toolbar button:hover {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: white;
+    }
+
+    .handwrite-result {
+      background: var(--bg-color);
+      border-radius: 12px;
+      padding: 15px;
+      margin-top: 15px;
+      font-family: 'Times New Roman', serif;
+      font-size: 18px;
+      min-height: 60px;
+      color: var(--text-color);
+    }
+
+    .handwrite-result .latex-preview {
+      margin-top: 10px;
+      padding: 10px;
+      background: var(--card-bg);
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+
+    .handwrite-dialog-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .handwrite-dialog-footer button {
+      padding: 10px 20px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+
+    .handwrite-dialog-footer .btn-cancel {
+      background: var(--bg-color);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-color);
+    }
+
+    .handwrite-dialog-footer .btn-insert {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+    }
+
+    /* PDF 预览对话框样式 */
+    .pdf-preview-dialog-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 3000;
+    }
+
+    .pdf-preview-dialog {
+      background: var(--card-bg);
+      border-radius: 20px;
+      width: 90%;
+      max-width: 900px;
+      max-height: 85vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border-color);
+    }
+
+    .pdf-preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 25px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .pdf-preview-header h3 {
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pdf-preview-toolbar {
+      display: flex;
+      gap: 10px;
+      padding: 15px 25px;
+      background: var(--bg-color);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .pdf-preview-toolbar button {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg);
+      color: var(--text-color);
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.3s;
+    }
+
+    .pdf-preview-toolbar button:hover {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: white;
+    }
+
+    .pdf-preview-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .pdf-pages-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 15px;
+    }
+
+    .pdf-page-item {
+      position: relative;
+      background: var(--bg-color);
+      border-radius: 10px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.3s;
+    }
+
+    .pdf-page-item:hover {
+      border-color: var(--primary-color);
+    }
+
+    .pdf-page-item.selected {
+      border-color: var(--success-color);
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+    }
+
+    .pdf-page-item img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .pdf-page-item .page-num {
+      position: absolute;
+      bottom: 5px;
+      right: 5px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    .pdf-preview-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 25px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .pdf-preview-footer .selected-count {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .pdf-preview-footer .footer-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .pdf-preview-footer button {
+      padding: 10px 20px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+
+    .pdf-preview-footer .btn-cancel {
+      background: var(--bg-color);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-color);
+    }
+
+    .pdf-preview-footer .btn-extract {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+    }
+
+    .pdf-preview-footer .btn-extract:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pdf-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 50px;
+      color: var(--text-secondary);
+    }
+
+    .pdf-loading i {
+      font-size: 40px;
+      margin-bottom: 15px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
@@ -1527,16 +2299,16 @@
         </button>
         <div class="avatar-type-switch">
           <button class="avatar-type-btn" :class="{ active: digitalHumanType === 'vrm' }" @click="switchAvatarType('vrm')">VRM</button>
-          <button class="avatar-type-btn" :class="{ active: digitalHumanType === 'tencent' }" @click="switchAvatarType('tencent')">腾讯数智人</button>
+          <button class="avatar-type-btn" :class="{ active: digitalHumanType === 'xingyun' }" @click="switchAvatarType('xingyun')">魔珐星云</button>
         </div>
       </div>
 
       <div class="avatar-container">
         <iframe v-if="digitalHumanType === 'vrm'" src="/vrm.html" class="avatar-video" frameborder="0"></iframe>
-        <video v-else-if="tencentSession.playUrl" :src="tencentSession.playUrl" autoplay muted playsinline class="avatar-video"></video>
+        <div v-else-if="digitalHumanType === 'xingyun'" id="xingyun-sdk-container" style="width: 100%; height: 100%;"></div>
         <div v-else class="avatar-placeholder">
           <i class="fa-solid fa-robot"></i>
-          <p>{{ digitalHumanType === 'tencent' ? '点击下方"连接"启动数字人' : '正在加载VRM数字人...' }}</p>
+          <p>{{ digitalHumanType === 'xingyun' ? '点击下方"连接"启动数字人' : '正在加载VRM数字人...' }}</p>
         </div>
         <div class="status-indicator">
           <span class="status-dot" :class="{ connected: isConnected }"></span>
@@ -1550,15 +2322,15 @@
           v-model="quickText"
           placeholder="输入文字让数字人播报..."
           @keyup.enter="sendQuickText"
-          :disabled="!isConnected && digitalHumanType === 'tencent'"
+          :disabled="!isConnected && digitalHumanType === 'xingyun'"
         >
-        <button v-if="digitalHumanType === 'tencent' && !tencentSession.isConnected" class="btn-primary" @click="createTencentSession" :disabled="tencentSession.status === 'connecting'">
+        <button v-if="digitalHumanType === 'xingyun' && !xingyunSession.isConnected" class="btn-primary" @click="createXingYunSession" :disabled="xingyunSession.status === 'connecting'">
           <i class="fa-solid fa-plug"></i> 连接
         </button>
-        <button v-else-if="digitalHumanType === 'tencent'" class="btn-secondary" @click="closeTencentSession">
+        <button v-else-if="digitalHumanType === 'xingyun'" class="btn-secondary" @click="closeXingYunSession">
           <i class="fa-solid fa-plug-circle-xmark"></i> 断开
         </button>
-        <button class="btn-primary" @click="sendQuickText" :disabled="!isConnected && digitalHumanType === 'tencent'">
+        <button class="btn-primary" @click="sendQuickText" :disabled="!isConnected && digitalHumanType === 'xingyun'">
           <i class="fa-solid fa-paper-plane"></i> 发送
         </button>
       </div>
@@ -1699,15 +2471,18 @@
               </button>
               <div class="export-dropdown" style="position: relative;">
                 <button class="btn-secondary" @click="showExportMenu = !showExportMenu" :disabled="exportLoading || filteredRecords.length === 0" style="padding: 8px 16px; font-size: 13px; border: none; border-radius: 20px; cursor: pointer;">
-                  <i class="fa-solid fa-download"></i> {{ exportLoading ? '导出中...' : '导出全部' }} <i class="fa-solid fa-caret-down"></i>
+                  <i class="fa-solid fa-download"></i> {{ exportLoading ? '导出中...' : (selectedSessionIds.length > 0 ? '导出选中' : '导出全部') }} <i class="fa-solid fa-caret-down"></i>
                 </button>
-                <div v-if="showExportMenu" class="export-menu" style="position: absolute; top: 100%; right: 0; margin-top: 5px; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; overflow: hidden;">
-                  <button @click="exportAllCollaborations('docx'); showExportMenu = false" style="display: block; width: 100%; padding: 10px 20px; border: none; background: none; text-align: left; cursor: pointer; font-size: 13px;">
+                <div v-if="showExportMenu" class="export-menu" style="position: absolute; top: 100%; right: 0; margin-top: 5px; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; overflow: hidden; min-width: 180px;">
+                  <button @click="exportSelectedCollaborations(); showExportMenu = false" style="display: block; width: 100%; padding: 10px 20px; border: none; background: none; text-align: left; cursor: pointer; font-size: 13px;">
                     <i class="fa-solid fa-file-word" style="color: #2b579a;"></i> 导出为 Word
                   </button>
-                  <button @click="exportAllCollaborations('pdf'); showExportMenu = false" style="display: block; width: 100%; padding: 10px 20px; border: none; background: none; text-align: left; cursor: pointer; font-size: 13px;">
-                    <i class="fa-solid fa-file-pdf" style="color: #e74c3c;"></i> 导出为 PDF
-                  </button>
+                  <div style="padding: 8px 15px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary);">
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                      <input type="checkbox" v-model="includeChatHistory" style="width: 14px; height: 14px;">
+                      包含聊天记录
+                    </label>
+                  </div>
                 </div>
               </div>
               <button class="btn-secondary" @click="refreshCollaboration" style="padding: 8px 16px; font-size: 13px; border: none; border-radius: 20px; cursor: pointer;">
@@ -1755,6 +2530,20 @@
             >{{ ft.label }}</button>
           </div>
 
+          <!-- 导出选项 -->
+          <div style="display: flex; gap: 10px; margin: 10px 0; align-items: center; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" v-model="includeChatHistory" style="width: 16px; height: 16px;">
+              包含聊天记录
+            </label>
+            <span v-if="selectedSessionIds.length > 0" style="font-size: 13px; color: var(--primary-color);">
+              已选择 {{ selectedSessionIds.length }} 条记录
+            </span>
+            <button v-if="selectedSessionIds.length > 0" @click="selectedSessionIds = []" style="padding: 4px 10px; font-size: 12px; border: 1px solid var(--border-color); border-radius: 4px; background: none; cursor: pointer;">
+              清除选择
+            </button>
+          </div>
+
           <div class="collaboration-list" style="margin-top: 10px;">
             <div v-if="filteredRecords.length === 0" class="empty-state">
               <i class="fa-solid fa-folder-open"></i>
@@ -1765,9 +2554,20 @@
               v-for="record in filteredRecords"
               :key="record.id"
               class="collab-card"
-              :class="'type-' + record.type"
+              :class="{'type-' + record.type, 'selected': selectedSessionIds.includes(record.id)}"
               @click="showRecordDetail(record)"
+              style="position: relative;"
             >
+              <!-- 选择复选框 -->
+              <div @click.stop style="position: absolute; top: 10px; right: 10px;">
+                <input
+                  type="checkbox"
+                  :checked="selectedSessionIds.includes(record.id)"
+                  @change="toggleSessionSelection(record.id)"
+                  style="width: 18px; height: 18px; cursor: pointer;"
+                  @click.stop
+                >
+              </div>
               <div class="collab-icon">
                 <i :class="getTypeIcon(record.type)"></i>
               </div>
@@ -1846,9 +2646,6 @@
               <button @click="exportCollaboration(selectedRecord, 'docx')" :disabled="exportLoading" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: var(--primary-color); color: white; font-size: 14px;">
                 <i class="fa-solid fa-file-word"></i> 导出 Word
               </button>
-              <button @click="exportCollaboration(selectedRecord, 'pdf')" :disabled="exportLoading" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: #e74c3c; color: white; font-size: 14px;">
-                <i class="fa-solid fa-file-pdf"></i> 导出 PDF
-              </button>
             </div>
           </div>
         </div>
@@ -1920,9 +2717,6 @@
               <div style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px; border-top: 1px solid var(--border-color);">
                 <button @click="exportLearningReport('docx')" :disabled="reportLoading" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: var(--primary-color); color: white; font-size: 14px;">
                   <i class="fa-solid fa-file-word"></i> 导出 Word
-                </button>
-                <button @click="exportLearningReport('pdf')" :disabled="reportLoading" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: #e74c3c; color: white; font-size: 14px;">
-                  <i class="fa-solid fa-file-pdf"></i> 导出 PDF
                 </button>
               </div>
             </div>
@@ -2019,7 +2813,15 @@
                     {{ msg.role === 'user' ? '我' : '教育助手' }}
                     <span v-if="msg.timestamp" style="margin-left: 10px; opacity: 0.7;">{{ formatTime(msg.timestamp) }}</span>
                   </div>
-                  <div class="message-content" v-html="formatMessage(msg.content)"></div>
+                  <!-- 思考过程显示 -->
+                  <div v-if="msg.role === 'assistant' && msg.reasoning" class="reasoning-block">
+                    <div class="reasoning-header" @click="msg.showReasoning = !msg.showReasoning">
+                      <i :class="msg.showReasoning ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'"></i>
+                      <span>💭 思考过程</span>
+                    </div>
+                    <div v-if="msg.showReasoning" class="reasoning-content">{{ msg.reasoning }}</div>
+                  </div>
+                  <div class="message-content" :class="{ typing: msg.isTyping }" v-html="formatMessage(msg.content)"></div>
                 </div>
               </template>
               <!-- 只在没有流式消息时显示typing动画 -->
@@ -2029,6 +2831,21 @@
             </div>
 
             <div class="chat-input-area">
+              <!-- 已上传文件列表 -->
+              <div v-if="uploadedFiles.length > 0" class="uploaded-files">
+                <div
+                  v-for="(file, index) in uploadedFiles"
+                  :key="index"
+                  class="uploaded-file-tag"
+                  :class="{ 'pdf-file': file.type === 'pdf' }"
+                >
+                  <i :class="getFileIcon(file.type)"></i>
+                  <span>{{ file.name }}</span>
+                  <i v-if="file.type === 'pdf'" class="fa-solid fa-eye preview-btn" @click="openPdfPreview(file)" title="PDF预览"></i>
+                  <i class="fa-solid fa-times remove-file" @click="removeUploadedFile(index)"></i>
+                </div>
+              </div>
+
               <!-- 语音录制状态提示 -->
               <div v-if="isRecording" class="voice-status">
                 <span class="recording-dot"></span>
@@ -2043,6 +2860,23 @@
                   rows="2"
                 ></textarea>
                 <div class="chat-buttons">
+                  <!-- 文件上传按钮 -->
+                  <input type="file" ref="fileInput" @change="handleFileUpload" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp" style="display: none;" multiple>
+                  <button
+                    class="upload-btn"
+                    @click="$refs.fileInput.click()"
+                    title="上传文件 (PDF/图片)"
+                  >
+                    <i class="fa-solid fa-paperclip"></i>
+                  </button>
+                  <!-- 手写公式按钮 -->
+                  <button
+                    class="handwrite-btn"
+                    @click="showHandwriteDialog = true"
+                    title="手写公式识别"
+                  >
+                    <i class="fa-solid fa-pen-fancy"></i>
+                  </button>
                   <!-- 语音按钮 -->
                   <button
                     class="voice-btn"
@@ -2327,12 +3161,160 @@
               </div>
             </div>
           </div>
+
+          <!-- 公式识别设置 -->
+          <div class="settings-group" style="margin-top: 15px;">
+            <div class="settings-group-title">
+              <i class="fa-solid fa-pen-fancy"></i> 公式识别
+              <a href="https://simpletex.cn/user/center" target="_blank" style="margin-left: auto; font-size: 12px; color: var(--primary-color); text-decoration: none;">
+                <i class="fa-solid fa-key"></i> 获取令牌
+              </a>
+            </div>
+
+            <div style="display: grid; gap: 12px;">
+              <!-- 启用开关 -->
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: var(--bg-color); border-radius: 8px;">
+                <div>
+                  <span style="color: var(--text-color); font-weight: 500;">启用公式识别</span>
+                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">手写公式自动转换为 LaTeX 格式</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="formulaOcrSettings.enabled">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <!-- 模型选择 -->
+              <div v-if="formulaOcrSettings.enabled" style="padding: 12px 15px; background: var(--bg-color); border-radius: 8px;">
+                <div style="color: var(--text-secondary); margin-bottom: 8px; font-size: 13px;">识别模型</div>
+                <div style="display: flex; gap: 10px;">
+                  <label class="radio-option" :class="{ active: formulaOcrSettings.model === 'standard' }">
+                    <input type="radio" v-model="formulaOcrSettings.model" value="standard">
+                    <span>标准模型 (精准)</span>
+                  </label>
+                  <label class="radio-option" :class="{ active: formulaOcrSettings.model === 'turbo' }">
+                    <input type="radio" v-model="formulaOcrSettings.model" value="turbo">
+                    <span>轻量模型 (快速)</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- API Key 输入 -->
+              <div v-if="formulaOcrSettings.enabled" style="padding: 12px 15px; background: var(--bg-color); border-radius: 8px;">
+                <div style="color: var(--text-secondary); margin-bottom: 8px; font-size: 13px;">
+                  <i class="fa-solid fa-key"></i> SimpleTex 用户授权令牌 (UAT)
+                </div>
+                <input
+                  type="password"
+                  v-model="formulaOcrSettings.api_key"
+                  placeholder="请输入用户授权令牌..."
+                  style="width: 100%; padding: 10px 12px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-color); font-size: 14px;">
+                <div style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
+                  <i class="fa-solid fa-info-circle"></i>
+                  前往 <a href="https://simpletex.cn/user/center" target="_blank" style="color: var(--primary-color);">simpletex.cn</a> 获取用户授权令牌
+                </div>
+              </div>
+
+              <!-- 状态提示 -->
+              <div v-if="formulaOcrSettings.enabled" :style="{
+                padding: '10px 15px',
+                borderRadius: '8px',
+                border: formulaOcrSettings.api_key ? '1px solid var(--success-color)' : '1px solid var(--warning-color)',
+                background: formulaOcrSettings.api_key ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)'
+              }">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                  <i :class="formulaOcrSettings.api_key ? 'fa-solid fa-check-circle' : 'fa-solid fa-exclamation-triangle'"
+                     :style="{ color: formulaOcrSettings.api_key ? 'var(--success-color)' : 'var(--warning-color)' }"></i>
+                  <span style="color: var(--text-color);">
+                    {{ formulaOcrSettings.api_key ? '公式识别已配置' : '请配置 SimpleTex 用户授权令牌' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="settings-modal-footer">
           <button @click="showSettingsModal = false" class="settings-btn settings-btn-secondary">关闭</button>
-          <button @click="saveFastModelSettings" class="settings-btn settings-btn-primary">
-            <i class="fa-solid fa-save"></i> 保存快速模型设置
+          <button @click="saveAllSettings" class="settings-btn settings-btn-primary">
+            <i class="fa-solid fa-save"></i> 保存设置
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 手写公式对话框 -->
+    <div v-if="showHandwriteDialog" class="handwrite-dialog-overlay" @click.self="showHandwriteDialog = false">
+      <div class="handwrite-dialog">
+        <div class="handwrite-dialog-header">
+          <h3><i class="fa-solid fa-pen-fancy"></i> 手写公式识别</h3>
+          <button class="modal-close" @click="showHandwriteDialog = false">&times;</button>
+        </div>
+        <div class="handwrite-canvas-container">
+          <canvas ref="handwriteCanvas" class="handwrite-canvas" @mousedown="startDrawing" @mousemove="draw" @mouseup="stopDrawing" @mouseleave="stopDrawing" @touchstart="startDrawing" @touchmove="draw" @touchend="stopDrawing"></canvas>
+        </div>
+        <div class="handwrite-toolbar">
+          <button @click="clearHandwriteCanvas"><i class="fa-solid fa-eraser"></i> 清除</button>
+          <button @click="undoHandwrite"><i class="fa-solid fa-undo"></i> 撤销</button>
+          <button @click="recognizeHandwrite" :disabled="handwriteRecognizing">
+            <i :class="handwriteRecognizing ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-magic'"></i>
+            {{ handwriteRecognizing ? '识别中...' : '识别公式' }}
+          </button>
+        </div>
+        <div v-if="handwriteResult" class="handwrite-result">
+          <div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">识别结果：</div>
+          <div style="font-size: 18px;">{{ handwriteResult }}</div>
+          <div class="latex-preview" v-html="handwriteLatexPreview"></div>
+        </div>
+        <div class="handwrite-dialog-footer">
+          <button class="btn-cancel" @click="showHandwriteDialog = false">取消</button>
+          <button class="btn-insert" @click="insertHandwriteResult" :disabled="!handwriteResult">
+            <i class="fa-solid fa-plus"></i> 插入到输入框
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDF 预览对话框 -->
+    <div v-if="showPdfPreviewDialog" class="pdf-preview-dialog-overlay" @click.self="showPdfPreviewDialog = false">
+      <div class="pdf-preview-dialog">
+        <div class="pdf-preview-header">
+          <h3><i class="fa-solid fa-file-pdf"></i> PDF 预览</h3>
+          <button class="modal-close" @click="showPdfPreviewDialog = false">&times;</button>
+        </div>
+        <div class="pdf-preview-toolbar">
+          <button @click="selectAllPdfPages"><i class="fa-solid fa-check-double"></i> 全选</button>
+          <button @click="clearPdfPageSelection"><i class="fa-solid fa-times"></i> 取消选择</button>
+        </div>
+        <div class="pdf-preview-content">
+          <div v-if="pdfPreviewLoading" class="pdf-loading">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+            <span>正在加载PDF页面...</span>
+          </div>
+          <div v-else-if="pdfPreviewPages.length > 0" class="pdf-pages-grid">
+            <div
+              v-for="page in pdfPreviewPages"
+              :key="page.pageNum"
+              class="pdf-page-item"
+              :class="{ selected: page.selected }"
+              @click="togglePdfPageSelection(page.pageNum)"
+            >
+              <img :src="page.image" :alt="'第' + page.pageNum + '页'">
+              <span class="page-num">{{ page.pageNum }}</span>
+            </div>
+          </div>
+          <div v-else style="text-align: center; padding: 50px; color: var(--text-secondary);">
+            <i class="fa-solid fa-file-pdf" style="font-size: 48px; margin-bottom: 15px; display: block;"></i>
+            暂无页面
+          </div>
+        </div>
+        <div class="pdf-preview-footer">
+          <span class="selected-count">已选择 {{ selectedPdfPages.length }} 页</span>
+          <div class="footer-buttons">
+            <button class="btn-cancel" @click="showPdfPreviewDialog = false">关闭</button>
+            <button class="btn-extract" @click="extractSelectedPdfPages" :disabled="selectedPdfPages.length === 0 || pdfPreviewLoading">
+              <i class="fa-solid fa-file-import"></i> 提取选中页面
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2341,6 +3323,8 @@
   <!-- 本地化 JS 库 -->
   <script src="libs/vue.global.prod.js"></script>
   <script src="libs/marked.min.js"></script>
+  <!-- 魔珐星云具身驱动 SDK -->
+  <script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script>
   <script>
     const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
 
@@ -2376,11 +3360,17 @@
           modelProviders: []
         });
 
-        const tencentSession = ref({
-          sessionId: null,
-          playUrl: null,
+        const xingyunSession = ref({
+          sdk: null,
           status: 'disconnected',
           isConnected: false
+        });
+
+        // 魔珐星云 SDK 配置
+        const xingyunConfig = ref({
+          appId: '',
+          appSecret: '',
+          gatewayServer: 'https://nebula-agent.xingyun3d.com/user/v1/ttsa/session'
         });
 
         // 模型选项
@@ -2397,6 +3387,37 @@
           conditionNoNewline: true,  // 禁止换行消息
           conditionNoFiles: true  // 禁止带文件消息
         });
+
+        // 公式识别设置
+        const formulaOcrSettings = ref({
+          enabled: true,
+          api_key: '',
+          model: 'standard'  // 'standard' 或 'turbo'
+        });
+
+        // 文件上传相关
+        const uploadedFiles = ref([]);
+        const fileInput = ref(null);
+
+        // 手写公式相关
+        const showHandwriteDialog = ref(false);
+        const handwriteCanvas = ref(null);
+        const handwriteResult = ref('');
+        const handwriteLatexPreview = ref('');
+        const handwriteRecognizing = ref(false);
+        const handwriteDrawing = ref(false);
+        const handwritePaths = ref([]);
+        const handwriteCurrentPath = ref([]);
+        const handwriteDpr = ref(1);
+
+        // PDF 预览相关
+        const showPdfPreviewDialog = ref(false);
+        const pdfPreviewFile = ref(null);
+        const pdfPreviewPages = ref([]);
+        const pdfPreviewLoading = ref(false);
+        const selectedPdfPages = ref([]);
+        const pdfTotalPages = ref(0);
+        const pdfPreviewScale = ref(0.5);
 
         const growth = ref({
           level: 1,
@@ -2513,13 +3534,13 @@
         // 计算属性
         const isConnected = computed(() => {
           if (digitalHumanType.value === 'vrm') return true;
-          return tencentSession.value.isConnected;
+          return xingyunSession.value.isConnected;
         });
 
         const statusText = computed(() => {
           if (digitalHumanType.value === 'vrm') return 'VRM 已连接';
-          if (tencentSession.value.status === 'connecting') return '连接中...';
-          if (tencentSession.value.isConnected) return '已连接';
+          if (xingyunSession.value.status === 'connecting') return '连接中...';
+          if (xingyunSession.value.isConnected) return '已连接';
           return '未连接';
         });
 
@@ -2599,58 +3620,89 @@
         // 方法
         const switchAvatarType = (type) => {
           if (type === digitalHumanType.value) return;
-          if (type === 'tencent' && tencentSession.value.isConnected) {
-            closeTencentSession();
+          if (type === 'xingyun' && xingyunSession.value.isConnected) {
+            closeXingYunSession();
           }
           digitalHumanType.value = type;
         };
 
-        const createTencentSession = async () => {
-          tencentSession.value.status = 'connecting';
+        // 加载魔珐星云配置
+        const loadXingYunConfig = async () => {
           try {
-            const response = await fetch('/api/tencent_digital_human/create_session', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ driver_type: 1, protocol: 'webrtc', video_profile: '720p' })
-            });
+            const response = await fetch('/api/xingyun_digital_human/config');
             const data = await response.json();
-            if (data.SessionId) {
-              tencentSession.value.sessionId = data.SessionId;
-              tencentSession.value.playUrl = data.PlayUrl;
-              tencentSession.value.isConnected = true;
-              tencentSession.value.status = 'connected';
-            } else {
-              throw new Error(data.ErrMsg || '创建会话失败');
-            }
+            xingyunConfig.value = {
+              appId: data.appId,
+              appSecret: data.appSecret,
+              gatewayServer: data.gatewayServer
+            };
           } catch (error) {
-            tencentSession.value.status = 'error';
-            alert('连接失败: ' + error.message);
+            console.error('加载魔珐星云配置失败:', error);
           }
         };
 
-        const closeTencentSession = async () => {
-          if (tencentSession.value.sessionId) {
-            await fetch('/api/tencent_digital_human/close_session', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ session_id: tencentSession.value.sessionId })
+        const createXingYunSession = async () => {
+          xingyunSession.value.status = 'connecting';
+          try {
+            // 确保配置已加载
+            if (!xingyunConfig.value.appId) {
+              await loadXingYunConfig();
+            }
+
+            // 创建魔珐星云 SDK 实例
+            xingyunSession.value.sdk = new XmovAvatar({
+              containerId: '#xingyun-sdk-container',
+              appId: xingyunConfig.value.appId,
+              appSecret: xingyunConfig.value.appSecret,
+              gatewayServer: xingyunConfig.value.gatewayServer,
+              hardwareAcceleration: "prefer-hardware",
+              onMessage(message) {
+                console.log('魔珐SDK消息:', message);
+              },
+              onStateChange(state) {
+                console.log('魔珐SDK状态变化:', state);
+              },
+              onStatusChange(status) {
+                console.log('魔珐SDK状态:', status);
+              },
+              onVoiceStateChange(status) {
+                console.log('语音状态:', status);
+              },
+              enableLogger: false
             });
+
+            // 初始化连接
+            await xingyunSession.value.sdk.initModel('normal', (progress) => {
+              console.log('资源加载进度:', progress);
+              if (progress >= 100) {
+                xingyunSession.value.isConnected = true;
+                xingyunSession.value.status = 'connected';
+              }
+            });
+
+          } catch (error) {
+            xingyunSession.value.status = 'error';
+            console.error('魔珐星云连接失败:', error);
+            alert('连接失败: ' + (error.message || '未知错误'));
           }
-          tencentSession.value = { sessionId: null, playUrl: null, status: 'disconnected', isConnected: false };
+        };
+
+        const closeXingYunSession = async () => {
+          if (xingyunSession.value.sdk) {
+            try {
+              xingyunSession.value.sdk.destroy();
+            } catch (e) {
+              console.error('销毁SDK失败:', e);
+            }
+          }
+          xingyunSession.value = { sdk: null, status: 'disconnected', isConnected: false };
         };
 
         const sendQuickText = async () => {
           if (!quickText.value.trim()) return;
-          if (digitalHumanType.value === 'tencent' && tencentSession.value.isConnected) {
-            await fetch('/api/tencent_digital_human/drive_text', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                session_id: tencentSession.value.sessionId,
-                text: quickText.value,
-                interrupt: true
-              })
-            });
+          if (digitalHumanType.value === 'xingyun' && xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+            // 使用魔珐 SDK 的 speak 方法
+            xingyunSession.value.sdk.speak(quickText.value, true, true);
           }
           quickText.value = '';
         };
@@ -2843,8 +3895,8 @@
           }
         };
 
-        // 保存快速应答模型设置
-        const saveFastModelSettings = async () => {
+        // 保存所有设置（包括快速模型和公式识别）
+        const saveAllSettings = async () => {
           try {
             // 获取当前完整设置
             const currentSettingsResponse = await fetch('/api/education/settings');
@@ -2857,7 +3909,8 @@
             const settingsToSave = {
               ...currentSettings,
               fast: fastModelSettings.value,
-              modelOptions: modelOptions.value
+              modelOptions: modelOptions.value,
+              formulaOcr: formulaOcrSettings.value
             };
 
             const response = await fetch('/api/education/settings', {
@@ -2916,20 +3969,468 @@
           }
         };
 
+        // 加载公式识别设置
+        const loadFormulaOcrSettings = async () => {
+          try {
+            const response = await fetch('/api/education/settings');
+            if (response.ok) {
+              const data = await response.json();
+              // 加载公式识别配置
+              if (data.formulaOcr) {
+                formulaOcrSettings.value = {
+                  enabled: data.formulaOcr.enabled ?? true,
+                  api_key: data.formulaOcr.api_key ?? '',
+                  model: data.formulaOcr.model ?? 'standard'
+                };
+              }
+            }
+          } catch (error) {
+            console.error('加载公式识别设置失败:', error);
+          }
+        };
+
+        // ========== 文件上传方法 ==========
+        const handleFileUpload = async (event) => {
+          const files = event.target.files;
+          if (!files || files.length === 0) return;
+
+          for (const file of files) {
+            const fileType = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
+            const fileObj = {
+              name: file.name,
+              type: fileType,
+              file: file,
+              path: URL.createObjectURL(file)
+            };
+            uploadedFiles.value.push(fileObj);
+          }
+          // 清空 input 以便重复选择同一文件
+          event.target.value = '';
+        };
+
+        const removeUploadedFile = (index) => {
+          const file = uploadedFiles.value[index];
+          if (file.path && file.path.startsWith('blob:')) {
+            URL.revokeObjectURL(file.path);
+          }
+          uploadedFiles.value.splice(index, 1);
+        };
+
+        const getFileIcon = (type) => {
+          const icons = {
+            pdf: 'fa-solid fa-file-pdf',
+            image: 'fa-solid fa-file-image'
+          };
+          return icons[type] || 'fa-solid fa-file';
+        };
+
+        // ========== 手写公式方法 ==========
+        const initHandwriteCanvas = () => {
+          nextTick(() => {
+            if (!handwriteCanvas.value) return;
+            const canvas = handwriteCanvas.value;
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            handwriteDpr.value = dpr;
+
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+          });
+        };
+
+        const getEventPos = (e) => {
+          const canvas = handwriteCanvas.value;
+          const rect = canvas.getBoundingClientRect();
+          if (e.touches) {
+            return {
+              x: e.touches[0].clientX - rect.left,
+              y: e.touches[0].clientY - rect.top
+            };
+          }
+          return {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+          };
+        };
+
+        const startDrawing = (e) => {
+          e.preventDefault();
+          handwriteDrawing.value = true;
+          const pos = getEventPos(e);
+          handwriteCurrentPath.value = [pos];
+        };
+
+        const draw = (e) => {
+          if (!handwriteDrawing.value) return;
+          e.preventDefault();
+          const pos = getEventPos(e);
+          handwriteCurrentPath.value.push(pos);
+
+          const canvas = handwriteCanvas.value;
+          const ctx = canvas.getContext('2d');
+          const dpr = handwriteDpr.value;
+
+          if (handwriteCurrentPath.value.length >= 2) {
+            const lastPos = handwriteCurrentPath.value[handwriteCurrentPath.value.length - 2];
+            ctx.beginPath();
+            ctx.moveTo(lastPos.x, lastPos.y);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+          }
+        };
+
+        const stopDrawing = (e) => {
+          if (handwriteDrawing.value && handwriteCurrentPath.value.length > 0) {
+            handwritePaths.value.push([...handwriteCurrentPath.value]);
+          }
+          handwriteDrawing.value = false;
+          handwriteCurrentPath.value = [];
+        };
+
+        const clearHandwriteCanvas = () => {
+          const canvas = handwriteCanvas.value;
+          const ctx = canvas.getContext('2d');
+          const dpr = handwriteDpr.value;
+          ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+          handwritePaths.value = [];
+          handwriteResult.value = '';
+          handwriteLatexPreview.value = '';
+        };
+
+        const undoHandwrite = () => {
+          if (handwritePaths.value.length === 0) return;
+          handwritePaths.value.pop();
+          redrawCanvas();
+        };
+
+        const redrawCanvas = () => {
+          const canvas = handwriteCanvas.value;
+          const ctx = canvas.getContext('2d');
+          const dpr = handwriteDpr.value;
+          ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 3;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          for (const path of handwritePaths.value) {
+            if (path.length < 2) continue;
+            ctx.beginPath();
+            ctx.moveTo(path[0].x, path[0].y);
+            for (let i = 1; i < path.length; i++) {
+              ctx.lineTo(path[i].x, path[i].y);
+            }
+            ctx.stroke();
+          }
+        };
+
+        const recognizeHandwrite = async () => {
+          if (!formulaOcrSettings.value.enabled) {
+            alert('请先在设置中启用公式识别功能');
+            return;
+          }
+          if (!formulaOcrSettings.value.api_key) {
+            alert('请先在设置中配置 SimpleTex 用户授权令牌');
+            return;
+          }
+
+          const canvas = handwriteCanvas.value;
+          const imageData = canvas.toDataURL('image/png');
+
+          handwriteRecognizing.value = true;
+          try {
+            const response = await fetch('/api/formula_ocr', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                image: imageData,
+                model: formulaOcrSettings.value.model,
+                api_key: formulaOcrSettings.value.api_key
+              })
+            });
+            const data = await response.json();
+
+            if (data.success && data.latex) {
+              handwriteResult.value = data.latex;
+              // 渲染 LaTeX 预览
+              if (window.MathJax) {
+                handwriteLatexPreview.value = `\\[${data.latex}\\]`;
+                nextTick(() => {
+                  MathJax.typesetPromise && MathJax.typesetPromise();
+                });
+              } else {
+                handwriteLatexPreview.value = `<code>${data.latex}</code>`;
+              }
+            } else {
+              alert(data.error || '识别失败，请重试');
+            }
+          } catch (error) {
+            console.error('识别错误:', error);
+            alert('识别失败，请检查网络连接');
+          } finally {
+            handwriteRecognizing.value = false;
+          }
+        };
+
+        const insertHandwriteResult = () => {
+          if (handwriteResult.value) {
+            chatInput.value += (chatInput.value ? '\n' : '') + '$$' + handwriteResult.value + '$$';
+            showHandwriteDialog.value = false;
+            clearHandwriteCanvas();
+          }
+        };
+
+        // 监听手写对话框打开
+        watch(showHandwriteDialog, (newVal) => {
+          if (newVal) {
+            nextTick(() => {
+              initHandwriteCanvas();
+            });
+          }
+        });
+
+        // ========== PDF 预览方法 ==========
+        const openPdfPreview = async (file) => {
+          pdfPreviewFile.value = file;
+          pdfPreviewLoading.value = true;
+          pdfPreviewPages.value = [];
+          selectedPdfPages.value = [];
+          showPdfPreviewDialog.value = true;
+
+          try {
+            let filePath = file.path || file.url;
+
+            // 如果是 blob URL，需要先上传到服务器
+            if (filePath && filePath.startsWith('blob:')) {
+              const uploadedPath = await uploadPdfForPreview(file);
+              if (!uploadedPath) {
+                alert('上传PDF文件失败');
+                showPdfPreviewDialog.value = false;
+                pdfPreviewLoading.value = false;
+                return;
+              }
+              filePath = uploadedPath;
+              pdfPreviewFile.value.serverPath = uploadedPath;
+            }
+
+            const response = await fetch('/api/pdf_info', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ file_path: filePath })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+              pdfTotalPages.value = data.page_count || 0;
+              await loadPdfPageImages();
+            } else {
+              alert(data.error || '获取PDF信息失败');
+            }
+          } catch (err) {
+            console.error('PDF preview error:', err);
+            alert('打开PDF预览失败');
+          } finally {
+            pdfPreviewLoading.value = false;
+          }
+        };
+
+        const uploadPdfForPreview = async (file) => {
+          try {
+            const formData = new FormData();
+            if (file.file instanceof Blob) {
+              formData.append('files', file.file, file.name);
+            } else {
+              const response = await fetch(file.path);
+              const blob = await response.blob();
+              formData.append('files', blob, file.name);
+            }
+
+            const uploadResponse = await fetch('/load_file', {
+              method: 'POST',
+              body: formData
+            });
+            const uploadData = await uploadResponse.json();
+
+            if (uploadData.success && uploadData.fileLinks && uploadData.fileLinks[0]) {
+              return uploadData.fileLinks[0].path;
+            }
+            return null;
+          } catch (err) {
+            console.error('Upload PDF error:', err);
+            return null;
+          }
+        };
+
+        const loadPdfPageImages = async () => {
+          if (!pdfPreviewFile.value) return;
+
+          try {
+            const filePath = pdfPreviewFile.value.serverPath || pdfPreviewFile.value.path || pdfPreviewFile.value.url;
+
+            const response = await fetch('/api/pdf_pages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                file_path: filePath,
+                scale: pdfPreviewScale.value
+              })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+              pdfPreviewPages.value = data.pages.map((img, idx) => ({
+                pageNum: idx + 1,
+                image: img,
+                selected: false
+              }));
+            }
+          } catch (err) {
+            console.error('Load PDF pages error:', err);
+          }
+        };
+
+        const togglePdfPageSelection = (pageNum) => {
+          const idx = selectedPdfPages.value.indexOf(pageNum);
+          if (idx > -1) {
+            selectedPdfPages.value.splice(idx, 1);
+          } else {
+            selectedPdfPages.value.push(pageNum);
+          }
+          const page = pdfPreviewPages.value.find(p => p.pageNum === pageNum);
+          if (page) page.selected = !page.selected;
+        };
+
+        const selectAllPdfPages = () => {
+          selectedPdfPages.value = pdfPreviewPages.value.map(p => p.pageNum);
+          pdfPreviewPages.value.forEach(p => p.selected = true);
+        };
+
+        const clearPdfPageSelection = () => {
+          selectedPdfPages.value = [];
+          pdfPreviewPages.value.forEach(p => p.selected = false);
+        };
+
+        const extractSelectedPdfPages = async () => {
+          if (selectedPdfPages.value.length === 0) {
+            alert('请先选择要提取的页面');
+            return;
+          }
+
+          pdfPreviewLoading.value = true;
+          try {
+            const pageRange = selectedPdfPages.value.sort((a, b) => a - b).join(',');
+            const filePath = pdfPreviewFile.value.serverPath || pdfPreviewFile.value.path || pdfPreviewFile.value.url;
+
+            const response = await fetch('/api/pdf_extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                file_path: filePath,
+                page_range: pageRange,
+                return_page_images: false
+              })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+              const text = data.text || '';
+              if (text) {
+                chatInput.value += `\n[PDF内容 - 第${pageRange}页]\n${text}\n`;
+                alert(`已提取 ${selectedPdfPages.value.length} 页内容`);
+              }
+              showPdfPreviewDialog.value = false;
+            } else {
+              alert(data.error || '提取PDF内容失败');
+            }
+          } catch (err) {
+            console.error('Extract PDF error:', err);
+            alert('提取PDF内容失败');
+          } finally {
+            pdfPreviewLoading.value = false;
+          }
+        };
+
         // 监听设置弹窗打开时加载设置
         watch(showSettingsModal, (newVal) => {
           if (newVal) {
             loadApiSettings();
             loadFastModelSettings();
+            loadFormulaOcrSettings();
           }
         });
+
+        // 打字机效果配置
+        const TYPEWRITER_SPEED = 15; // ms per character
+        let typewriterQueue = [];
+        let typewriterTimer = null;
+        let isTypewriting = false;
+
+        // 打字机显示函数
+        const runTypewriter = (targetIndex) => {
+          if (typewriterQueue.length === 0) {
+            isTypewriting = false;
+            return;
+          }
+
+          const char = typewriterQueue.shift();
+          messages.value[targetIndex].content += char;
+          scrollToBottom();
+
+          typewriterTimer = setTimeout(() => {
+            runTypewriter(targetIndex);
+          }, TYPEWRITER_SPEED);
+        };
 
         const sendMessage = async () => {
           if (!chatInput.value.trim() || isTyping.value) return;
 
           const userMessage = chatInput.value.trim();
+
+          // 处理上传的文件
+          let filePaths = [];
+          if (uploadedFiles.value.length > 0) {
+            // 上传文件到服务器
+            for (const file of uploadedFiles.value) {
+              if (file.file) {
+                const formData = new FormData();
+                formData.append('files', file.file, file.name);
+
+                try {
+                  const uploadResponse = await fetch('/load_file', {
+                    method: 'POST',
+                    body: formData
+                  });
+                  const uploadData = await uploadResponse.json();
+
+                  if (uploadData.success && uploadData.fileLinks && uploadData.fileLinks[0]) {
+                    filePaths.push(uploadData.fileLinks[0].path);
+                  }
+                } catch (err) {
+                  console.error('上传文件失败:', err);
+                }
+              }
+            }
+          }
+
           messages.value.push({ role: 'user', content: userMessage, timestamp: new Date().toISOString() });
           chatInput.value = '';
+
+          // 清空已上传文件列表
+          uploadedFiles.value.forEach(f => {
+            if (f.path && f.path.startsWith('blob:')) {
+              URL.revokeObjectURL(f.path);
+            }
+          });
+          uploadedFiles.value = [];
+
           isTyping.value = true;
 
           await nextTick();
@@ -2942,16 +4443,24 @@
               content: m.content
             }));
 
+            // 构建请求体
+            const requestBody = {
+              message: userMessage,
+              skill_id: currentSkill.value,
+              session_id: sessionId.value,
+              history: history
+            };
+
+            // 如果有文件，添加到请求中
+            if (filePaths.length > 0) {
+              requestBody.files = filePaths;
+            }
+
             // 使用流式传输
             const response = await fetch('/api/education/chat/stream', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                message: userMessage,
-                skill_id: currentSkill.value,
-                session_id: sessionId.value,
-                history: history
-              })
+              body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -2963,7 +4472,10 @@
             messages.value.push({
               role: 'assistant',
               content: '',
-              timestamp: new Date().toISOString()
+              reasoning: '',  // 思考过程
+              showReasoning: true,  // 默认展开思考过程
+              timestamp: new Date().toISOString(),
+              isTyping: true
             });
 
             const reader = response.body.getReader();
@@ -2971,6 +4483,13 @@
             let fullContent = '';
             let emotion = 'neutral';
             let expGained = 10;
+
+            // 重置打字机队列
+            typewriterQueue = [];
+            if (typewriterTimer) {
+              clearTimeout(typewriterTimer);
+              typewriterTimer = null;
+            }
 
             while (true) {
               const { done, value } = await reader.read();
@@ -2986,14 +4505,27 @@
 
                     if (data.error) {
                       messages.value[assistantIndex].content = `抱歉，出现问题：${data.error}`;
+                      messages.value[assistantIndex].isTyping = false;
                       break;
+                    }
+
+                    // 处理思考过程 (reasoning_content)
+                    if (data.reasoning_content) {
+                      messages.value[assistantIndex].reasoning += data.reasoning_content;
                     }
 
                     if (data.content) {
                       fullContent += data.content;
-                      messages.value[assistantIndex].content = fullContent;
-                      await nextTick();
-                      scrollToBottom();
+                      // 将新内容加入打字机队列
+                      for (const char of data.content) {
+                        typewriterQueue.push(char);
+                      }
+
+                      // 启动打字机（如果未启动）
+                      if (!isTypewriting) {
+                        isTypewriting = true;
+                        runTypewriter(assistantIndex);
+                      }
                     }
 
                     if (data.done) {
@@ -3006,6 +4538,33 @@
                 }
               }
             }
+
+            // 等待打字机完成或超时
+            const waitForTypewriter = () => {
+              return new Promise((resolve) => {
+                const checkInterval = setInterval(() => {
+                  if (typewriterQueue.length === 0) {
+                    clearInterval(checkInterval);
+                    // 确保所有内容都显示
+                    messages.value[assistantIndex].content = fullContent;
+                    messages.value[assistantIndex].isTyping = false;
+                    isTypewriting = false;
+                    resolve();
+                  }
+                }, 50);
+                // 超时保护：最多等待5秒
+                setTimeout(() => {
+                  clearInterval(checkInterval);
+                  typewriterQueue = [];
+                  isTypewriting = false;
+                  messages.value[assistantIndex].content = fullContent;
+                  messages.value[assistantIndex].isTyping = false;
+                  resolve();
+                }, 5000);
+              });
+            };
+
+            await waitForTypewriter();
 
             // 确保消息有内容
             if (!messages.value[assistantIndex].content) {
@@ -3152,9 +4711,65 @@
 
         const exportLoading = ref(false);
         const showExportMenu = ref(false);
+        const selectedSessionIds = ref([]);
+        const includeChatHistory = ref(false);
 
         // 格式转换：前端使用 docx，后端使用 word
         const convertFormat = (format) => format === 'docx' ? 'word' : format;
+
+        // 切换会话选择
+        const toggleSessionSelection = (sessionId) => {
+          const index = selectedSessionIds.value.indexOf(sessionId);
+          if (index > -1) {
+            selectedSessionIds.value.splice(index, 1);
+          } else {
+            selectedSessionIds.value.push(sessionId);
+          }
+        };
+
+        // 导出选中的协作记录
+        const exportSelectedCollaborations = async () => {
+          exportLoading.value = true;
+          try {
+            const requestBody = {
+              format: 'word'
+            };
+
+            // 如果有选中的会话，只导出这些
+            if (selectedSessionIds.value.length > 0) {
+              requestBody.session_ids = selectedSessionIds.value;
+            }
+
+            // 是否包含聊天记录
+            requestBody.include_chat_history = includeChatHistory.value;
+
+            const response = await fetch('/api/education/collaboration/export_all', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(requestBody)
+            });
+            if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              throw new Error(errData.detail || '导出失败');
+            }
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `协作记录_${new Date().toISOString().slice(0,10)}.docx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            // 清除选择
+            selectedSessionIds.value = [];
+          } catch (e) {
+            console.error('导出协作记录失败:', e);
+            alert('导出失败: ' + e.message);
+          } finally {
+            exportLoading.value = false;
+          }
+        };
 
         // 导出单个协作记录
         const exportCollaboration = async (record, format = 'docx') => {
@@ -3180,7 +4795,7 @@
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            const ext = format === 'pdf' ? 'pdf' : 'docx';
+            const ext = 'docx';
             a.download = `协作记录_${record.title || record.type}_${new Date().toISOString().slice(0,10)}.${ext}`;
             document.body.appendChild(a);
             a.click();
@@ -3214,7 +4829,7 @@
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            const ext = format === 'pdf' ? 'pdf' : 'docx';
+            const ext = 'docx';
             a.download = `协作记录汇总_${new Date().toISOString().slice(0,10)}.${ext}`;
             document.body.appendChild(a);
             a.click();
@@ -3263,7 +4878,7 @@
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            const ext = format === 'pdf' ? 'pdf' : 'docx';
+            const ext = 'docx';
             a.download = `学习报告_${new Date().toISOString().slice(0,10)}.${ext}`;
             document.body.appendChild(a);
             a.click();
@@ -3373,9 +4988,9 @@
                   history: history
                 };
 
-                // 如果是腾讯数智人，传递会话 ID
-                if (digitalHumanType.value === 'tencent' && tencentSession.value.sessionId) {
-                  requestBody.tencent_session_id = tencentSession.value.sessionId;
+                // 如果是魔珐星云，标记需要前端驱动
+                if (digitalHumanType.value === 'xingyun') {
+                  requestBody.frontend_drive = true;
                 }
 
                 const response = await fetch('/api/education/voice/chat', {
@@ -3403,14 +5018,15 @@
                     timestamp: new Date().toISOString()
                   });
 
-                  // 仅 VRM 模式播放音频响应（腾讯数智人已自动播报）
+                  // VRM 模式播放音频响应
                   if (data.audio_data && digitalHumanType.value === 'vrm') {
                     playAudioResponse(data.audio_data);
                   }
 
-                  // 显示数字人驱动状态
-                  if (data.digital_human_driven) {
-                    console.log('腾讯数智人已驱动播报');
+                  // 魔珐星云驱动数字人播报
+                  if (digitalHumanType.value === 'xingyun' && xingyunSession.value.isConnected && xingyunSession.value.sdk && data.response) {
+                    xingyunSession.value.sdk.speak(data.response, true, true);
+                    console.log('魔珐星云已驱动播报');
                   }
 
                   // 更新经验值
@@ -3479,9 +5095,9 @@
               digital_human_type: digitalHumanType.value
             };
 
-            // 如果是腾讯数智人，传递会话 ID
-            if (digitalHumanType.value === 'tencent' && tencentSession.value.sessionId) {
-              configMsg.tencent_session_id = tencentSession.value.sessionId;
+            // 如果是魔珐星云，标记需要前端驱动
+            if (digitalHumanType.value === 'xingyun') {
+              configMsg.frontend_drive = true;
             }
 
             voiceWebSocket.value.send(JSON.stringify(configMsg));
@@ -3507,6 +5123,11 @@
                   content: data.text,
                   timestamp: new Date().toISOString()
                 });
+                // 魔珐星云驱动数字人播报
+                if (digitalHumanType.value === 'xingyun' && xingyunSession.value.isConnected && xingyunSession.value.sdk && data.text) {
+                  xingyunSession.value.sdk.speak(data.text, true, true);
+                  console.log('魔珐星云已驱动播报');
+                }
                 break;
 
               case 'audio':
@@ -3515,12 +5136,8 @@
                 break;
 
               case 'digital_human_driven':
-                // 腾讯数智人驱动状态
-                if (data.success) {
-                  console.log('腾讯数智人已驱动播报');
-                } else {
-                  console.warn('腾讯数智人驱动失败');
-                }
+                // 数字人驱动状态（保留兼容）
+                console.log('数字人驱动状态:', data.success ? '成功' : '失败');
                 break;
 
               case 'emotion':
@@ -3738,7 +5355,7 @@
           isTyping,
           isRecording,
           chatMessages,
-          tencentSession,
+          xingyunSession,
           growth,
           skills,
           skillUsage,
@@ -3760,8 +5377,8 @@
           hasStreamingContent,
           quickQuestions,
           switchAvatarType,
-          createTencentSession,
-          closeTencentSession,
+          createXingYunSession,
+          closeXingYunSession,
           sendQuickText,
           selectSkill,
           startConversation,
@@ -3779,6 +5396,10 @@
           // 导出和学习报告
           exportLoading,
           showExportMenu,
+          selectedSessionIds,
+          includeChatHistory,
+          toggleSessionSelection,
+          exportSelectedCollaborations,
           exportCollaboration,
           exportAllCollaborations,
           learningReport,
@@ -3805,8 +5426,40 @@
           modelOptions,
           // 快速应答模型
           fastModelSettings,
-          saveFastModelSettings,
-          loadFastModelSettings
+          saveAllSettings,
+          loadFastModelSettings,
+          // 公式识别设置
+          formulaOcrSettings,
+          loadFormulaOcrSettings,
+          // 文件上传
+          uploadedFiles,
+          fileInput,
+          handleFileUpload,
+          removeUploadedFile,
+          getFileIcon,
+          // 手写公式
+          showHandwriteDialog,
+          handwriteCanvas,
+          handwriteResult,
+          handwriteLatexPreview,
+          handwriteRecognizing,
+          startDrawing,
+          draw,
+          stopDrawing,
+          clearHandwriteCanvas,
+          undoHandwrite,
+          recognizeHandwrite,
+          insertHandwriteResult,
+          // PDF 预览
+          showPdfPreviewDialog,
+          pdfPreviewPages,
+          pdfPreviewLoading,
+          selectedPdfPages,
+          openPdfPreview,
+          togglePdfPageSelection,
+          selectAllPdfPages,
+          clearPdfPageSelection,
+          extractSelectedPdfPages
         };
       }
     }).mount('#app');
