@@ -10258,6 +10258,47 @@ code {
   font-size: 16px;
 }
 
+/* 设置面板 */
+.settings-panel {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.settings-panel .tool-item {
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.settings-panel .tool-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--el-bg-color-page);
+  cursor: pointer;
+}
+
+.settings-panel .tool-header:hover {
+  background: var(--el-color-primary-light-9);
+}
+
+.settings-panel .header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-panel .header-left .el-icon {
+  color: var(--el-color-primary);
+}
+
+.settings-panel .tool-content {
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
 /* 成长系统面板 */
 .growth-panel {
   max-width: 800px;

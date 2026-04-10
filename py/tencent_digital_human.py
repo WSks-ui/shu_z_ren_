@@ -27,7 +27,7 @@ TENCENT_CONFIG = {
     "appkey": "f10ffb9b56c6454a981e8417f6eb5255",
     "accesstoken": "f8e790d6a788490ba9bac5029640a24e",
     "virtualmanProjectId": "099e1687a4c44318afe2027321a43625",
-    "sign": "2OYinqSQTk+6iJM2iUmHgcleVJ6180xNvFNZV5DOQQ7QHZOKMJfaj3EaY573m9MofaL6tebBUATKWLLqzBfdfR+kH0bMjQ5ggdiFN2EVckysJDyPmg8WDJv2FUrt3gMcrqfTR+fv41hQTLB4PaKd8A==",
+    "sign": "/9Od3YeU6/FAEtNq31bfrzoeWzkM4GPrjg5/I2AaOhfQHZOKMJfaj3EaY573m9MofaL6tebBUATKWLLqzBfdfR+kH0bMjQ5ggdiFN2EVckysJDyPmg8WDJv2FUrt3gMcrqfTR+fv41hQTLB4PaKd8A==",
 }
 
 # API 路径
@@ -140,6 +140,9 @@ class TencentDigitalHumanClient:
             response.raise_for_status()
             result = response.json()
 
+            # 检查两种可能的错误格式
+            # 格式1: {"ErrCode": 0, ...} (成功格式)
+            # 格式2: {"Header": {"Code": 0, ...}} (认证错误格式)
             if result.get("ErrCode") == 0:
                 session_id = result.get("SessionId")
                 self.active_sessions[session_id] = {
@@ -149,6 +152,15 @@ class TencentDigitalHumanClient:
                     "play_url": result.get("PlayUrl"),
                 }
                 return result
+            elif result.get("Header", {}).get("Code"):
+                # 认证错误格式
+                header = result.get("Header", {})
+                error_code = header.get("Code")
+                error_msg = header.get("Message", "未知错误")
+                raise HTTPException(
+                    status_code=error_code,
+                    detail=f"腾讯API错误 (Code: {error_code}): {error_msg}"
+                )
             else:
                 raise HTTPException(
                     status_code=400,

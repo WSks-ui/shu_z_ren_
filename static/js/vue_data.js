@@ -2212,6 +2212,7 @@ main();`,
     showHandwriteDialog: false,  // 手写板对话框显示
     handwriteCanvas: null,       // Canvas 实例引用
     handwriteCtx: null,          // Canvas 2D 上下文
+    handwriteDpr: 1,             // 设备像素比
     isDrawing: false,            // 是否正在绘制
     handwriteColor: '#000000',   // 画笔颜色
     handwriteLineWidth: 3,       // 画笔粗细

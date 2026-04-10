@@ -8984,11 +8984,23 @@ async def pdf_info_endpoint(request: PDFInfoRequest):
     返回页数、元数据等信息
     """
     from py.load_files import get_pdf_info
+    import aiohttp
 
     try:
-        # 读取PDF文件
-        with open(request.file_path, 'rb') as f:
-            content = f.read()
+        content = None
+
+        # 判断是 URL 还是本地路径
+        if request.file_path.startswith('http://') or request.file_path.startswith('https://'):
+            # 从 URL 下载文件
+            async with aiohttp.ClientSession() as session:
+                async with session.get(request.file_path) as response:
+                    if response.status != 200:
+                        return JSONResponse(content={"success": False, "error": f"下载文件失败: {response.status}"})
+                    content = await response.read()
+        else:
+            # 本地文件路径
+            with open(request.file_path, 'rb') as f:
+                content = f.read()
 
         info = await get_pdf_info(content)
         return JSONResponse(content={"success": True, **info})
@@ -9004,11 +9016,23 @@ async def pdf_pages_endpoint(request: PDFPreviewRequest):
     返回指定页面的base64编码图像
     """
     from py.load_files import get_pdf_page_images
+    import aiohttp
 
     try:
-        # 读取PDF文件
-        with open(request.file_path, 'rb') as f:
-            content = f.read()
+        content = None
+
+        # 判断是 URL 还是本地路径
+        if request.file_path.startswith('http://') or request.file_path.startswith('https://'):
+            # 从 URL 下载文件
+            async with aiohttp.ClientSession() as session:
+                async with session.get(request.file_path) as response:
+                    if response.status != 200:
+                        return JSONResponse(content={"success": False, "error": f"下载文件失败: {response.status}"})
+                    content = await response.read()
+        else:
+            # 本地文件路径
+            with open(request.file_path, 'rb') as f:
+                content = f.read()
 
         pages = await get_pdf_page_images(
             content,
@@ -9016,6 +9040,15 @@ async def pdf_pages_endpoint(request: PDFPreviewRequest):
             scale=request.scale
         )
         return JSONResponse(content={"success": True, "pages": pages})
+    except RuntimeError as e:
+        error_msg = str(e)
+        if "PyMuPDF" in error_msg:
+            return JSONResponse(content={
+                "success": False,
+                "error": "PDF预览功能需要安装 PyMuPDF 库，请运行: pip install pymupdf"
+            })
+        logger.error(f"PDF pages error: {error_msg}")
+        return JSONResponse(content={"success": False, "error": error_msg})
     except Exception as e:
         logger.error(f"PDF pages error: {str(e)}")
         return JSONResponse(content={"success": False, "error": str(e)})
@@ -9028,11 +9061,23 @@ async def pdf_extract_endpoint(request: PDFExtractRequest):
     支持页码范围选择和图像预览
     """
     from py.load_files import handle_pdf_enhanced
+    import aiohttp
 
     try:
-        # 读取PDF文件
-        with open(request.file_path, 'rb') as f:
-            content = f.read()
+        content = None
+
+        # 判断是 URL 还是本地路径
+        if request.file_path.startswith('http://') or request.file_path.startswith('https://'):
+            # 从 URL 下载文件
+            async with aiohttp.ClientSession() as session:
+                async with session.get(request.file_path) as response:
+                    if response.status != 200:
+                        return JSONResponse(content={"success": False, "error": f"下载文件失败: {response.status}"})
+                    content = await response.read()
+        else:
+            # 本地文件路径
+            with open(request.file_path, 'rb') as f:
+                content = f.read()
 
         result = await handle_pdf_enhanced(
             content,
@@ -10712,6 +10757,9 @@ app.include_router(education_router)
 
 from py.tencent_digital_human import router as tencent_digital_human_router
 app.include_router(tencent_digital_human_router)
+
+from py.xingyun_digital_human import router as xingyun_digital_human_router
+app.include_router(xingyun_digital_human_router)
 
 mcp = FastApiMCP(
     app,

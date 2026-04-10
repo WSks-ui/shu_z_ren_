@@ -17087,17 +17087,28 @@ closeTaskCenter() {
       const canvas = document.getElementById('handwriteCanvas');
       if (!canvas) return;
 
-      this.handwriteCanvas = canvas;
-      this.handwriteCtx = canvas.getContext('2d');
-
-      // 设置 Canvas 尺寸
       const container = canvas.parentElement;
-      canvas.width = container.offsetWidth || 400;
-      canvas.height = 300;
+      const dpr = window.devicePixelRatio || 1;
+      const width = container.clientWidth || 400;
+      const height = 300;
 
-      // 设置白色背景
-      this.handwriteCtx.fillStyle = '#ffffff';
-      this.handwriteCtx.fillRect(0, 0, canvas.width, canvas.height);
+      // 设置 Canvas 实际像素大小（考虑 DPR）
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      // 设置 CSS 显示大小
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+
+      const ctx = canvas.getContext('2d');
+      // 缩放上下文以匹配 DPR
+      ctx.scale(dpr, dpr);
+      // 白色背景
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      this.handwriteCanvas = canvas;
+      this.handwriteCtx = ctx;
+      this.handwriteDpr = dpr;
 
       // 设置画笔样式
       this.handwriteCtx.strokeStyle = this.handwriteColor;
@@ -17160,8 +17171,11 @@ closeTaskCenter() {
     // 清空画布
     clearHandwriteCanvas() {
       if (!this.handwriteCtx || !this.handwriteCanvas) return;
+      const dpr = this.handwriteDpr || 1;
+      const width = parseInt(this.handwriteCanvas.style.width) || this.handwriteCanvas.width / dpr;
+      const height = parseInt(this.handwriteCanvas.style.height) || this.handwriteCanvas.height / dpr;
       this.handwriteCtx.fillStyle = '#ffffff';
-      this.handwriteCtx.fillRect(0, 0, this.handwriteCanvas.width, this.handwriteCanvas.height);
+      this.handwriteCtx.fillRect(0, 0, width, height);
       this.handwriteResult = '';
       this.handwriteError = null;
     },
@@ -17169,6 +17183,18 @@ closeTaskCenter() {
     // 识别手写公式
     async recognizeHandwrite() {
       if (!this.handwriteCanvas) return;
+
+      // 检查是否启用了公式识别
+      if (!this.formulaOcrSettings?.enabled) {
+        this.$message.warning('公式识别功能未启用，请在设置中开启');
+        return;
+      }
+
+      // 检查是否配置了 API Key
+      if (!this.formulaOcrSettings?.api_key) {
+        this.$message.warning('未配置 SimpleTex API Key，请在设置中配置');
+        return;
+      }
 
       this.handwriteRecognizing = true;
       this.handwriteError = null;

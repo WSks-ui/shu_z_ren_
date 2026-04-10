@@ -1,7 +1,7 @@
 {
   "level": 4,
-  "exp": 200,
-  "totalExp": 750,
+  "exp": 230,
+  "totalExp": 780,
   "achievements": [
     "first_paper"
   ],
@@ -11,7 +11,7 @@
     "experimentsDesigned": 4,
     "questionsAsked": 0,
     "learningHours": 0,
-    "conversations": 50,
+    "conversations": 53,
     "papers_read": 0,
     "experiments_designed": 0,
     "papers_written": 0,
