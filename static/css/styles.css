@@ -10572,3 +10572,279 @@ code {
 .el-radio-button__inner {
   padding: 5px 12px !important;
 }
+
+/* ==================== 手写公式识别样式 ==================== */
+.handwrite-dialog .handwrite-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.handwrite-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+}
+
+.handwrite-toolbar .tool-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.handwrite-toolbar .tool-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.handwrite-canvas-wrapper {
+  position: relative;
+  border: 2px dashed var(--el-border-color);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.handwrite-canvas {
+  width: 100%;
+  height: 300px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.canvas-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+  pointer-events: none;
+}
+
+.handwrite-result {
+  padding: 16px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+}
+
+.handwrite-result .result-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 8px;
+}
+
+.handwrite-result .result-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.handwrite-result .latex-preview {
+  padding: 12px;
+  background: #fff;
+  border-radius: 4px;
+  font-size: 18px;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.handwrite-result .latex-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #1e1e1e;
+  border-radius: 4px;
+  font-family: 'Fira Code', 'Consolas', monospace;
+}
+
+.handwrite-result .latex-code code {
+  flex: 1;
+  color: #d4d4d4;
+  font-size: 13px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* 手写按钮样式 */
+.handwrite-btn {
+  transition: all 0.3s ease;
+}
+
+.handwrite-btn:hover {
+  transform: scale(1.05);
+}
+
+/* ==================== PDF 预览样式 ==================== */
+.pdf-preview-dialog .pdf-preview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pdf-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+}
+
+.pdf-page-info {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+
+.pdf-pages-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.pdf-page-item {
+  position: relative;
+  border: 2px solid var(--el-border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pdf-page-item:hover {
+  border-color: var(--el-color-primary-light-5);
+}
+
+.pdf-page-item.selected {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-7);
+}
+
+.pdf-page-item img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.pdf-page-item .page-number {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.pdf-page-item .select-checkbox {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+}
+
+/* PDF 预览对话框补充样式 */
+.pdf-preview-dialog .pdf-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  color: var(--el-text-color-secondary);
+  gap: 12px;
+}
+
+.pdf-preview-dialog .pdf-loading i {
+  font-size: 32px;
+  color: var(--el-color-primary);
+}
+
+.pdf-preview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+}
+
+.pdf-toolbar .page-info,
+.pdf-toolbar .selected-info {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+
+.pdf-toolbar .selected-info {
+  color: var(--el-color-primary);
+  font-weight: 500;
+  margin-left: 16px;
+}
+
+.pdf-toolbar .toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pdf-page-item .page-image-wrapper {
+  position: relative;
+  aspect-ratio: 210 / 297; /* A4 比例 */
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+.pdf-page-item .page-image-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.pdf-page-item .page-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(var(--el-color-primary-rgb), 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdf-page-item .page-overlay i {
+  font-size: 32px;
+  color: var(--el-color-primary);
+  background: #fff;
+  border-radius: 50%;
+  padding: 8px;
+}
+
+/* PDF 文件卡片预览按钮 */
+.file-card-box.pdf-file {
+  position: relative;
+}
+
+.file-card-box .pdf-preview-btn {
+  position: absolute;
+  right: 36px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.file-card-box.pdf-file:hover .pdf-preview-btn {
+  opacity: 1;
+}

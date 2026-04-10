@@ -356,6 +356,11 @@ let vue_data = {
       e2b_api_key: '',
       sandbox_url: 'http://127.0.0.1:8080',
     },
+    formulaOcrSettings: {
+      enabled: true,
+      api_key: '', // SimpleTex API Key，用户自行配置
+      model: 'standard', // standard 或 turbo
+    },
     CLISettings: {
       enabled: false,
       visibilityScope: 'workspace',
@@ -2202,6 +2207,26 @@ main();`,
     showEducationDialog: false,
     educationActiveTab: 'skills',  // skills | growth | records
     selectedEducationSkill: null,
+
+    // ==================== 手写公式识别系统 ====================
+    showHandwriteDialog: false,  // 手写板对话框显示
+    handwriteCanvas: null,       // Canvas 实例引用
+    handwriteCtx: null,          // Canvas 2D 上下文
+    isDrawing: false,            // 是否正在绘制
+    handwriteColor: '#000000',   // 画笔颜色
+    handwriteLineWidth: 3,       // 画笔粗细
+    handwriteRecognizing: false, // 是否正在识别
+    handwriteResult: '',         // 识别结果
+    handwriteError: null,        // 错误信息
+
+    // ==================== PDF 文献阅读增强 ====================
+    showPdfPreviewDialog: false, // PDF 预览对话框显示
+    pdfPreviewFile: null,        // 当前预览的 PDF 文件
+    pdfPreviewPages: [],         // PDF 页面预览数据 [{pageNum, imageUrl, selected}]
+    pdfPreviewLoading: false,    // 是否正在加载
+    pdfTotalPages: 0,            // PDF 总页数
+    selectedPdfPages: [],        // 选中的页码列表
+    pdfPreviewScale: 0.5,        // 预览缩放比例
 
     // ==================== 腾讯数智人系统 ====================
     tencentDigitalHuman: {

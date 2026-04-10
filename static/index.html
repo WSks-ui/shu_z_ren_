@@ -1015,12 +1015,24 @@ function updateElement(el, rawMarkdown, formatFn) {
 
                     <el-tooltip :content="t('uploadFileorImage')" placement="top">
                       <el-button
-                        @click="browseAllFiles" 
+                        @click="browseAllFiles"
                         class="icon-btn file-btn"
                         :type="(hasFiles || hasImages) ? 'primary' : 'default'"
                         v-if="MoreButtonDict.find(b => b.name === 'fileButton')?.enabled && !isCapsuleMode"
                         circle>
                         <i class="fa-solid fa-paperclip"></i>
+                      </el-button>
+                    </el-tooltip>
+
+                    <!-- 手写公式按钮 -->
+                    <el-tooltip :content="t('handwriteFormula') || '手写公式'" placement="top">
+                      <el-button
+                        @click="openHandwriteDialog"
+                        class="icon-btn handwrite-btn"
+                        type="default"
+                        v-if="MoreButtonDict.find(b => b.name === 'fileButton')?.enabled && !isCapsuleMode"
+                        circle>
+                        <i class="fa-solid fa-pen-fancy"></i>
                       </el-button>
                     </el-tooltip>
 
@@ -1391,13 +1403,25 @@ function updateElement(el, rawMarkdown, formatFn) {
                       </div>
 
                       <!-- 文件类型 -->
-                      <div v-else class="file-card-box">
+                      <div v-else class="file-card-box" :class="{ 'pdf-file': item.name.toLowerCase().endsWith('.pdf') }">
                         <div class="file-icon">
                           <i class="fa-solid fa-file-lines"></i>
                         </div>
                         <div class="file-info">
                           <span class="file-name" :title="item.name">{{ item.name }}</span>
                         </div>
+                        <!-- PDF 预览按钮 -->
+                        <el-button
+                          v-if="item.name.toLowerCase().endsWith('.pdf')"
+                          type="primary"
+                          circle
+                          size="small"
+                          class="pdf-preview-btn"
+                          @click.stop="openPdfPreview(item)"
+                          title="PDF预览"
+                        >
+                          <i class="fa-solid fa-eye"></i>
+                        </el-button>
                         <div class="remove-btn" @click.stop="removeItem(index, item.uiCategory)">
                           <i class="fa-solid fa-xmark"></i>
                         </div>
@@ -5302,6 +5326,147 @@ function updateElement(el, rawMarkdown, formatFn) {
           </template>
         </el-dialog>
 
+        <!-- 手写公式识别对话框 -->
+        <el-dialog
+          v-model="showHandwriteDialog"
+          :title="t('handwriteFormula') || '手写公式识别'"
+          width="600px"
+          class="handwrite-dialog"
+        >
+          <div class="handwrite-container">
+            <!-- 工具栏 -->
+            <div class="handwrite-toolbar">
+              <div class="tool-group">
+                <span class="tool-label">{{ t('penColor') || '画笔颜色' }}:</span>
+                <el-color-picker v-model="handwriteColor" size="small"></el-color-picker>
+              </div>
+              <div class="tool-group">
+                <span class="tool-label">{{ t('penWidth') || '画笔粗细' }}:</span>
+                <el-slider v-model="handwriteLineWidth" :min="1" :max="10" :step="0.5" style="width: 100px;"></el-slider>
+              </div>
+              <el-button size="small" @click="clearHandwriteCanvas">
+                <i class="fa-solid fa-eraser"></i> {{ t('clear') || '清空' }}
+              </el-button>
+            </div>
+
+            <!-- 画布区域 -->
+            <div class="handwrite-canvas-wrapper">
+              <canvas
+                id="handwriteCanvas"
+                class="handwrite-canvas"
+              ></canvas>
+              <div class="canvas-hint">{{ t('drawFormulaHint') || '请在上方区域手写公式' }}</div>
+            </div>
+
+            <!-- 识别结果 -->
+            <div class="handwrite-result" v-if="handwriteResult">
+              <div class="result-label">{{ t('recognitionResult') || '识别结果' }}:</div>
+              <div class="result-content">
+                <div class="latex-preview" v-html="'$$' + handwriteResult + '$$'"></div>
+                <div class="latex-code">
+                  <code>{{ handwriteResult }}</code>
+                  <el-button size="small" text @click="copyFormula">
+                    <i class="fa-solid fa-copy"></i>
+                  </el-button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 错误提示 -->
+            <el-alert
+              v-if="handwriteError"
+              :title="handwriteError"
+              type="error"
+              show-icon
+              :closable="false"
+              style="margin-top: 10px;"
+            ></el-alert>
+          </div>
+
+          <template #footer>
+            <el-button @click="showHandwriteDialog = false">{{ t('cancel') || '取消' }}</el-button>
+            <el-button
+              type="primary"
+              @click="recognizeHandwrite"
+              :loading="handwriteRecognizing"
+            >
+              <i class="fa-solid fa-wand-magic-sparkles"></i> {{ t('recognize') || '识别' }}
+            </el-button>
+            <el-button
+              type="success"
+              @click="insertFormulaToInput"
+              :disabled="!handwriteResult"
+            >
+              <i class="fa-solid fa-plus"></i> {{ t('insert') || '插入' }}
+            </el-button>
+          </template>
+        </el-dialog>
+
+        <!-- PDF 预览对话框 -->
+        <el-dialog
+          v-model="showPdfPreviewDialog"
+          :title="t('pdfPreview') || 'PDF 预览'"
+          width="800px"
+          class="pdf-preview-dialog"
+          destroy-on-close
+        >
+          <div v-if="pdfPreviewLoading" class="pdf-loading">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+            <span>{{ t('loading') || '加载中...' }}</span>
+          </div>
+
+          <div v-else class="pdf-preview-content">
+            <!-- 工具栏 -->
+            <div class="pdf-toolbar">
+              <span class="page-info">
+                {{ t('totalPages') || '共' }} {{ pdfTotalPages }} {{ t('pages') || '页' }}
+              </span>
+              <span class="selected-info" v-if="selectedPdfPages.length > 0">
+                {{ t('selected') || '已选' }} {{ selectedPdfPages.length }} {{ t('pages') || '页' }}
+              </span>
+              <div class="toolbar-actions">
+                <el-button size="small" @click="selectAllPdfPages">
+                  <i class="fa-solid fa-check-double"></i> {{ t('selectAll') || '全选' }}
+                </el-button>
+                <el-button size="small" @click="clearPdfPageSelection">
+                  <i class="fa-solid fa-xmark"></i> {{ t('clearSelection') || '清除' }}
+                </el-button>
+              </div>
+            </div>
+
+            <!-- 页面网格 -->
+            <div class="pdf-pages-grid">
+              <div
+                v-for="page in pdfPreviewPages"
+                :key="page.pageNum"
+                class="pdf-page-item"
+                :class="{ selected: page.selected }"
+                @click="togglePdfPageSelection(page.pageNum)"
+              >
+                <div class="page-image-wrapper">
+                  <img :src="'data:image/png;base64,' + page.image" :alt="'Page ' + page.pageNum" />
+                  <div class="page-overlay" v-if="page.selected">
+                    <i class="fa-solid fa-check"></i>
+                  </div>
+                </div>
+                <div class="page-number">{{ page.pageNum }}</div>
+              </div>
+            </div>
+          </div>
+
+          <template #footer>
+            <el-button @click="showPdfPreviewDialog = false">{{ t('cancel') || '取消' }}</el-button>
+            <el-button
+              type="primary"
+              @click="extractSelectedPdfPages"
+              :disabled="selectedPdfPages.length === 0"
+            >
+              <i class="fa-solid fa-file-import"></i>
+              {{ t('extractSelected') || '提取选中页面' }}
+            </el-button>
+          </template>
+        </el-dialog>
+
         <div v-show="activeMenu === 'model-config'" class="page agent-suite-container">
           <div class="suite-layout">
             <!-- 左侧二级导航 -->
@@ -8710,7 +8875,55 @@ function updateElement(el, rawMarkdown, formatFn) {
                       </el-form-item>
                     </div>
                   </div>
-                </el-form> 
+                  <!-- 公式识别配置 -->
+                  <div class="tool-item">
+                    <div class="tool-header">
+                      <div class="header-left">
+                        <span>
+                          <el-icon>
+                            <i class="fa-solid fa-pen-fancy"></i>
+                          </el-icon>
+                          {{ t('formulaOcr') || '公式识别' }}
+                        </span>
+                      </div>
+                      <el-switch v-model="formulaOcrSettings.enabled" @click.stop @change="autoSaveSettings"/>
+                    </div>
+                    <div class="tool-content" v-show="formulaOcrSettings.enabled">
+                      <el-form-item :label="t('model') || '模型'" class="form-item-align">
+                        <el-select
+                          v-model="formulaOcrSettings.model"
+                          @change="autoSaveSettings"
+                          class="full-width-input"
+                        >
+                          <el-option label="标准模型 (精准)" value="standard"></el-option>
+                          <el-option label="轻量模型 (快速)" value="turbo"></el-option>
+                        </el-select>
+                      </el-form-item>
+                      <el-form-item class="form-item-align">
+                        <template #label>
+                          <span>{{ t('simpletexApiKey') || 'SimpleTex API Key' }}</span>
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://simpletex.cn/user/center"
+                            target="_blank"
+                            style="margin-left: 8px;"
+                          >
+                            <el-icon><i class="fa-solid fa-key"></i></el-icon>
+                            {{ t('getKey') || '获取令牌' }}
+                          </el-link>
+                        </template>
+                        <el-input
+                          v-model="formulaOcrSettings.api_key"
+                          :placeholder="t('simpletexApiKeyPlaceholder') || '用户授权令牌 (UAT)'"
+                          show-password
+                          @input="autoSaveSettings"
+                          class="full-width-input"
+                        />
+                      </el-form-item>
+                    </div>
+                  </div>
+                </el-form>
               </div>
               <!-- 视觉控制界面 -->
               <div v-show="subMenu === 'visionControl'" class="page">

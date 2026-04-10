@@ -30,6 +30,38 @@
       "aiContributions": [],
       "humanContributions": [],
       "summary": null
+    },
+    {
+      "id": "session_1775744529789",
+      "type": "paper",
+      "title": "没事",
+      "startTime": "2026-04-10T00:38:41.885344",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "好的，没事就好！😊\n\n那您先忙。如果之后在**学术论文写作**方面有任何需求，随时欢迎回来找我。我可以为您提供以下帮助：\n\n- 📑 **论文结构规划**：设计框架和章节安排\n- ✍️ **写作技巧指导**：优化学术语言和表达风格\n- 📚 **引用格式支持**：APA、MLA、GB/T 7714、IEEE 等格式调整\n\n祝您科研顺利，生活愉快！👋",
+          "type": "text",
+          "timestamp": "2026-04-10T00:38:41.885351"
+        },
+        {
+          "content": "看来心情不错呀！😄 笑一笑没什么烦恼～\n\n不过记得哦，当您需要**打磨论文**、**梳理逻辑**或者**调整格式**的时候，我随时都在这里等您。\n\n祝您今天灵感爆棚，写作顺利！✍️📚",
+          "type": "text",
+          "timestamp": "2026-04-10T00:40:48.200833"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "没事",
+          "type": "text",
+          "timestamp": "2026-04-10T00:38:41.885353"
+        },
+        {
+          "content": "哈哈",
+          "type": "text",
+          "timestamp": "2026-04-10T00:40:48.200827"
+        }
+      ],
+      "summary": null
     }
   ],
   "experiments": [
@@ -87,6 +119,105 @@
       "humanContributions": [],
       "endTime": "2026-04-09T09:11:37.651Z",
       "duration": 0
+    },
+    {
+      "id": "experiment_1775727144196",
+      "type": "experiment",
+      "title": "",
+      "startTime": "2026-04-09T09:32:24.196Z",
+      "content": "",
+      "aiContributions": [],
+      "humanContributions": [],
+      "endTime": "2026-04-09T09:32:25.338Z",
+      "duration": 0
+    },
+    {
+      "id": "session_1775729808453",
+      "type": "experiment",
+      "title": "如何设计一个对照实验？",
+      "startTime": "2026-04-09T18:17:46.370773",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "您好！我是教育数字人助手。要启用完整对话功能，请在主界面配置 API Key。\n\n您可以前往「设置」页面配置语言模型 API。",
+          "type": "text",
+          "timestamp": "2026-04-09T18:17:46.370783"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "如何设计一个对照实验？",
+          "type": "text",
+          "timestamp": "2026-04-09T18:17:46.370785"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "session_1775730303734",
+      "type": "experiment",
+      "title": "如何设计一个对照实验？",
+      "startTime": "2026-04-09T18:25:20.552905",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "您好！我是教育数字人助手。要启用完整对话功能，请在主界面配置 API Key。\n\n您可以前往「设置」页面配置语言模型 API。",
+          "type": "text",
+          "timestamp": "2026-04-09T18:25:20.552913"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "如何设计一个对照实验？",
+          "type": "text",
+          "timestamp": "2026-04-09T18:25:20.552915"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "session_1775740812406",
+      "type": "experiment",
+      "title": "如何设计一个对照实验？",
+      "startTime": "2026-04-09T21:21:25.727251",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "您好！我是教育数字人助手。要启用完整对话功能，请在主界面配置 API Key。\n\n您可以前往「设置」页面配置语言模型 API。",
+          "type": "text",
+          "timestamp": "2026-04-09T21:21:25.727266"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "如何设计一个对照实验？",
+          "type": "text",
+          "timestamp": "2026-04-09T21:21:25.727268"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "session_1775748287038",
+      "type": "experiment",
+      "title": "如何设计一个对照实验？",
+      "startTime": "2026-04-09T23:25:26.843058",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "你好！很高兴能协助你思考实验设计的问题。设计一个严谨的对照实验（Controlled Experiment）确实是确立因果关系、验证科学假设的“金标准”。\n\n不过，实验设计高度依赖于具体的研究领域和问题。为了不仅能给你提供通用的框架，还能给出更具针对性的建议，**我们需要先厘清你的研究背景**。\n\n在此之前，我可以先为你梳理一个**通用的对照实验设计框架**，并附上一些关键的思考点，帮助你构建思路",
+          "type": "text",
+          "timestamp": "2026-04-09T23:25:26.843070"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "如何设计一个对照实验？",
+          "type": "text",
+          "timestamp": "2026-04-09T23:25:26.843073"
+        }
+      ],
+      "summary": null
     }
   ],
   "reviews": [
@@ -179,12 +310,25 @@
       "summary": null
     },
     {
-      "id": "review_1775725897695",
+      "id": "session_1775727690052",
       "type": "review",
-      "startTime": "2026-04-09T17:11:37.725047",
+      "title": "你可以查看图片吗",
+      "startTime": "2026-04-09T17:41:46.401521",
       "endTime": null,
-      "aiContributions": [],
-      "humanContributions": [],
+      "aiContributions": [
+        {
+          "content": "您好！我是教育数字人助手。要启用完整对话功能，请在主界面配置 API Key。\n\n您可以前往「设置」页面配置语言模型 API。",
+          "type": "text",
+          "timestamp": "2026-04-09T17:41:46.401531"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "你可以查看图片吗",
+          "type": "text",
+          "timestamp": "2026-04-09T17:41:46.401534"
+        }
+      ],
       "summary": null
     }
   ],
@@ -207,6 +351,246 @@
       "endTime": null,
       "aiContributions": [],
       "humanContributions": [],
+      "summary": null
+    },
+    {
+      "id": "session_1775744529789",
+      "type": "tutoring",
+      "title": "你好",
+      "startTime": "2026-04-09T22:22:14.565918",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "您好！我是教育数字人助手。要启用完整对话功能，请在主界面配置 API Key。\n\n您可以前往「设置」页面配置语言模型 API。",
+          "type": "text",
+          "timestamp": "2026-04-09T22:22:14.565931"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "你好",
+          "type": "text",
+          "timestamp": "2026-04-09T22:22:14.565933"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "test_123",
+      "type": "tutoring",
+      "title": "你好",
+      "startTime": "2026-04-09T22:42:18.981647",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "你好呀！👋 很高兴见到你！\n\n我是你的专属虚拟导师，在接下来的学习旅程中，我会一直陪伴在你身边。无论是想**制定一个切实可行的学习计划**📅，还是遇到了**难懂的知识概念**📚，亦或是单纯想**聊聊学习中的困惑**💡，我都在这里随时准备支持你。\n\n为了更好帮助你，我想了解一下：\n\n1. 你最近有特别想学习的主题或技能吗？\n2. 或者，目前在学习上有什么让你觉得有点“卡壳”的地方吗？\n\n别担心，学习",
+          "type": "text",
+          "timestamp": "2026-04-09T22:42:18.981657"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "你好",
+          "type": "text",
+          "timestamp": "2026-04-09T22:42:18.981659"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "test123",
+      "type": "tutoring",
+      "title": "hello",
+      "startTime": "2026-04-10T01:06:22.645996",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "你好！👋 很高兴能成为你的学习伙伴！\n\n我是你的虚拟导师，在这里，没有“太简单”或“太困难”的问题，只有等待被解开的好奇心。💡\n\n学习是一场奇妙的旅程，而我会陪在你身边，帮你扫清障碍、规划路线。今天你想探索什么领域呢？比如：\n\n📚 **制定一个学习计划**？（比如想入门编程、学习外语，或是准备考试）\n🤔 **弄懂某个复杂的概念**？（有什么知识点让你觉得困惑吗？）\n❓ **解决具体的学习难题**？",
+          "type": "text",
+          "timestamp": "2026-04-10T01:06:22.646002"
+        },
+        {
+          "content": "你好！👋 很高兴见到你！\n\n我是你的虚拟导师，随时准备为你的学习之旅提供支持。学习是一场精彩的探索，而我很荣幸能陪你一起走这段路。\n\n无论是想攻克一个难点、制定学习计划，还是单纯对某个概念感到好奇，我都在这里帮你。\n\n**今天你想探索什么领域呢？** 或者，你最近有什么具体的学习目标吗？\n\n别担心，我们一步一步来，一起进步！💪",
+          "type": "text",
+          "timestamp": "2026-04-10T01:16:10.125900"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "hello",
+          "type": "text",
+          "timestamp": "2026-04-10T01:06:22.646003"
+        },
+        {
+          "content": "hi",
+          "type": "text",
+          "timestamp": "2026-04-10T01:16:10.125892"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "session_1775755098546",
+      "type": "tutoring",
+      "title": "你好哈哈哈",
+      "startTime": "2026-04-10T01:18:43.243614",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "你好呀！😄 看到你这么开心，我也感到很有活力！\n\n学习之旅有时候需要一点轻松的心情作为起点呢。我是你的虚拟导师，随时准备陪伴你一起探索知识的奥秘。\n\n今天有没有什么特别想了解的领域？或者最近在学习什么有趣的内容吗？哪怕只是一个小小的疑问，我们也可以从这里开始哦！🌱\n\n期待听到你的想法～",
+          "type": "text",
+          "timestamp": "2026-04-10T01:18:43.243622"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "你好哈哈哈",
+          "type": "text",
+          "timestamp": "2026-04-10T01:18:43.243623"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "perf-test",
+      "type": "tutoring",
+      "title": "hi",
+      "startTime": "2026-04-10T01:24:38.814596",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "你好呀！👋 很高兴能成为你的学习伙伴！\n\n我是你的虚拟导师。在这里，没有“愚蠢的问题”，只有等待被解开的好奇心。无论你想攻克某个复杂的知识点、需要制定一个切实可行的学习计划，还是只是想聊聊学习中的困惑，我都在这里陪着你。\n\n今天，你希望我们在哪个领域一起探索呢？是语言、科学、技术，还是其他什么感兴趣的话题？或者，最近学习上有什么让你觉得特别有挑战性的地方吗？\n\n放轻松，我们一步步来，相信你一定会有",
+          "type": "text",
+          "timestamp": "2026-04-10T01:24:38.814605"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "hi",
+          "type": "text",
+          "timestamp": "2026-04-10T01:24:38.814607"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "perf-test2",
+      "type": "tutoring",
+      "title": "hello",
+      "startTime": "2026-04-10T01:25:11.369718",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "你好呀！👋 很高兴能在这里遇见你！\n\n我是你的专属虚拟导师。在接下来的学习旅程中，我会一直陪在你身边，为你答疑解惑、规划路径，一起攻克那些看似复杂的知识难点。\n\n学习是一场充满惊喜的探索，不管你是想开启一个全新的领域，还是在现有的学习中遇到了“拦路虎”，都可以随时告诉我。\n\n不妨和我聊聊，以便我更好地为你提供帮助：\n1. **你最近对什么领域最感兴趣？**（比如编程、语言、科学、艺术...）\n2.",
+          "type": "text",
+          "timestamp": "2026-04-10T01:25:11.369731"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "hello",
+          "type": "text",
+          "timestamp": "2026-04-10T01:25:11.369734"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "cold",
+      "type": "tutoring",
+      "title": "hi",
+      "startTime": "2026-04-10T01:31:05.330628",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "你好呀！👋 很高兴见到你！\n\n我是你的虚拟导师，专门为你提供最适合自己的学习支持。学习是一场精彩的旅程，而我很荣幸能陪你一起走。🎓\n\n今天你想探索什么呢？比如：\n\n- 📚 **想学习一门新技能？**（比如编程、外语、设计、写作等）\n- ❓ **对某个知识点感到困惑？**（需要有人帮你用通俗的方式梳理）\n- 🗓️ **想制定一个学习计划？**（希望更有条理地达成目标）\n- 💡 **或者只是想聊聊学习",
+          "type": "text",
+          "timestamp": "2026-04-10T01:31:05.330640"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "hi",
+          "type": "text",
+          "timestamp": "2026-04-10T01:31:05.330643"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "warm",
+      "type": "tutoring",
+      "title": "hello",
+      "startTime": "2026-04-10T01:31:55.650273",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "你好呀！👋 很高兴见到你！\n\n我是你的虚拟导师，在这里陪伴你探索知识的海洋。无论是想学习新技能、解决具体的难题，还是希望制定一个专属的学习计划，我都可以为你提供帮助。\n\n学习是一段精彩的旅程，有时候可能会遇到挑战，但别担心，我会一直在这里支持你。💪\n\n不妨告诉我：\n1. **你最近对什么领域感兴趣呢？**（比如编程、语言、科学、艺术...）\n2. **或者，你现在有什么特别想解决的学习问题吗？**",
+          "type": "text",
+          "timestamp": "2026-04-10T01:31:55.650280"
+        },
+        {
+          "content": "你好呀！测试成功～ 🎉\n\n很高兴能成为你的学习伙伴！我是你的虚拟导师，专门为你量身定制学习支持。\n\n学习是一场奇妙的旅程，有时候可能会遇到迷雾，但别担心，我会陪你一起拨云见日。💡\n\n不知道你今天想从哪里开始呢？\n*   📚 **想搞懂某个复杂的概念？**（比如量子力学、机器学习、或是历史事件）\n*   🗓️ **需要制定一个学习计划？**（比如备考、学习新语言、技能提升）\n*   ❓ **遇到了具",
+          "type": "text",
+          "timestamp": "2026-04-10T01:33:06.711349"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "hello",
+          "type": "text",
+          "timestamp": "2026-04-10T01:31:55.650281"
+        },
+        {
+          "content": "test",
+          "type": "text",
+          "timestamp": "2026-04-10T01:33:06.711341"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "with-skill",
+      "type": "tutoring",
+      "title": "hi",
+      "startTime": "2026-04-10T01:49:57.582877",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "你好呀！👋 很高兴能成为你的虚拟学习导师。\n\n学习是一场充满惊喜的旅程，而我很荣幸能陪你一起探索。无论你想攻克某个复杂的概念、制定高效的学习计划，还是仅仅想解决当下的一个小疑惑，我都随时准备着为你提供帮助。\n\n为了让我们更好地开始，能不能和我聊聊：\n1. **你最近最想学习或深入了解的主题是什么？**（比如编程、历史、语言、科学等）\n2. **你目前在这个领域大概处于什么阶段？**（是完全零基础，",
+          "type": "text",
+          "timestamp": "2026-04-10T01:49:57.582885"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "hi",
+          "type": "text",
+          "timestamp": "2026-04-10T01:49:57.582886"
+        }
+      ],
+      "summary": null
+    },
+    {
+      "id": "session_1775758843038",
+      "type": "tutoring",
+      "title": "好吧，",
+      "startTime": "2026-04-10T02:25:32.047192",
+      "endTime": null,
+      "aiContributions": [
+        {
+          "content": "没关系，有时候刚开始学习或交流时，确实不一定马上就有明确的问题，这很正常。\n\n您可以把我当作一个随时待命的学习伙伴。当您准备好了，我们可以尝试从这些小事开始：\n\n1.  **聊聊困惑**：最近有没有哪个知识点让您觉得特别难懂？\n2.  **制定小目标**：比如这周想读完一本书，或者掌握一项新技能？\n3.  **随意探讨**：哪怕是一个突然想到的好奇问题，也可以随时抛给我。\n\n不用有压力，按照您的节",
+          "type": "text",
+          "timestamp": "2026-04-10T02:25:32.047198"
+        }
+      ],
+      "humanContributions": [
+        {
+          "content": "好吧，",
+          "type": "text",
+          "timestamp": "2026-04-10T02:25:32.047200"
+        }
+      ],
       "summary": null
     }
   ]

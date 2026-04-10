@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+import base64
 from urllib.parse import urlparse
 import aiohttp
 from io import BytesIO
@@ -460,6 +461,246 @@ def _process_pdf(content):
     except Exception as e:
         raise RuntimeError(f"PDF解析失败: {str(e)}")
     return '\n'.join(text)
+
+
+async def handle_pdf_enhanced(content, page_range: str = None, return_page_images: bool = False):
+    """
+    增强版 PDF 处理
+
+    Args:
+        content: PDF 文件二进制内容
+        page_range: 页面范围，格式如 "1-5,8,10-12"，None 表示全部
+        return_page_images: 是否返回页面预览图像（base64）
+
+    Returns:
+        {
+            "text": "提取的文本内容",
+            "total_pages": 总页数,
+            "extracted_pages": [提取的页码列表],
+            "page_images": [{"page": 1, "image_base64": "..."}, ...]  # 如果 return_page_images=True
+        }
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _process_pdf_enhanced, content, page_range, return_page_images)
+
+
+def _parse_page_range(page_range: str, total_pages: int) -> list:
+    """
+    解析页面范围字符串
+
+    Args:
+        page_range: 格式如 "1-5,8,10-12"
+        total_pages: PDF 总页数
+
+    Returns:
+        页码列表（从1开始）
+    """
+    if not page_range:
+        return list(range(1, total_pages + 1))
+
+    pages = set()
+    parts = page_range.replace(' ', '').split(',')
+
+    for part in parts:
+        if '-' in part:
+            # 范围格式：1-5
+            start, end = part.split('-')
+            start = int(start)
+            end = int(end)
+            for p in range(start, min(end + 1, total_pages + 1)):
+                if p >= 1:
+                    pages.add(p)
+        else:
+            # 单页格式：8
+            p = int(part)
+            if 1 <= p <= total_pages:
+                pages.add(p)
+
+    return sorted(pages)
+
+
+def _process_pdf_enhanced(content, page_range: str = None, return_page_images: bool = False):
+    """同步处理增强版 PDF"""
+    result = {
+        "text": "",
+        "total_pages": 0,
+        "extracted_pages": [],
+        "page_images": []
+    }
+
+    try:
+        from PyPDF2 import PdfReader
+
+        with BytesIO(content) as pdf_file:
+            reader = PdfReader(pdf_file)
+            total_pages = len(reader.pages)
+            result["total_pages"] = total_pages
+
+            # 解析页面范围
+            pages_to_extract = _parse_page_range(page_range, total_pages)
+            result["extracted_pages"] = pages_to_extract
+
+            # 提取文本
+            text_parts = []
+            for page_num in pages_to_extract:
+                page = reader.pages[page_num - 1]  # PDF 页码从0开始
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    text_parts.append(f"=== 第 {page_num} 页 ===\n{page_text}")
+
+            result["text"] = '\n\n'.join(text_parts)
+
+            # 生成页面图像预览（如果需要）
+            if return_page_images:
+                try:
+                    import fit  # PyMuPDF
+                    pdf_doc = fit.open(stream=content, filetype="pdf")
+
+                    for page_num in pages_to_extract:
+                        page = pdf_doc[page_num - 1]
+                        # 渲染为图像（缩放比例 0.5）
+                        mat = fit.Matrix(0.5, 0.5)
+                        pix = page.get_pixmap(matrix=mat)
+
+                        # 转换为 base64
+                        img_bytes = pix.tobytes("png")
+                        img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+
+                        result["page_images"].append({
+                            "page": page_num,
+                            "image_base64": img_base64,
+                            "width": pix.width,
+                            "height": pix.height
+                        })
+
+                    pdf_doc.close()
+                except ImportError:
+                    # PyMuPDF 未安装，跳过图像生成
+                    pass
+                except Exception as e:
+                    # 图像生成失败，记录错误但不影响文本提取
+                    result["page_images_error"] = str(e)
+
+    except Exception as e:
+        raise RuntimeError(f"PDF解析失败: {str(e)}")
+
+    return result
+
+
+async def get_pdf_page_images(content, page_numbers: list = None, scale: float = 0.5):
+    """
+    获取 PDF 指定页面的预览图像
+
+    Args:
+        content: PDF 文件二进制内容
+        page_numbers: 页码列表（从1开始），None 表示全部
+        scale: 缩放比例，默认 0.5
+
+    Returns:
+        [{"page": 1, "image_base64": "...", "width": 100, "height": 150}, ...]
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _get_pdf_page_images, content, page_numbers, scale)
+
+
+def _get_pdf_page_images(content, page_numbers: list = None, scale: float = 0.5):
+    """同步获取 PDF 页面图像"""
+    import base64
+
+    try:
+        import fit  # PyMuPDF
+    except ImportError:
+        raise RuntimeError("需要安装 PyMuPDF 库: pip install pymupdf")
+
+    images = []
+
+    try:
+        pdf_doc = fit.open(stream=content, filetype="pdf")
+        total_pages = pdf_doc.page_count
+
+        # 确定要渲染的页面
+        if page_numbers is None:
+            page_numbers = list(range(1, total_pages + 1))
+
+        for page_num in page_numbers:
+            if page_num < 1 or page_num > total_pages:
+                continue
+
+            page = pdf_doc[page_num - 1]
+            mat = fit.Matrix(scale, scale)
+            pix = page.get_pixmap(matrix=mat)
+
+            img_bytes = pix.tobytes("png")
+            img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+
+            images.append({
+                "page": page_num,
+                "image_base64": img_base64,
+                "width": pix.width,
+                "height": pix.height
+            })
+
+        pdf_doc.close()
+
+    except Exception as e:
+        raise RuntimeError(f"PDF 页面图像生成失败: {str(e)}")
+
+    return images
+
+
+async def get_pdf_info(content) -> dict:
+    """
+    获取 PDF 文件基本信息
+
+    Returns:
+        {
+            "total_pages": 总页数,
+            "metadata": {...},
+            "toc": [...]  # 目录
+        }
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _get_pdf_info, content)
+
+
+def _get_pdf_info(content):
+    """同步获取 PDF 信息"""
+    info = {
+        "total_pages": 0,
+        "metadata": {},
+        "toc": []
+    }
+
+    try:
+        from PyPDF2 import PdfReader
+
+        with BytesIO(content) as pdf_file:
+            reader = PdfReader(pdf_file)
+            info["total_pages"] = len(reader.pages)
+
+            # 提取元数据
+            if reader.metadata:
+                info["metadata"] = {
+                    "title": reader.metadata.get("/Title", ""),
+                    "author": reader.metadata.get("/Author", ""),
+                    "subject": reader.metadata.get("/Subject", ""),
+                    "creator": reader.metadata.get("/Creator", ""),
+                }
+
+            # 尝试提取目录（PyPDF2 功能有限）
+            try:
+                import fit  # PyMuPDF
+                pdf_doc = fit.open(stream=content, filetype="pdf")
+                toc = pdf_doc.get_toc()
+                info["toc"] = [{"level": item[0], "title": item[1], "page": item[2]} for item in toc]
+                pdf_doc.close()
+            except:
+                pass
+
+    except Exception as e:
+        raise RuntimeError(f"PDF 信息获取失败: {str(e)}")
+
+    return info
 
 async def handle_docx(content):
     """异步处理DOCX文件"""

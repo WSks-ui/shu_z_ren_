@@ -10,22 +10,52 @@ import httpx
 import base64
 import asyncio
 from pathlib import Path
-from fastapi import APIRouter, Body, HTTPException, WebSocket, WebSocketDisconnect
-from typing import Dict, Any, List, Optional
+from fastapi import APIRouter, Body, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import StreamingResponse
+from typing import Dict, Any, List, Optional, AsyncGenerator
 from pydantic import BaseModel, Field
 from datetime import datetime
+
+
+def get_global_http_client():
+    """获取全局 HTTP 客户端（复用连接池）"""
+    try:
+        from server import global_http_client
+        print(f"[教育数字人] 获取全局客户端: {global_http_client is not None}")
+        return global_http_client
+    except ImportError as e:
+        print(f"[教育数字人] 无法导入全局客户端: {e}")
+        return None
+
 
 # 路由前缀
 router = APIRouter(prefix="/api/education", tags=["Education Digital Human"])
 
-# 数据存储目录
+# 数据存储目录 - 与 edu_storage.py 保持一致
 EDUCATION_DATA_DIR = Path(os.path.join(os.path.dirname(__file__), "..", "education_digital_human", "数据"))
 EDUCATION_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# JSON 文件路径（仅用于健康检查和备份）
 GROWTH_DATA_FILE = EDUCATION_DATA_DIR / "growth_data.json"
 COLLABORATION_DATA_FILE = EDUCATION_DATA_DIR / "collaboration_data.json"
 ACHIEVEMENT_DATA_FILE = EDUCATION_DATA_DIR / "achievement_data.json"
 CHAT_HISTORY_FILE = EDUCATION_DATA_DIR / "chat_history.json"
+
+# 使用优化的存储层
+from py.edu_storage import get_cache, close_cache
+
+# 教育知识库服务
+from py.edu_knowledge_base import get_education_kb, search_education_knowledge, get_education_context, EDUCATION_KB_DIR, preload_education_kb
+
+# 存储层初始化标记
+_storage_initialized = False
+
+async def ensure_storage():
+    """确保存储层已初始化"""
+    global _storage_initialized
+    if not _storage_initialized:
+        await get_cache()
+        _storage_initialized = True
 
 # 技能系统提示词
 SKILL_PROMPTS = {
@@ -143,8 +173,123 @@ class EmotionState(BaseModel):
 
 # ==================== 辅助函数 ====================
 
-def _read_json_file(file_path: Path, default: Any = None) -> Any:
-    """安全读取 JSON 文件"""
+# 最大记录数常量
+MAX_COLLABORATION_RECORDS = 500
+MAX_CHAT_HISTORY_SESSIONS = 100
+MAX_CHAT_MESSAGES_PER_SESSION = 100
+SESSION_TIMEOUT_MINUTES = 30  # 会话超时时间（分钟）
+
+# 设置缓存（避免每次请求都访问数据库）
+_settings_cache = None
+_settings_cache_time = 0
+SETTINGS_CACHE_TTL = 5  # 缓存有效期（秒）
+
+
+async def get_cached_settings() -> Dict[str, Any]:
+    """获取缓存的设置，避免频繁访问数据库"""
+    global _settings_cache, _settings_cache_time
+    import time as time_module
+
+    current_time = time_module.time()
+
+    # 如果缓存有效，直接返回
+    if _settings_cache is not None and (current_time - _settings_cache_time) < SETTINGS_CACHE_TTL:
+        return _settings_cache
+
+    # 缓存过期或不存在，重新加载
+    try:
+        from py.get_setting import load_settings
+        _settings_cache = await load_settings()
+        _settings_cache_time = current_time
+        return _settings_cache
+    except Exception:
+        return {}
+
+
+def invalidate_settings_cache():
+    """使设置缓存失效（保存设置后调用）"""
+    global _settings_cache, _settings_cache_time
+    _settings_cache = None
+    _settings_cache_time = 0
+
+
+class SessionManager:
+    """会话管理器：跟踪活跃会话并自动清理超时会话"""
+
+    def __init__(self, timeout_minutes: int = SESSION_TIMEOUT_MINUTES):
+        self.sessions: Dict[str, Dict[str, Any]] = {}
+        self.timeout_minutes = timeout_minutes
+        self._cleanup_task = None
+
+    def create_session(self, session_id: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
+        """创建新会话"""
+        self.sessions[session_id] = {
+            "id": session_id,
+            "created_at": datetime.now().isoformat(),
+            "last_activity": datetime.now().isoformat(),
+            "metadata": metadata or {}
+        }
+        return self.sessions[session_id]
+
+    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """获取会话并更新活动时间"""
+        if session_id in self.sessions:
+            self.sessions[session_id]["last_activity"] = datetime.now().isoformat()
+            return self.sessions[session_id]
+        return None
+
+    def update_activity(self, session_id: str) -> bool:
+        """更新会话活动时间"""
+        if session_id in self.sessions:
+            self.sessions[session_id]["last_activity"] = datetime.now().isoformat()
+            return True
+        return False
+
+    def remove_session(self, session_id: str) -> bool:
+        """移除会话"""
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+            return True
+        return False
+
+    def cleanup_inactive_sessions(self) -> int:
+        """清理超时会话，返回清理数量"""
+        now = datetime.now()
+        timeout_threshold = now.timestamp() - (self.timeout_minutes * 60)
+
+        expired_sessions = []
+        for session_id, session_data in self.sessions.items():
+            last_activity = session_data.get("last_activity", "")
+            try:
+                last_time = datetime.fromisoformat(last_activity).timestamp()
+                if last_time < timeout_threshold:
+                    expired_sessions.append(session_id)
+            except:
+                expired_sessions.append(session_id)
+
+        for session_id in expired_sessions:
+            del self.sessions[session_id]
+
+        if expired_sessions:
+            print(f"会话管理器: 清理了 {len(expired_sessions)} 个超时会话")
+
+        return len(expired_sessions)
+
+    def get_active_count(self) -> int:
+        """获取活跃会话数量"""
+        return len(self.sessions)
+
+    def get_all_sessions(self) -> List[Dict[str, Any]]:
+        """获取所有会话信息"""
+        return list(self.sessions.values())
+
+
+# 全局会话管理器实例
+session_manager = SessionManager()
+
+
+def _read_json_file_sync(file_path: Path, default: Any = None) -> Any:
+    """安全读取 JSON 文件（同步版本）"""
     if not file_path.exists():
         return default
     try:
@@ -155,8 +300,8 @@ def _read_json_file(file_path: Path, default: Any = None) -> Any:
         return default
 
 
-def _write_json_file(file_path: Path, data: Any) -> bool:
-    """安全写入 JSON 文件"""
+def _write_json_file_sync(file_path: Path, data: Any) -> bool:
+    """安全写入 JSON 文件（同步版本）"""
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -166,12 +311,63 @@ def _write_json_file(file_path: Path, data: Any) -> bool:
         return False
 
 
+async def _read_json_file(file_path: Path, default: Any = None) -> Any:
+    """安全读取 JSON 文件（异步版本，使用线程池避免阻塞）"""
+    return await asyncio.to_thread(_read_json_file_sync, file_path, default)
+
+
+async def _write_json_file(file_path: Path, data: Any) -> bool:
+    """安全写入 JSON 文件（异步版本，使用线程池避免阻塞）"""
+    return await asyncio.to_thread(_write_json_file_sync, file_path, data)
+
+
+def _cleanup_collaboration_records(data: dict) -> dict:
+    """清理旧协作记录，保留最近 MAX_COLLABORATION_RECORDS 条"""
+    total = 0
+    max_per_type = MAX_COLLABORATION_RECORDS // 4
+
+    for key in ["papers", "experiments", "reviews", "sessions"]:
+        records = data.get(key, [])
+        total += len(records)
+
+        if len(records) > max_per_type:
+            # 按时间排序，保留最新的
+            records.sort(key=lambda x: x.get("startTime", ""), reverse=True)
+            data[key] = records[:max_per_type]
+            print(f"清理 {key}: 保留 {max_per_type} 条，删除 {len(records) - max_per_type} 条")
+
+    return data
+
+
+def _cleanup_chat_history(data: dict) -> dict:
+    """清理旧对话历史，保留最近 MAX_CHAT_HISTORY_SESSIONS 个会话"""
+    sessions = data.get("sessions", {})
+
+    if len(sessions) > MAX_CHAT_HISTORY_SESSIONS:
+        # 按最后消息时间排序
+        session_list = []
+        for sid, msgs in sessions.items():
+            last_time = msgs[-1].get("timestamp", "") if msgs else ""
+            session_list.append((sid, last_time))
+
+        session_list.sort(key=lambda x: x[1], reverse=True)
+
+        # 保留最新的会话
+        keep_ids = {s[0] for s in session_list[:MAX_CHAT_HISTORY_SESSIONS]}
+        data["sessions"] = {k: v for k, v in sessions.items() if k in keep_ids}
+        print(f"清理对话历史: 保留 {len(data['sessions'])} 个会话")
+
+    return data
+
+
 # ==================== 成长系统 API ====================
 
 @router.get("/growth")
 async def get_growth_data():
     """获取成长系统数据"""
-    data = _read_json_file(GROWTH_DATA_FILE, {
+    await ensure_storage()
+    cache = await get_cache()
+    data = await cache.get("growth", {
         "level": 1,
         "exp": 0,
         "totalExp": 0,
@@ -191,15 +387,20 @@ async def get_growth_data():
 @router.post("/growth")
 async def save_growth_data(data: Dict[str, Any] = Body(...)):
     """保存成长系统数据"""
-    if _write_json_file(GROWTH_DATA_FILE, data):
-        return {"status": "success", "message": "成长数据保存成功"}
-    raise HTTPException(status_code=500, detail="保存成长数据失败")
+    await ensure_storage()
+    cache = await get_cache()
+    await cache.set("growth", data)
+    return {"status": "success", "message": "成长数据保存成功"}
 
 
 @router.post("/growth/add_exp")
 async def add_experience(amount: int = Body(..., embed=True)):
-    """增加经验值"""
-    data = _read_json_file(GROWTH_DATA_FILE, {
+    """增加经验值（优化的原子操作）"""
+    await ensure_storage()
+    cache = await get_cache()
+
+    # 获取当前数据
+    data = await cache.get("growth", {
         "level": 1,
         "exp": 0,
         "totalExp": 0,
@@ -207,42 +408,46 @@ async def add_experience(amount: int = Body(..., embed=True)):
         "stats": {}
     })
 
-    data["exp"] = data.get("exp", 0) + amount
-    data["totalExp"] = data.get("totalExp", 0) + amount
+    # 使用缓存的原子增量操作
+    await cache.increment("growth", "exp", amount)
+    await cache.increment("growth", "totalExp", amount)
 
-    # 计算升级 (每100经验升一级)
+    # 计算升级
+    data = await cache.get("growth")
     exp_for_next = data["level"] * 100
     while data["exp"] >= exp_for_next:
         data["exp"] -= exp_for_next
         data["level"] += 1
         exp_for_next = data["level"] * 100
 
-    if _write_json_file(GROWTH_DATA_FILE, data):
-        return {
-            "status": "success",
-            "message": f"获得 {amount} 经验值",
-            "newLevel": data["level"],
-            "currentExp": data["exp"],
-            "expForNext": exp_for_next
-        }
-    raise HTTPException(status_code=500, detail="保存成长数据失败")
+    await cache.set("growth", data)
+
+    return {
+        "status": "success",
+        "message": f"获得 {amount} 经验值",
+        "newLevel": data["level"],
+        "currentExp": data["exp"],
+        "expForNext": exp_for_next
+    }
 
 
 @router.post("/growth/update_stats")
 async def update_growth_stats(stats: Dict[str, Any] = Body(...)):
     """更新成长统计"""
-    data = _read_json_file(GROWTH_DATA_FILE, {"level": 1, "exp": 0, "totalExp": 0, "achievements": [], "stats": {}})
+    await ensure_storage()
+    cache = await get_cache()
 
-    current_stats = data.get("stats", {})
+    # 使用缓存的更新操作
+    updates = {}
     for key, value in stats.items():
         if isinstance(value, (int, float)):
-            current_stats[key] = current_stats.get(key, 0) + value
+            updates[f"stats.{key}"] = value
 
-    data["stats"] = current_stats
+    for field, value in updates.items():
+        await cache.increment("growth", field, int(value) if isinstance(value, (int, float)) else 0)
 
-    if _write_json_file(GROWTH_DATA_FILE, data):
-        return {"status": "success", "stats": current_stats}
-    raise HTTPException(status_code=500, detail="保存统计数据失败")
+    data = await cache.get("growth")
+    return {"status": "success", "stats": data.get("stats", {})}
 
 
 # ==================== 成就系统 API ====================
@@ -250,18 +455,20 @@ async def update_growth_stats(stats: Dict[str, Any] = Body(...)):
 @router.get("/achievements")
 async def get_achievements():
     """获取成就列表和解锁状态"""
-    data = _read_json_file(ACHIEVEMENT_DATA_FILE, {"unlocked": [], "history": []})
+    await ensure_storage()
+    cache = await get_cache()
+    data = await cache.get("achievement", {"unlocked": [], "history": []})
 
     # 定义所有成就
     all_achievements = [
-        {"id": "first_chat", "name": "初次对话", "description": "完成第一次对话", "icon": "fa-comments"},
-        {"id": "paper_reader", "name": "文献读者", "description": "阅读10篇文献", "icon": "fa-book"},
-        {"id": "experiment_designer", "name": "实验设计师", "description": "设计5个实验方案", "icon": "fa-flask"},
-        {"id": "paper_writer", "name": "论文写作者", "description": "完成论文写作协助", "icon": "fa-pen"},
-        {"id": "level_5", "name": "进阶学者", "description": "达到5级", "icon": "fa-star"},
-        {"id": "level_10", "name": "资深学者", "description": "达到10级", "icon": "fa-crown"},
-        {"id": "collaboration_master", "name": "协作大师", "description": "完成20次人机协作", "icon": "fa-handshake"},
-        {"id": "knowledge_seeker", "name": "知识探索者", "description": "使用所有教育技能", "icon": "fa-compass"}
+        {"id": "first_chat", "name": "初次对话", "description": "完成第一次对话", "icon": "fa-solid fa-comments"},
+        {"id": "paper_reader", "name": "文献读者", "description": "阅读10篇文献", "icon": "fa-solid fa-book"},
+        {"id": "experiment_designer", "name": "实验设计师", "description": "设计5个实验方案", "icon": "fa-solid fa-flask"},
+        {"id": "paper_writer", "name": "论文写作者", "description": "完成论文写作协助", "icon": "fa-solid fa-pen"},
+        {"id": "level_5", "name": "进阶学者", "description": "达到5级", "icon": "fa-solid fa-star"},
+        {"id": "level_10", "name": "资深学者", "description": "达到10级", "icon": "fa-solid fa-crown"},
+        {"id": "collaboration_master", "name": "协作大师", "description": "完成20次人机协作", "icon": "fa-solid fa-handshake"},
+        {"id": "knowledge_seeker", "name": "知识探索者", "description": "使用所有教育技能", "icon": "fa-solid fa-compass"}
     ]
 
     unlocked_ids = data.get("unlocked", [])
@@ -281,7 +488,9 @@ async def get_achievements():
 @router.post("/achievements/unlock")
 async def unlock_achievement(achievement_id: str = Body(..., embed=True)):
     """解锁成就"""
-    data = _read_json_file(ACHIEVEMENT_DATA_FILE, {"unlocked": [], "history": []})
+    await ensure_storage()
+    cache = await get_cache()
+    data = await cache.get("achievement", {"unlocked": [], "history": []})
 
     if achievement_id in data.get("unlocked", []):
         return {"status": "already_unlocked", "message": "成就已解锁"}
@@ -292,9 +501,8 @@ async def unlock_achievement(achievement_id: str = Body(..., embed=True)):
         "unlockedAt": datetime.now().isoformat()
     })
 
-    if _write_json_file(ACHIEVEMENT_DATA_FILE, data):
-        return {"status": "success", "message": f"成就 {achievement_id} 已解锁"}
-    raise HTTPException(status_code=500, detail="保存成就数据失败")
+    await cache.set("achievement", data)
+    return {"status": "success", "message": f"成就 {achievement_id} 已解锁"}
 
 
 # ==================== 协作记录 API ====================
@@ -302,7 +510,9 @@ async def unlock_achievement(achievement_id: str = Body(..., embed=True)):
 @router.get("/collaboration")
 async def get_collaboration_data():
     """获取协作记录数据"""
-    data = _read_json_file(COLLABORATION_DATA_FILE, {
+    await ensure_storage()
+    cache = await get_cache()
+    data = await cache.get("collaboration", {
         "papers": [],
         "experiments": [],
         "reviews": [],
@@ -314,20 +524,17 @@ async def get_collaboration_data():
 @router.post("/collaboration")
 async def save_collaboration_data(data: Dict[str, Any] = Body(...)):
     """保存协作记录数据"""
-    if _write_json_file(COLLABORATION_DATA_FILE, data):
-        return {"status": "success", "message": "协作记录保存成功"}
-    raise HTTPException(status_code=500, detail="保存协作记录失败")
+    await ensure_storage()
+    cache = await get_cache()
+    await cache.set("collaboration", data)
+    return {"status": "success", "message": "协作记录保存成功"}
 
 
 @router.post("/collaboration/start_session")
 async def start_collaboration_session(session_type: str = Body(...), session_id: str = Body(...)):
     """开始新的协作会话"""
-    data = _read_json_file(COLLABORATION_DATA_FILE, {
-        "papers": [],
-        "experiments": [],
-        "reviews": [],
-        "sessions": []
-    })
+    await ensure_storage()
+    cache = await get_cache()
 
     new_session = {
         "id": session_id,
@@ -348,11 +555,21 @@ async def start_collaboration_session(session_type: str = Body(...), session_id:
     }
 
     list_key = type_mapping.get(session_type, "sessions")
+
+    # 获取现有数据并添加新会话
+    data = await cache.get("collaboration", {
+        "papers": [],
+        "experiments": [],
+        "reviews": [],
+        "sessions": []
+    })
     data.setdefault(list_key, []).append(new_session)
 
-    if _write_json_file(COLLABORATION_DATA_FILE, data):
-        return {"status": "success", "session": new_session}
-    raise HTTPException(status_code=500, detail="创建会话失败")
+    # 同时保存到索引表（支持查询）
+    await cache.add_collaboration_session(new_session)
+
+    await cache.set("collaboration", data)
+    return {"status": "success", "session": new_session}
 
 
 @router.post("/collaboration/add_contribution")
@@ -364,7 +581,10 @@ async def add_collaboration_contribution(
     contribution_type: str = Body(default="text")
 ):
     """向协作会话添加贡献"""
-    data = _read_json_file(COLLABORATION_DATA_FILE, {
+    await ensure_storage()
+    cache = await get_cache()
+
+    data = await cache.get("collaboration", {
         "papers": [],
         "experiments": [],
         "reviews": [],
@@ -394,9 +614,8 @@ async def add_collaboration_contribution(
             else:
                 session.setdefault("humanContributions", []).append(contribution)
 
-            if _write_json_file(COLLABORATION_DATA_FILE, data):
-                return {"status": "success", "message": "贡献已记录"}
-            raise HTTPException(status_code=500, detail="保存贡献失败")
+            await cache.set("collaboration", data)
+            return {"status": "success", "message": "贡献已记录"}
 
     raise HTTPException(status_code=404, detail="会话不存在")
 
@@ -408,7 +627,10 @@ async def end_collaboration_session(
     summary: str = Body(default="")
 ):
     """结束协作会话"""
-    data = _read_json_file(COLLABORATION_DATA_FILE, {
+    await ensure_storage()
+    cache = await get_cache()
+
+    data = await cache.get("collaboration", {
         "papers": [],
         "experiments": [],
         "reviews": [],
@@ -429,9 +651,8 @@ async def end_collaboration_session(
             session["endTime"] = datetime.now().isoformat()
             session["summary"] = summary
 
-            if _write_json_file(COLLABORATION_DATA_FILE, data):
-                return {"status": "success", "message": "会话已结束"}
-            raise HTTPException(status_code=500, detail="保存会话失败")
+            await cache.set("collaboration", data)
+            return {"status": "success", "message": "会话已结束"}
 
     raise HTTPException(status_code=404, detail="会话不存在")
 
@@ -439,7 +660,10 @@ async def end_collaboration_session(
 @router.get("/collaboration/stats")
 async def get_collaboration_stats():
     """获取协作统计信息"""
-    data = _read_json_file(COLLABORATION_DATA_FILE, {
+    await ensure_storage()
+    cache = await get_cache()
+
+    data = await cache.get("collaboration", {
         "papers": [],
         "experiments": [],
         "reviews": [],
@@ -489,7 +713,9 @@ async def get_collaboration_stats():
 @router.get("/emotion/history")
 async def get_emotion_history(limit: int = 100):
     """获取情绪历史记录"""
-    growth_data = _read_json_file(GROWTH_DATA_FILE, {})
+    await ensure_storage()
+    cache = await get_cache()
+    growth_data = await cache.get("growth", {})
     history = growth_data.get("emotionHistory", [])[-limit:]
     return {"history": history}
 
@@ -497,24 +723,17 @@ async def get_emotion_history(limit: int = 100):
 @router.post("/emotion/record")
 async def record_emotion(emotion: str = Body(...), intensity: float = Body(...)):
     """记录情绪状态"""
-    data = _read_json_file(GROWTH_DATA_FILE, {
-        "level": 1, "exp": 0, "totalExp": 0, "achievements": [], "stats": {},
-        "emotionHistory": []
-    })
+    await ensure_storage()
+    cache = await get_cache()
 
-    data.setdefault("emotionHistory", []).append({
+    # 使用缓存的追加操作
+    await cache.append_to_list("growth", "emotionHistory", {
         "emotion": emotion,
         "intensity": intensity,
         "timestamp": datetime.now().isoformat()
-    })
+    }, max_items=500)
 
-    # 只保留最近500条记录
-    if len(data["emotionHistory"]) > 500:
-        data["emotionHistory"] = data["emotionHistory"][-500:]
-
-    if _write_json_file(GROWTH_DATA_FILE, data):
-        return {"status": "success"}
-    raise HTTPException(status_code=500, detail="保存情绪记录失败")
+    return {"status": "success"}
 
 
 # ==================== 技能使用统计 API ====================
@@ -522,23 +741,22 @@ async def record_emotion(emotion: str = Body(...), intensity: float = Body(...))
 @router.post("/skills/record_usage")
 async def record_skill_usage(skill_id: str = Body(...)):
     """记录技能使用"""
-    data = _read_json_file(GROWTH_DATA_FILE, {
-        "level": 1, "exp": 0, "totalExp": 0, "achievements": [], "stats": {},
-        "skillUsage": {}
-    })
+    await ensure_storage()
+    cache = await get_cache()
 
-    data.setdefault("skillUsage", {})
-    data["skillUsage"][skill_id] = data["skillUsage"].get(skill_id, 0) + 1
+    # 使用缓存的原子增量操作
+    await cache.increment("growth", f"skillUsage.{skill_id}")
 
-    if _write_json_file(GROWTH_DATA_FILE, data):
-        return {"status": "success", "usage": data["skillUsage"]}
-    raise HTTPException(status_code=500, detail="保存技能使用记录失败")
+    data = await cache.get("growth")
+    return {"status": "success", "usage": data.get("skillUsage", {})}
 
 
 @router.get("/skills/usage_stats")
 async def get_skill_usage_stats():
     """获取技能使用统计"""
-    data = _read_json_file(GROWTH_DATA_FILE, {"skillUsage": {}})
+    await ensure_storage()
+    cache = await get_cache()
+    data = await cache.get("growth", {"skillUsage": {}})
     return {"usageStats": data.get("skillUsage", {})}
 
 
@@ -547,13 +765,44 @@ async def get_skill_usage_stats():
 @router.get("/health")
 async def education_health_check():
     """教育系统健康检查"""
+    await ensure_storage()
+    cache = await get_cache()
+
+    # 检查数据库连接状态
+    db_connected = cache._db_conn is not None
+
+    # 检查知识库状态
+    kb_status = "not_initialized"
+    kb_doc_count = 0
+    try:
+        kb = await get_education_kb()
+        if kb.vector_store:
+            kb_status = "ready"
+            kb_doc_count = len(kb.documents)
+        elif kb.embeddings:
+            kb_status = "configured"
+        else:
+            kb_status = "no_embeddings"
+    except Exception as e:
+        kb_status = f"error: {str(e)[:50]}"
+
     return {
         "status": "ok",
         "dataDir": str(EDUCATION_DATA_DIR),
+        "storage": {
+            "type": "sqlite",
+            "connected": db_connected,
+            "cacheKeys": list(cache._cache.keys()) if hasattr(cache, '_cache') else []
+        },
         "files": {
             "growth": GROWTH_DATA_FILE.exists(),
             "collaboration": COLLABORATION_DATA_FILE.exists(),
             "achievement": ACHIEVEMENT_DATA_FILE.exists()
+        },
+        "knowledgeBase": {
+            "status": kb_status,
+            "documentCount": kb_doc_count,
+            "directory": str(EDUCATION_KB_DIR)
         }
     }
 
@@ -587,18 +836,16 @@ async def education_chat(request: ChatRequest = Body(...)):
     """
     教育对话接口
     自动添加技能系统提示词，调用后端 LLM API
+    集成知识库 RAG 检索增强
     """
-    # 获取系统设置
-    try:
-        from py.get_setting import get_settings_path
-        import json as json_module
+    import time
+    start_time = time.time()
 
-        settings_path = get_settings_path()
-        if settings_path.exists():
-            with open(settings_path, 'r', encoding='utf-8') as f:
-                settings = json_module.load(f)
-        else:
-            settings = {}
+    # 获取系统设置（使用缓存避免频繁访问数据库）
+    try:
+        t0 = time.time()
+        settings = await get_cached_settings()
+        print(f"[性能] get_cached_settings 耗时: {time.time() - t0:.2f}s")
     except Exception:
         settings = {}
 
@@ -607,17 +854,49 @@ async def education_chat(request: ChatRequest = Body(...)):
 
     # 添加技能系统提示词
     if request.skill_id and request.skill_id in SKILL_PROMPTS:
-        messages.append({
-            "role": "system",
-            "content": SKILL_PROMPTS[request.skill_id]
-        })
+        base_system_prompt = SKILL_PROMPTS[request.skill_id]
     else:
         # 默认教育助手提示词
-        messages.append({
-            "role": "system",
-            "content": """你是一位友好的教育数字人助手，帮助用户学习和研究。
+        base_system_prompt = """你是一位友好的教育数字人助手，帮助用户学习和研究。
 请用简洁、专业的语言回答问题，必要时提供学习建议。"""
-        })
+
+    # RAG: 检索知识库获取上下文
+    rag_context = ""
+    rag_sources = []
+    try:
+        t_rag = time.time()
+        kb = await get_education_kb()
+        kb_results = await kb.search(request.message, k=3)
+
+        if kb_results:
+            rag_context = kb.get_context_for_chat(kb_results, max_length=1500)
+            rag_sources = [r["metadata"].get("file_name", "") for r in kb_results if r.get("metadata", {}).get("file_name")]
+            print(f"[RAG] 知识库检索耗时: {time.time() - t_rag:.3f}s, 找到 {len(kb_results)} 条相关内容")
+    except Exception as e:
+        print(f"[RAG] 知识库检索失败: {e}")
+
+    # 构建最终系统提示词
+    if rag_context:
+        system_prompt = f"""{base_system_prompt}
+
+## 相关知识库内容
+
+以下是从知识库中检索到的相关内容，请参考这些内容回答用户问题：
+
+{rag_context}
+
+**注意**：
+1. 如果知识库内容与用户问题相关，请优先参考知识库内容回答
+2. 如果知识库内容不完全匹配，请结合自己的知识补充回答
+3. 回答时可以引用知识库来源，格式如「根据《学术写作规范》...」
+"""
+    else:
+        system_prompt = base_system_prompt
+
+    messages.append({
+        "role": "system",
+        "content": system_prompt
+    })
 
     # 添加历史消息
     for msg in request.history[-10:]:  # 最多保留10条历史
@@ -629,14 +908,40 @@ async def education_chat(request: ChatRequest = Body(...)):
     # 添加当前消息
     messages.append({"role": "user", "content": request.message})
 
-    # 获取 API 配置
+    # 获取 API 配置 - 优先使用选中提供商的配置
     api_key = settings.get("api_key", "")
     base_url = settings.get("base_url", "https://api.openai.com/v1")
     model = settings.get("model", "gpt-3.5-turbo")
 
+    selected_provider = settings.get("selectedProvider", None)
+    model_providers = settings.get("modelProviders", [])
+
+    # 如果选择了提供商，使用提供商的配置
+    if selected_provider and model_providers:
+        for provider in model_providers:
+            # 统一转换为字符串进行比较
+            provider_id = str(provider.get("id", ""))
+            selected_id = str(selected_provider)
+            if provider_id == selected_id:
+                # 使用提供商的配置（数据库字段名）
+                if provider.get("apiKey"):
+                    api_key = provider.get("apiKey", api_key)
+                elif provider.get("api_key"):
+                    api_key = provider.get("api_key", api_key)
+                if provider.get("url"):
+                    base_url = provider.get("url", base_url)
+                elif provider.get("base_url"):
+                    base_url = provider.get("base_url", base_url)
+                if provider.get("modelId"):
+                    model = provider.get("modelId", model)
+                elif provider.get("model"):
+                    model = provider.get("model", model)
+                print(f"[教育对话] 使用提供商配置: vendor={provider.get('vendor')}, model={model}, base_url={base_url}")
+                break
+
     if not api_key:
         # 模拟模式下也记录协作
-        mock_response = "您好！我是教育数字人助手。要启用完整对话功能，请在主界面配置 API Key。\n\n您可以前往「设置」页面配置语言模型 API。"
+        mock_response = "您好！我是教育数字人助手。\n\n⚠️ **未配置 API Key**\n\n要启用完整对话功能，请点击页面右上角的「⚙️ 设置」按钮，配置语言模型 API。"
         await update_chat_stats(request.skill_id)
         if request.session_id and request.skill_id:
             await _auto_record_collaboration(
@@ -653,6 +958,8 @@ async def education_chat(request: ChatRequest = Body(...)):
 
     # 调用 LLM API
     try:
+        t1 = time.time()
+        print(f"[性能] 准备调用 LLM API: {base_url}, model={model}")
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{base_url.rstrip('/')}/chat/completions",
@@ -667,39 +974,348 @@ async def education_chat(request: ChatRequest = Body(...)):
                     "max_tokens": settings.get("max_tokens", 2048)
                 }
             )
+        print(f"[性能] LLM API 调用耗时: {time.time() - t1:.2f}s")
 
-            if response.status_code == 200:
-                result = response.json()
-                assistant_message = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if response.status_code == 200:
+            result = response.json()
+            assistant_message = result.get("choices", [{}])[0].get("message", {}).get("content", "")
 
-                # 分析情绪
-                emotion = analyze_emotion(assistant_message)
+            # 分析情绪
+            t2 = time.time()
+            emotion = analyze_emotion(assistant_message)
 
-                # 更新统计
-                await update_chat_stats(request.skill_id)
+            # 更新统计
+            await update_chat_stats(request.skill_id)
+            print(f"[性能] update_chat_stats 耗时: {time.time() - t2:.2f}s")
 
-                # 自动记录协作贡献
-                if request.session_id and request.skill_id:
-                    await _auto_record_collaboration(
-                        session_id=request.session_id,
-                        skill_id=request.skill_id,
-                        user_message=request.message,
-                        ai_message=assistant_message
-                    )
-
-                return ChatResponse(
-                    response=assistant_message,
-                    emotion=emotion,
-                    exp_gained=10
+            # 自动记录协作贡献
+            t3 = time.time()
+            if request.session_id and request.skill_id:
+                await _auto_record_collaboration(
+                    session_id=request.session_id,
+                    skill_id=request.skill_id,
+                    user_message=request.message,
+                    ai_message=assistant_message
                 )
-            else:
-                error_detail = response.json().get("error", {}).get("message", "API 调用失败")
-                raise HTTPException(status_code=response.status_code, detail=error_detail)
+            print(f"[性能] _auto_record_collaboration 耗时: {time.time() - t3:.2f}s")
+
+            print(f"[性能] 总耗时: {time.time() - start_time:.2f}s")
+            return ChatResponse(
+                response=assistant_message,
+                emotion=emotion,
+                exp_gained=10
+            )
+        else:
+            error_detail = response.json().get("error", {}).get("message", "API 调用失败")
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
 
     except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="API 请求超时")
+        error_response = _get_error_response("llm_timeout")
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "code": error_response["code"],
+                "message": error_response["message"],
+                "detail": error_response["detail"]
+            }
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"对话失败: {str(e)}")
+        error_type = _classify_error(e)
+        error_response = _get_error_response(error_type)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": error_response["code"],
+                "message": error_response["message"],
+                "detail": error_response["detail"],
+                "error": str(e)
+            }
+        )
+
+
+@router.post("/chat/stream")
+async def education_chat_stream(request: ChatRequest = Body(...)):
+    """
+    教育对话流式接口 (Server-Sent Events)
+    实时返回 AI 回复，优化响应体验
+    集成知识库 RAG 检索增强
+    """
+    from fastapi.responses import StreamingResponse
+
+    async def generate_stream() -> AsyncGenerator[str, None]:
+        import time
+        start_time = time.time()
+        full_response = ""
+
+        # 获取系统设置（使用缓存）
+        t0 = time.time()
+        settings = await get_cached_settings()
+        print(f"[性能-流式] get_cached_settings 耗时: {time.time() - t0:.3f}s")
+
+        # 构建消息
+        messages = []
+
+        # 添加技能系统提示词
+        if request.skill_id and request.skill_id in SKILL_PROMPTS:
+            base_system_prompt = SKILL_PROMPTS[request.skill_id]
+        else:
+            base_system_prompt = """你是一位友好的教育数字人助手，帮助用户学习和研究。
+请用简洁、专业的语言回答问题，必要时提供学习建议。"""
+
+        # RAG: 检索知识库获取上下文
+        rag_context = ""
+        rag_sources = []
+        try:
+            t_rag = time.time()
+            kb = await get_education_kb()
+            kb_results = await kb.search(request.message, k=3)
+
+            if kb_results:
+                rag_context = kb.get_context_for_chat(kb_results, max_length=1500)
+                rag_sources = [r["metadata"].get("file_name", "") for r in kb_results if r.get("metadata", {}).get("file_name")]
+                print(f"[RAG-流式] 知识库检索耗时: {time.time() - t_rag:.3f}s, 找到 {len(kb_results)} 条相关内容")
+        except Exception as e:
+            print(f"[RAG-流式] 知识库检索失败: {e}")
+
+        # 构建最终系统提示词
+        if rag_context:
+            system_prompt = f"""{base_system_prompt}
+
+## 相关知识库内容
+
+以下是从知识库中检索到的相关内容，请参考这些内容回答用户问题：
+
+{rag_context}
+
+**注意**：
+1. 如果知识库内容与用户问题相关，请优先参考知识库内容回答
+2. 如果知识库内容不完全匹配，请结合自己的知识补充回答
+3. 回答时可以引用知识库来源，格式如「根据《学术写作规范》...」
+"""
+        else:
+            system_prompt = base_system_prompt
+
+        messages.append({
+            "role": "system",
+            "content": system_prompt
+        })
+
+        # 添加历史消息
+        for msg in request.history[-10:]:
+            messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", "")
+            })
+
+        # 添加当前消息
+        messages.append({"role": "user", "content": request.message})
+
+        # 获取 API 配置
+        api_key = settings.get("api_key", "")
+        base_url = settings.get("base_url", "https://api.openai.com/v1")
+        model = settings.get("model", "gpt-3.5-turbo")
+        temperature = settings.get("temperature", 0.7)
+        max_tokens = settings.get("max_tokens", 2048)
+
+        selected_provider = settings.get("selectedProvider", None)
+        model_providers = settings.get("modelProviders", [])
+
+        # 如果选择了提供商，使用提供商的配置
+        if selected_provider and model_providers:
+            for provider in model_providers:
+                provider_id = str(provider.get("id", ""))
+                selected_id = str(selected_provider)
+                if provider_id == selected_id:
+                    if provider.get("apiKey"):
+                        api_key = provider.get("apiKey", api_key)
+                    elif provider.get("api_key"):
+                        api_key = provider.get("api_key", api_key)
+                    if provider.get("url"):
+                        base_url = provider.get("url", base_url)
+                    elif provider.get("base_url"):
+                        base_url = provider.get("base_url", base_url)
+                    if provider.get("modelId"):
+                        model = provider.get("modelId", model)
+                    elif provider.get("model"):
+                        model = provider.get("model", model)
+                    break
+
+        # 快速模型逻辑
+        fast_settings = settings.get("fast", {})
+        use_fast_model = False
+
+        if fast_settings.get("enabled", False):
+            trigger_mode = fast_settings.get("triggerMode", "conditional")
+
+            if trigger_mode == "always":
+                use_fast_model = True
+            elif trigger_mode == "conditional":
+                # 条件判断
+                condition_pass = True
+                user_message = request.message or ""
+
+                # 字数限制
+                max_len = fast_settings.get("conditionMaxLen", 0)
+                if max_len > 0 and len(user_message) > max_len:
+                    condition_pass = False
+
+                # 禁止换行
+                if condition_pass and fast_settings.get("conditionNoNewline", False):
+                    if "\n" in user_message:
+                        condition_pass = False
+
+                # 禁止文件/图片 (当前教育数字人暂不支持文件)
+                if condition_pass and fast_settings.get("conditionNoFiles", True):
+                    # 如果未来添加文件支持，这里需要检查
+                    pass
+
+                if condition_pass:
+                    use_fast_model = True
+
+        # 如果触发快速模型，使用快速模型配置
+        if use_fast_model:
+            fast_provider_id = fast_settings.get("selectedProvider")
+            if fast_provider_id and model_providers:
+                for provider in model_providers:
+                    if str(provider.get("id", "")) == str(fast_provider_id):
+                        if provider.get("apiKey"):
+                            api_key = provider.get("apiKey", api_key)
+                        elif provider.get("api_key"):
+                            api_key = provider.get("api_key", api_key)
+                        if provider.get("url"):
+                            base_url = provider.get("url", base_url)
+                        elif provider.get("base_url"):
+                            base_url = provider.get("base_url", base_url)
+                        if provider.get("modelId"):
+                            model = provider.get("modelId", model)
+                        elif provider.get("model"):
+                            model = provider.get("model", model)
+                        break
+            # 快速模型也可以有独立的配置覆盖
+            if fast_settings.get("api_key"):
+                api_key = fast_settings.get("api_key")
+            if fast_settings.get("base_url"):
+                base_url = fast_settings.get("base_url")
+            if fast_settings.get("model"):
+                model = fast_settings.get("model")
+            if fast_settings.get("temperature") is not None:
+                temperature = fast_settings.get("temperature")
+            if fast_settings.get("max_tokens") is not None:
+                max_tokens = fast_settings.get("max_tokens")
+
+            print(f"[快速模型] 使用快速模型: {model}")
+
+        if not api_key:
+            # 模拟模式
+            mock_response = "您好！我是教育数字人助手。\n\n⚠️ **未配置 API Key**\n\n要启用完整对话功能，请配置语言模型 API。"
+            yield f"data: {json.dumps({'content': mock_response, 'done': False}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'content': '', 'done': True, 'emotion': 'neutral', 'exp_gained': 5}, ensure_ascii=False)}\n\n"
+            return
+
+        # 调用 LLM API (流式) - 优先使用全局客户端（复用连接池）
+        global_client = get_global_http_client()
+        print(f"[性能-流式] 使用全局客户端: {global_client is not None}")
+
+        # 获取模型选项（是否启用思考）
+        model_options = settings.get("modelOptions", {})
+        enable_thinking = model_options.get("enableThinking", False)
+
+        # 构建请求体
+        request_body = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+            "enable_thinking": enable_thinking  # 根据用户设置决定是否启用思考
+        }
+
+        print(f"[性能-流式] enable_thinking: {enable_thinking}")
+
+        try:
+            if global_client:
+                # 使用全局客户端（连接池已预热）
+                async with global_client.stream(
+                    "POST",
+                    f"{base_url.rstrip('/')}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json=request_body,
+                    timeout=60.0
+                ) as response:
+                    async for line in response.aiter_lines():
+                        if not line or line == "data: [DONE]":
+                            continue
+                        if line.startswith("data: "):
+                            try:
+                                chunk = json.loads(line[6:])
+                                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    full_response += content
+                                    yield f"data: {json.dumps({'content': content, 'done': False}, ensure_ascii=False)}\n\n"
+                            except json.JSONDecodeError:
+                                continue
+            else:
+                # 回退：创建临时客户端
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    async with client.stream(
+                        "POST",
+                        f"{base_url.rstrip('/')}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json=request_body
+                    ) as response:
+                        async for line in response.aiter_lines():
+                            if not line or line == "data: [DONE]":
+                                continue
+                            if line.startswith("data: "):
+                                try:
+                                    chunk = json.loads(line[6:])
+                                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                    content = delta.get("content", "")
+                                    if content:
+                                        full_response += content
+                                        yield f"data: {json.dumps({'content': content, 'done': False}, ensure_ascii=False)}\n\n"
+                                except json.JSONDecodeError:
+                                    continue
+
+            # 流式结束，发送最终元数据
+            emotion = analyze_emotion(full_response)
+            print(f"[流式对话] 总耗时: {time.time() - start_time:.2f}s, 回复长度: {len(full_response)}")
+
+            # 更新统计和记录协作
+            await update_chat_stats(request.skill_id)
+            if request.session_id and request.skill_id:
+                await _auto_record_collaboration(
+                    session_id=request.session_id,
+                    skill_id=request.skill_id,
+                    user_message=request.message,
+                    ai_message=full_response
+                )
+
+            # 发送完成信号
+            yield f"data: {json.dumps({'content': '', 'done': True, 'emotion': emotion, 'exp_gained': 10}, ensure_ascii=False)}\n\n"
+
+        except httpx.TimeoutException:
+            yield f"data: {json.dumps({'error': 'AI 响应超时，请稍后重试'}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            print(f"[流式对话] 错误: {e}")
+            yield f"data: {json.dumps({'error': f'对话失败: {str(e)}'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # 禁用 Nginx 缓冲
+        }
+    )
 
 
 def analyze_emotion(text: str) -> str:
@@ -722,34 +1338,34 @@ def analyze_emotion(text: str) -> str:
 
 
 async def update_chat_stats(skill_id: str = None):
-    """更新对话统计"""
-    data = _read_json_file(GROWTH_DATA_FILE, {
+    """更新对话统计（使用优化存储层）"""
+    await ensure_storage()
+    cache = await get_cache()
+
+    # 使用原子增量操作，避免全量读写
+    await cache.increment("growth", "stats.conversations", 1)
+    await cache.increment("growth", "exp", 10)
+    await cache.increment("growth", "totalExp", 10)
+
+    # 更新技能使用统计
+    if skill_id:
+        await cache.increment("growth", f"skillUsage.{skill_id}", 1)
+
+    # 检查升级（需要读取当前数据）
+    data = await cache.get("growth", {
         "level": 1, "exp": 0, "totalExp": 0, "achievements": [], "stats": {},
         "skillUsage": {}
     })
 
-    # 更新对话次数
-    stats = data.get("stats", {})
-    stats["conversations"] = stats.get("conversations", 0) + 1
-    data["stats"] = stats
-
-    # 更新技能使用
-    if skill_id:
-        data.setdefault("skillUsage", {})
-        data["skillUsage"][skill_id] = data["skillUsage"].get(skill_id, 0) + 1
-
-    # 增加经验值
-    data["exp"] = data.get("exp", 0) + 10
-    data["totalExp"] = data.get("totalExp", 0) + 10
-
-    # 检查升级
     exp_for_next = data["level"] * 100
     while data["exp"] >= exp_for_next:
         data["exp"] -= exp_for_next
         data["level"] += 1
         exp_for_next = data["level"] * 100
 
-    _write_json_file(GROWTH_DATA_FILE, data)
+    # 如果有升级，更新数据
+    if data["level"] > 1:
+        await cache.set("growth", data)
 
 
 # 技能ID到协作类型的映射
@@ -775,6 +1391,9 @@ async def _auto_record_collaboration(
     ai_message: str
 ):
     """自动记录协作贡献到协作记录中"""
+    await ensure_storage()
+    cache = await get_cache()
+
     collab_type = SKILL_TO_COLLAB_TYPE.get(skill_id, "sessions")
     type_mapping = {
         "paper": "papers",
@@ -784,7 +1403,7 @@ async def _auto_record_collaboration(
     }
     list_key = type_mapping.get(collab_type, "sessions")
 
-    data = _read_json_file(COLLABORATION_DATA_FILE, {
+    data = await cache.get("collaboration", {
         "papers": [], "experiments": [], "reviews": [], "sessions": []
     })
 
@@ -831,8 +1450,12 @@ async def _auto_record_collaboration(
             "summary": None
         }
         data.setdefault(list_key, []).append(new_session)
+        # 同时保存到索引表（支持查询）
+        await cache.add_collaboration_session(new_session)
 
-    _write_json_file(COLLABORATION_DATA_FILE, data)
+    # 清理旧记录
+    data = _cleanup_collaboration_records(data)
+    await cache.set("collaboration", data)
 
 
 @router.post("/collaboration/generate_summary")
@@ -841,7 +1464,10 @@ async def generate_collaboration_summary(
     session_type: str = Body(...)
 ):
     """为协作会话生成摘要"""
-    data = _read_json_file(COLLABORATION_DATA_FILE, {
+    await ensure_storage()
+    cache = await get_cache()
+
+    data = await cache.get("collaboration", {
         "papers": [], "experiments": [], "reviews": [], "sessions": []
     })
 
@@ -886,7 +1512,7 @@ async def generate_collaboration_summary(
                 except Exception:
                     pass
 
-            _write_json_file(COLLABORATION_DATA_FILE, data)
+            await cache.set("collaboration", data)
             return {"status": "success", "summary": summary}
 
     raise HTTPException(status_code=404, detail="会话不存在")
@@ -895,7 +1521,9 @@ async def generate_collaboration_summary(
 @router.get("/chat/history")
 async def get_chat_history(session_id: str = None, limit: int = 50):
     """获取对话历史"""
-    data = _read_json_file(CHAT_HISTORY_FILE, {"sessions": {}})
+    await ensure_storage()
+    cache = await get_cache()
+    data = await cache.get("chat_history", {"sessions": {}})
 
     if session_id:
         return {"history": data.get("sessions", {}).get(session_id, [])}
@@ -920,7 +1548,9 @@ async def save_chat_history(
     message: Dict[str, Any] = Body(...)
 ):
     """保存对话消息"""
-    data = _read_json_file(CHAT_HISTORY_FILE, {"sessions": {}})
+    await ensure_storage()
+    cache = await get_cache()
+    data = await cache.get("chat_history", {"sessions": {}})
 
     data.setdefault("sessions", {})
     data["sessions"].setdefault(session_id, [])
@@ -928,25 +1558,90 @@ async def save_chat_history(
     message["timestamp"] = datetime.now().isoformat()
     data["sessions"][session_id].append(message)
 
-    # 限制每个会话最多保存100条消息
-    if len(data["sessions"][session_id]) > 100:
-        data["sessions"][session_id] = data["sessions"][session_id][-100:]
+    # 限制每个会话最多保存 MAX_CHAT_MESSAGES_PER_SESSION 条消息
+    if len(data["sessions"][session_id]) > MAX_CHAT_MESSAGES_PER_SESSION:
+        data["sessions"][session_id] = data["sessions"][session_id][-MAX_CHAT_MESSAGES_PER_SESSION:]
 
-    _write_json_file(CHAT_HISTORY_FILE, data)
+    # 清理旧会话
+    data = _cleanup_chat_history(data)
+
+    await cache.set("chat_history", data)
     return {"status": "success"}
 
 
 @router.delete("/chat/history/{session_id}")
 async def delete_chat_history(session_id: str):
     """删除对话历史"""
-    data = _read_json_file(CHAT_HISTORY_FILE, {"sessions": {}})
+    await ensure_storage()
+    cache = await get_cache()
+    data = await cache.get("chat_history", {"sessions": {}})
 
     if session_id in data.get("sessions", {}):
         del data["sessions"][session_id]
-        _write_json_file(CHAT_HISTORY_FILE, data)
+        await cache.set("chat_history", data)
         return {"status": "success"}
 
     raise HTTPException(status_code=404, detail="会话不存在")
+
+
+# ==================== 会话管理 API ====================
+
+@router.post("/session/create")
+async def create_session(
+    session_id: str = Body(...),
+    skill_id: str = Body(None),
+    digital_human_type: str = Body("vrm")
+):
+    """创建新会话"""
+    metadata = {
+        "skill_id": skill_id,
+        "digital_human_type": digital_human_type
+    }
+    session = session_manager.create_session(session_id, metadata)
+    return {"status": "success", "session": session}
+
+
+@router.get("/session/{session_id}")
+async def get_session(session_id: str):
+    """获取会话信息"""
+    session = session_manager.get_session(session_id)
+    if session:
+        return {"status": "success", "session": session}
+    return {"status": "not_found", "session": None}
+
+
+@router.post("/session/{session_id}/activity")
+async def update_session_activity(session_id: str):
+    """更新会话活动时间"""
+    if session_manager.update_activity(session_id):
+        return {"status": "success"}
+    return {"status": "not_found"}
+
+
+@router.delete("/session/{session_id}")
+async def delete_session(session_id: str):
+    """删除会话"""
+    if session_manager.remove_session(session_id):
+        return {"status": "success"}
+    return {"status": "not_found"}
+
+
+@router.post("/session/cleanup")
+async def cleanup_sessions():
+    """手动触发清理超时会话"""
+    cleaned = session_manager.cleanup_inactive_sessions()
+    return {"status": "success", "cleaned_count": cleaned}
+
+
+@router.get("/sessions/active")
+async def get_active_sessions():
+    """获取所有活跃会话"""
+    sessions = session_manager.get_all_sessions()
+    return {
+        "status": "success",
+        "count": len(sessions),
+        "sessions": sessions
+    }
 
 
 # ==================== 技能提示词 API ====================
@@ -965,16 +1660,256 @@ async def get_skill_prompt(skill_id: str):
     raise HTTPException(status_code=404, detail="技能不存在")
 
 
+# ==================== API 设置 ====================
+
+# 允许访问设置 API 的来源列表
+ALLOWED_ORIGINS = [
+    "http://127.0.0.1",
+    "http://localhost",
+    "http://0.0.0.0",
+]
+
+
+def _validate_request_origin(request) -> bool:
+    """
+    验证请求来源是否合法
+
+    Args:
+        request: FastAPI 请求对象
+
+    Returns:
+        是否为合法来源
+    """
+    from fastapi import Request
+
+    # 获取来源信息
+    origin = request.headers.get("origin", "")
+    referer = request.headers.get("referer", "")
+
+    # 检查是否为本地访问
+    client_host = getattr(request, "client", None)
+    if client_host:
+        client_ip = getattr(client_host, "host", "")
+        if client_ip in ["127.0.0.1", "::1", "localhost"]:
+            return True
+
+    # 检查 Origin 头
+    if origin:
+        for allowed in ALLOWED_ORIGINS:
+            if origin.startswith(allowed):
+                return True
+
+    # 检查 Referer 头
+    if referer:
+        for allowed in ALLOWED_ORIGINS:
+            if referer.startswith(allowed):
+                return True
+
+    # 如果没有 Origin 和 Referer，可能是直接 API 调用（允许本地开发）
+    if not origin and not referer:
+        return True
+
+    return False
+
+
+def _mask_api_key(api_key: str) -> str:
+    """
+    隐藏 API Key，只显示后4位
+
+    Args:
+        api_key: 原始 API Key
+
+    Returns:
+        隐藏后的 API Key
+    """
+    if not api_key or len(api_key) <= 4:
+        return "****" if api_key else ""
+    return "****" + api_key[-4:]
+
+
+@router.get("/settings")
+async def get_api_settings(request: Request):
+    """获取 API 设置"""
+    try:
+        from py.get_setting import load_settings
+        settings = await load_settings()
+
+        # 获取根级别配置
+        api_key = settings.get("api_key", "")
+        base_url = settings.get("base_url", "")
+        model = settings.get("model", "")
+        selected_provider = settings.get("selectedProvider", None)
+        model_providers = settings.get("modelProviders", [])
+
+        # 调试日志
+        print(f"[教育数字人设置] selectedProvider: {selected_provider} (type: {type(selected_provider)})")
+        print(f"[教育数字人设置] modelProviders 数量: {len(model_providers)}")
+        for p in model_providers:
+            print(f"  - Provider ID: {p.get('id')} (type: {type(p.get('id'))}), vendor: {p.get('vendor')}, has apiKey: {bool(p.get('apiKey'))}")
+
+        # 如果选择了提供商，使用提供商的配置
+        provider_info = None
+        if selected_provider and model_providers:
+            for provider in model_providers:
+                # 统一转换为字符串进行比较，避免类型不匹配问题
+                provider_id = str(provider.get("id", ""))
+                selected_id = str(selected_provider)
+                if provider_id == selected_id:
+                    # 数据库字段映射：vendor->name, url->base_url, apiKey->api_key, modelId->model
+                    vendor_name = provider.get("vendor", selected_provider)
+                    # 映射 vendor 到友好名称
+                    vendor_display_names = {
+                        "aliyun": "阿里云百炼",
+                        "openai": "OpenAI",
+                        "anthropic": "Anthropic",
+                        "deepseek": "DeepSeek",
+                        "zhipu": "智谱AI",
+                        "moonshot": "Moonshot",
+                        "baidu": "百度文心",
+                        "tencent": "腾讯混元",
+                    }
+                    display_name = vendor_display_names.get(vendor_name, vendor_name)
+
+                    provider_info = {
+                        "name": display_name,
+                        "type": provider.get("type", "custom"),
+                        "model": provider.get("modelId", provider.get("model", "")),
+                        "base_url": provider.get("url", provider.get("base_url", "")),
+                    }
+                    # 如果提供商有配置，优先使用提供商的值
+                    if provider.get("apiKey"):
+                        api_key = provider.get("apiKey", api_key)
+                    elif provider.get("api_key"):
+                        api_key = provider.get("api_key", api_key)
+                    if provider.get("url"):
+                        base_url = provider.get("url", base_url)
+                    elif provider.get("base_url"):
+                        base_url = provider.get("base_url", base_url)
+                    if provider.get("modelId"):
+                        model = provider.get("modelId", model)
+                    elif provider.get("model"):
+                        model = provider.get("model", model)
+                    break
+
+        # 构建显示名称
+        display_model = model
+        if provider_info:
+            display_model = f"[{provider_info['name']}] {model}"
+
+        # 转换 modelProviders 列表，统一字段名
+        vendor_display_names = {
+            "aliyun": "阿里云百炼",
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+            "deepseek": "DeepSeek",
+            "zhipu": "智谱AI",
+            "moonshot": "Moonshot",
+            "baidu": "百度文心",
+            "tencent": "腾讯混元",
+        }
+
+        transformed_providers = []
+        for p in model_providers:
+            vendor_name = p.get("vendor", p.get("name", str(p.get("id", ""))))
+            display_name = vendor_display_names.get(vendor_name, p.get("name", vendor_name))
+
+            transformed_providers.append({
+                "id": p.get("id"),
+                "name": display_name,
+                "type": p.get("type", "custom"),
+                "model": p.get("modelId", p.get("model", "")),
+                "base_url": p.get("url", p.get("base_url", "")),
+                "vendor": vendor_name,
+            })
+
+        # 获取快速模型设置
+        fast_settings = settings.get("fast", {})
+
+        # 获取模型选项设置
+        model_options = settings.get("modelOptions", {"enableThinking": False})
+
+        return {
+            "api_key": _mask_api_key(api_key),  # 隐藏 API Key
+            "api_key_configured": bool(api_key),  # 是否已配置
+            "base_url": base_url,
+            "model": display_model,
+            "raw_model": model,  # 原始模型名
+            "selectedProvider": selected_provider,
+            "providerInfo": provider_info,  # 提供商信息
+            "temperature": settings.get("temperature", 0.7),
+            "max_tokens": settings.get("max_tokens", 2048),
+            "modelProviders": transformed_providers,  # 转换后的模型提供商列表
+            "fast": fast_settings,  # 快速模型设置
+            "modelOptions": model_options  # 模型选项
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"加载设置失败: {str(e)}")
+
+
+@router.post("/settings")
+async def save_api_settings(settings: Dict[str, Any] = Body(...), request: Request = None):
+    """保存 API 设置（包括快速模型设置）"""
+    try:
+        # 验证请求来源
+        if request and not _validate_request_origin(request):
+            raise HTTPException(
+                status_code=403,
+                detail="禁止访问：设置 API 仅允许从本地访问"
+            )
+
+        from py.get_setting import load_settings, save_settings
+
+        # 加载现有设置
+        current_settings = await load_settings()
+
+        # 更新基础设置
+        if "api_key" in settings:
+            current_settings["api_key"] = settings["api_key"]
+        if "base_url" in settings:
+            current_settings["base_url"] = settings["base_url"]
+        if "model" in settings:
+            current_settings["model"] = settings["model"]
+        if "temperature" in settings:
+            current_settings["temperature"] = settings["temperature"]
+        if "max_tokens" in settings:
+            current_settings["max_tokens"] = settings["max_tokens"]
+
+        # 更新快速模型设置
+        if "fast" in settings:
+            current_settings["fast"] = settings["fast"]
+            print(f"[教育数字人设置] 保存快速模型配置: {settings['fast']}")
+
+        # 更新模型选项设置
+        if "modelOptions" in settings:
+            current_settings["modelOptions"] = settings["modelOptions"]
+            print(f"[教育数字人设置] 保存模型选项: {settings['modelOptions']}")
+
+        # 保存设置
+        await save_settings(current_settings)
+
+        # 使缓存失效
+        invalidate_settings_cache()
+
+        return {"status": "success", "message": "设置已保存"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存设置失败: {str(e)}")
+
+
 # ==================== 综合统计 API ====================
 
 @router.get("/dashboard")
 async def get_dashboard():
     """获取仪表盘数据"""
-    growth_data = _read_json_file(GROWTH_DATA_FILE, {
+    await ensure_storage()
+    cache = await get_cache()
+
+    growth_data = await cache.get("growth", {
         "level": 1, "exp": 0, "totalExp": 0, "achievements": [], "stats": {}
     })
 
-    collab_data = _read_json_file(COLLABORATION_DATA_FILE, {
+    collab_data = await cache.get("collaboration", {
         "papers": [], "experiments": [], "reviews": [], "sessions": []
     })
 
@@ -1002,6 +1937,7 @@ class VoiceChatRequest(BaseModel):
     language: str = "zh"
     digital_human_type: str = "vrm"  # "vrm" 或 "tencent"
     tencent_session_id: Optional[str] = None  # 腾讯数智人会话 ID
+    history: List[Dict[str, str]] = []  # 历史对话消息
 
 
 class VoiceChatResponse(BaseModel):
@@ -1042,7 +1978,8 @@ async def voice_chat(request: VoiceChatRequest = Body(...)):
         chat_response = await _get_llm_response(
             message=recognized_text,
             skill_id=request.skill_id,
-            session_id=request.session_id
+            session_id=request.session_id,
+            history=request.history
         )
 
         response_text = chat_response["response"]
@@ -1085,7 +2022,17 @@ async def voice_chat(request: VoiceChatRequest = Body(...)):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"语音对话失败: {str(e)}")
+        error_type = _classify_error(e)
+        error_response = _get_error_response(error_type)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": error_response["code"],
+                "message": error_response["message"],
+                "detail": error_response["detail"],
+                "error": str(e)
+            }
+        )
 
 
 @router.post("/voice/recognize")
@@ -1163,9 +2110,23 @@ async def websocket_voice_chat(websocket: WebSocket):
                 session_config["language"] = message.get("language", "zh")
                 session_config["digital_human_type"] = message.get("digital_human_type", "vrm")
                 session_config["tencent_session_id"] = message.get("tencent_session_id")
+
+                # 创建或更新会话管理器中的会话
+                session_manager.create_session(
+                    session_config["session_id"],
+                    {
+                        "skill_id": session_config["skill_id"],
+                        "digital_human_type": session_config["digital_human_type"],
+                        "source": "websocket"
+                    }
+                )
+
                 await websocket.send_json({"type": "config", "status": "ok"})
 
             elif msg_type == "audio":
+                # 更新会话活动时间
+                session_manager.update_activity(session_config["session_id"])
+
                 # 语音识别
                 audio_data = message.get("data", "")
                 language = message.get("language", session_config["language"])
@@ -1228,12 +2189,19 @@ async def websocket_voice_chat(websocket: WebSocket):
                         )
 
                 except Exception as e:
+                    error_type = _classify_error(e)
+                    error_response = _get_error_response(error_type, str(e))
                     await websocket.send_json({
                         "type": "error",
-                        "message": f"语音处理失败: {str(e)}"
+                        "code": error_response["code"],
+                        "message": error_response["message"],
+                        "detail": error_response["detail"]
                     })
 
             elif msg_type == "text":
+                # 更新会话活动时间
+                session_manager.update_activity(session_config["session_id"])
+
                 # 直接处理文本消息
                 text_data = message.get("data", "")
 
@@ -1272,18 +2240,167 @@ async def websocket_voice_chat(websocket: WebSocket):
                         })
 
                 except Exception as e:
+                    error_type = _classify_error(e)
+                    error_response = _get_error_response(error_type, str(e))
                     await websocket.send_json({
                         "type": "error",
-                        "message": str(e)
+                        "code": error_response["code"],
+                        "message": error_response["message"],
+                        "detail": error_response["detail"]
                     })
 
     except WebSocketDisconnect:
+        session_manager.remove_session(session_config["session_id"])
         print(f"WebSocket 语音连接断开: {session_config['session_id']}")
     except Exception as e:
+        session_manager.remove_session(session_config["session_id"])
         print(f"WebSocket 错误: {e}")
 
 
 # ==================== 辅助函数 ====================
+
+# 错误消息映射表
+ERROR_MESSAGES = {
+    # 语音相关
+    "speech_recognition_failed": {
+        "code": "SPEECH_001",
+        "message": "语音识别失败，请确保麦克风正常工作",
+        "detail": "可能原因：麦克风未授权、环境噪音过大、或语音过短"
+    },
+    "speech_synthesis_failed": {
+        "code": "SPEECH_002",
+        "message": "语音合成失败，请稍后重试",
+        "detail": "TTS 服务暂时不可用"
+    },
+
+    # API 相关
+    "llm_timeout": {
+        "code": "API_001",
+        "message": "AI 响应超时，请稍后重试",
+        "detail": "服务繁忙，请稍后再试"
+    },
+    "llm_error": {
+        "code": "API_002",
+        "message": "AI 服务暂时不可用",
+        "detail": "请检查网络连接或稍后重试"
+    },
+    "api_rate_limit": {
+        "code": "API_003",
+        "message": "请求过于频繁，请稍后再试",
+        "detail": "已达到 API 调用限制"
+    },
+
+    # 会话相关
+    "session_not_found": {
+        "code": "SESSION_001",
+        "message": "会话已过期，请重新开始",
+        "detail": "会话可能已被清理或不存在"
+    },
+    "session_expired": {
+        "code": "SESSION_002",
+        "message": "会话已超时，请刷新页面",
+        "detail": "长时间未活动，会话已自动关闭"
+    },
+
+    # 数据相关
+    "data_save_failed": {
+        "code": "DATA_001",
+        "message": "数据保存失败，请重试",
+        "detail": "存储服务暂时不可用"
+    },
+    "data_load_failed": {
+        "code": "DATA_002",
+        "message": "数据加载失败，请刷新页面",
+        "detail": "无法读取历史数据"
+    },
+
+    # 数字人相关
+    "digital_human_connect_failed": {
+        "code": "DH_001",
+        "message": "数字人连接失败，请检查网络",
+        "detail": "无法连接到数字人服务"
+    },
+
+    # 通用错误
+    "unknown_error": {
+        "code": "UNKNOWN_001",
+        "message": "发生未知错误，请重试",
+        "detail": "如果问题持续，请联系技术支持"
+    }
+}
+
+
+def _get_error_response(error_type: str, extra_info: str = None) -> Dict[str, Any]:
+    """
+    获取用户友好的错误响应
+
+    Args:
+        error_type: 错误类型键值
+        extra_info: 额外信息（可选）
+
+    Returns:
+        包含错误码、用户消息和技术详情的字典
+    """
+    error_info = ERROR_MESSAGES.get(error_type, ERROR_MESSAGES["unknown_error"])
+
+    response = {
+        "code": error_info["code"],
+        "message": error_info["message"],
+        "detail": error_info["detail"]
+    }
+
+    if extra_info:
+        response["extra"] = extra_info
+
+    return response
+
+
+def _classify_error(error: Exception) -> str:
+    """
+    根据异常类型自动分类错误
+
+    Args:
+        error: 异常对象
+
+    Returns:
+        错误类型键值
+    """
+    error_str = str(error).lower()
+
+    # 超时相关
+    if "timeout" in error_str or "timed out" in error_str:
+        return "llm_timeout"
+
+    # 连接相关
+    if "connection" in error_str or "connect" in error_str:
+        if "refused" in error_str:
+            return "llm_error"
+        return "digital_human_connect_failed"
+
+    # 语音相关
+    if "speech" in error_str or "audio" in error_str or "asr" in error_str:
+        return "speech_recognition_failed"
+
+    if "tts" in error_str or "synthesize" in error_str:
+        return "speech_synthesis_failed"
+
+    # API 限流
+    if "rate limit" in error_str or "429" in error_str:
+        return "api_rate_limit"
+
+    # 会话相关
+    if "session" in error_str and ("not found" in error_str or "expired" in error_str):
+        return "session_not_found"
+
+    # 数据相关
+    if "save" in error_str or "write" in error_str:
+        return "data_save_failed"
+
+    if "load" in error_str or "read" in error_str:
+        return "data_load_failed"
+
+    return "unknown_error"
+
 
 async def _recognize_speech(audio_bytes: bytes, language: str = "zh") -> str:
     """使用 Sherpa ASR 进行语音识别"""
@@ -1314,18 +2431,13 @@ async def _synthesize_speech(
     """使用 TTS 适配器合成语音，返回 base64 编码"""
     try:
         from py.tts_adapter import tts_adapter
+        from py.get_setting import load_settings
 
         # 获取语音设置
         try:
-            from py.get_setting import get_settings_path
-            settings_path = get_settings_path()
-            if settings_path.exists():
-                with open(settings_path, 'r', encoding='utf-8') as f:
-                    settings = json.load(f)
-                    engine = settings.get("tts_engine", engine)
-                    voice_id = settings.get("tts_voice", voice_id)
-            else:
-                settings = {}
+            settings = await load_settings()
+            engine = settings.get("tts_engine", engine)
+            voice_id = settings.get("tts_voice", voice_id)
         except Exception:
             settings = {}
 
@@ -1349,18 +2461,14 @@ async def _synthesize_speech(
 async def _get_llm_response(
     message: str,
     skill_id: str = None,
-    session_id: str = None
+    session_id: str = None,
+    history: List[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """调用 LLM 获取回复"""
-    # 获取系统设置
+    # 获取系统设置（从数据库加载）
     try:
-        from py.get_setting import get_settings_path
-        settings_path = get_settings_path()
-        if settings_path.exists():
-            with open(settings_path, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-        else:
-            settings = {}
+        from py.get_setting import load_settings
+        settings = await load_settings()
     except Exception:
         settings = {}
 
@@ -1381,6 +2489,14 @@ async def _get_llm_response(
 由于是语音交互，请保持回复简洁，适合朗读。"""
         })
 
+    # 添加历史消息（最多保留10条）
+    if history:
+        for msg in history[-10:]:
+            messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", "")
+            })
+
     # 添加用户消息
     messages.append({"role": "user", "content": message})
 
@@ -1391,7 +2507,7 @@ async def _get_llm_response(
 
     if not api_key:
         # 模拟模式
-        mock_response = "您好！我是教育数字人助手。要启用完整功能，请在主界面配置 API Key。"
+        mock_response = "您好！我是教育数字人助手。\n\n⚠️ **未配置 API Key**\n\n要启用完整功能，请点击页面右上角的「⚙️ 设置」按钮配置语言模型 API。"
         return {
             "response": mock_response,
             "emotion": "neutral",
@@ -1479,8 +2595,11 @@ async def _save_voice_chat_history(
     skill_id: str = None
 ):
     """保存语音对话历史"""
+    await ensure_storage()
+    cache = await get_cache()
+
     # 保存到聊天历史
-    data = _read_json_file(CHAT_HISTORY_FILE, {"sessions": {}})
+    data = await cache.get("chat_history", {"sessions": {}})
 
     data.setdefault("sessions", {})
     data["sessions"].setdefault(session_id, [])
@@ -1505,7 +2624,7 @@ async def _save_voice_chat_history(
     if len(data["sessions"][session_id]) > 100:
         data["sessions"][session_id] = data["sessions"][session_id][-100:]
 
-    _write_json_file(CHAT_HISTORY_FILE, data)
+    await cache.set("chat_history", data)
 
     # 同时记录协作贡献
     if skill_id:
@@ -1515,3 +2634,1076 @@ async def _save_voice_chat_history(
             user_message=user_message,
             ai_message=assistant_message
         )
+
+
+# ==================== 知识库管理 API ====================
+
+@router.get("/knowledge/stats")
+async def get_knowledge_stats():
+    """获取知识库统计信息"""
+    try:
+        kb = await get_education_kb()
+        stats = await kb.get_stats()
+        return {"status": "success", "stats": stats}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/knowledge/preload")
+async def preload_knowledge():
+    """
+    预加载知识库（服务启动后手动调用）
+    避免首次对话时的延迟
+    """
+    try:
+        success = await preload_education_kb()
+        if success:
+            kb = await get_education_kb()
+            stats = await kb.get_stats()
+            return {
+                "status": "success",
+                "message": "知识库预加载完成",
+                "stats": stats
+            }
+        else:
+            return {"status": "warning", "message": "知识库预加载失败，可能是嵌入模型未配置"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/knowledge/search")
+async def search_knowledge(query: str = Body(..., embed=True), k: int = Body(default=5, embed=True)):
+    """
+    搜索知识库
+
+    Args:
+        query: 搜索查询
+        k: 返回结果数量
+
+    Returns:
+        检索结果列表
+    """
+    try:
+        results = await search_education_knowledge(query, k=k)
+        return {
+            "status": "success",
+            "query": query,
+            "count": len(results),
+            "results": results
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/knowledge/rebuild")
+async def rebuild_knowledge_base():
+    """重建知识库向量索引"""
+    try:
+        kb = await get_education_kb()
+        await kb.build_vector_store(force_rebuild=True)
+        stats = await kb.get_stats()
+        return {
+            "status": "success",
+            "message": "知识库向量索引重建完成",
+            "stats": stats
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/knowledge/files")
+async def list_knowledge_files():
+    """列出知识库中的所有文件"""
+    from pathlib import Path
+
+    files = []
+    if EDUCATION_KB_DIR.exists():
+        for file_path in EDUCATION_KB_DIR.glob("**/*"):
+            if file_path.is_file() and file_path.suffix.lower() in [".md", ".txt"]:
+                files.append({
+                    "name": file_path.name,
+                    "path": str(file_path.relative_to(EDUCATION_KB_DIR)),
+                    "size": file_path.stat().st_size,
+                    "modified": datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
+                })
+
+    return {
+        "status": "success",
+        "directory": str(EDUCATION_KB_DIR),
+        "count": len(files),
+        "files": files
+    }
+
+
+# ==================== 导出功能 API ====================
+
+from io import BytesIO
+from fastapi.responses import StreamingResponse
+
+# 导出相关库
+try:
+    from docx import Document
+    from docx.shared import Inches, Pt, Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.style import WD_STYLE_TYPE
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+    print("[导出功能] python-docx 未安装，Word 导出不可用")
+
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib import colors
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+    print("[导出功能] reportlab 未安装，PDF 导出不可用")
+
+
+# 注册中文字体（如果可用）
+def _register_chinese_fonts():
+    """注册中文字体"""
+    font_paths = [
+        # Windows
+        "C:/Windows/Fonts/msyh.ttc",  # 微软雅黑
+        "C:/Windows/Fonts/simhei.ttf",  # 黑体
+        "C:/Windows/Fonts/simsun.ttc",  # 宋体
+        # macOS
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        # Linux
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    ]
+
+    for font_path in font_paths:
+        if Path(font_path).exists():
+            try:
+                pdfmetrics.registerFont(TTFont('Chinese', font_path))
+                return 'Chinese'
+            except Exception:
+                continue
+    return None
+
+
+CHINESE_FONT = _register_chinese_fonts() if PDF_AVAILABLE else None
+
+
+@router.get("/export/formats")
+async def get_export_formats():
+    """获取支持的导出格式"""
+    formats = []
+    if DOCX_AVAILABLE:
+        formats.append({"id": "word", "name": "Word 文档", "extension": ".docx"})
+    if PDF_AVAILABLE:
+        formats.append({"id": "pdf", "name": "PDF 文档", "extension": ".pdf"})
+    return {"formats": formats}
+
+
+@router.post("/collaboration/export")
+async def export_collaboration(
+    session_id: str = Body(...),
+    format: str = Body(default="word"),
+    include_history: bool = Body(default=True)
+):
+    """
+    导出协作记录
+
+    Args:
+        session_id: 协作会话 ID
+        format: 导出格式 (word/pdf)
+        include_history: 是否包含完整对话历史
+
+    Returns:
+        文件下载流
+    """
+    await ensure_storage()
+    cache = await get_cache()
+
+    # 获取协作数据
+    data = await cache.get("collaboration", {
+        "papers": [], "experiments": [], "reviews": [], "sessions": []
+    })
+
+    # 查找指定会话
+    session = None
+    session_type = None
+    type_mapping = {
+        "paper": "papers",
+        "experiment": "experiments",
+        "review": "reviews",
+        "tutoring": "sessions"
+    }
+
+    for stype, skey in type_mapping.items():
+        for s in data.get(skey, []):
+            if s.get("id") == session_id:
+                session = s
+                session_type = stype
+                break
+        if session:
+            break
+
+    if not session:
+        raise HTTPException(status_code=404, detail="协作会话不存在")
+
+    # 生成文档
+    if format == "pdf":
+        if not PDF_AVAILABLE:
+            raise HTTPException(status_code=400, detail="PDF 导出功能不可用，请安装 reportlab")
+        file_bytes = await _generate_collaboration_pdf(session, session_type, include_history)
+        filename = f"协作记录_{session_id}.pdf"
+        media_type = "application/pdf"
+    else:
+        if not DOCX_AVAILABLE:
+            raise HTTPException(status_code=400, detail="Word 导出功能不可用，请安装 python-docx")
+        file_bytes = await _generate_collaboration_docx(session, session_type, include_history)
+        filename = f"协作记录_{session_id}.docx"
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    # 返回文件流
+    return StreamingResponse(
+        BytesIO(file_bytes),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
+@router.post("/collaboration/export_all")
+async def export_all_collaborations(
+    format: str = Body(default="word"),
+    session_type: str = Body(default=None)
+):
+    """
+    导出所有协作记录
+
+    Args:
+        format: 导出格式 (word/pdf)
+        session_type: 筛选类型 (paper/experiment/review/tutoring)，为空则导出全部
+
+    Returns:
+        文件下载流
+    """
+    await ensure_storage()
+    cache = await get_cache()
+
+    data = await cache.get("collaboration", {
+        "papers": [], "experiments": [], "reviews": [], "sessions": []
+    })
+
+    # 筛选会话
+    all_sessions = []
+    type_names = {
+        "papers": "论文写作",
+        "experiments": "实验设计",
+        "reviews": "文献综述",
+        "sessions": "虚拟辅导"
+    }
+
+    for skey, sname in type_names.items():
+        if session_type:
+            # 只导出指定类型
+            stype_map = {"paper": "papers", "experiment": "experiments", "review": "reviews", "tutoring": "sessions"}
+            if skey != stype_map.get(session_type):
+                continue
+
+        for s in data.get(skey, []):
+            s["_type_name"] = sname
+            all_sessions.append(s)
+
+    if not all_sessions:
+        raise HTTPException(status_code=404, detail="没有可导出的协作记录")
+
+    # 生成文档
+    if format == "pdf":
+        if not PDF_AVAILABLE:
+            raise HTTPException(status_code=400, detail="PDF 导出功能不可用")
+        file_bytes = await _generate_all_collaborations_pdf(all_sessions)
+        filename = f"协作记录汇总_{datetime.now().strftime('%Y%m%d')}.pdf"
+        media_type = "application/pdf"
+    else:
+        if not DOCX_AVAILABLE:
+            raise HTTPException(status_code=400, detail="Word 导出功能不可用")
+        file_bytes = await _generate_all_collaborations_docx(all_sessions)
+        filename = f"协作记录汇总_{datetime.now().strftime('%Y%m%d')}.docx"
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    return StreamingResponse(
+        BytesIO(file_bytes),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
+async def _generate_collaboration_docx(session: dict, session_type: str, include_history: bool) -> bytes:
+    """生成单个协作记录的 Word 文档"""
+    doc = Document()
+
+    # 标题
+    type_names = {
+        "paper": "论文写作协作",
+        "experiment": "实验设计协作",
+        "review": "文献综述协作",
+        "tutoring": "虚拟导师辅导"
+    }
+
+    title = doc.add_heading(type_names.get(session_type, "协作记录"), level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # 基本信息
+    doc.add_heading("基本信息", level=1)
+
+    info_table = doc.add_table(rows=4, cols=2)
+    info_table.style = 'Table Grid'
+
+    info_data = [
+        ("会话 ID", session.get("id", "")),
+        ("开始时间", session.get("startTime", "")),
+        ("结束时间", session.get("endTime", "进行中")),
+        ("摘要", session.get("summary", "暂无摘要"))
+    ]
+
+    for i, (label, value) in enumerate(info_data):
+        info_table.rows[i].cells[0].text = label
+        info_table.rows[i].cells[1].text = str(value)
+
+    doc.add_paragraph()
+
+    # 协作统计
+    doc.add_heading("协作统计", level=1)
+
+    ai_count = len(session.get("aiContributions", []))
+    human_count = len(session.get("humanContributions", []))
+    total = ai_count + human_count
+
+    stats_table = doc.add_table(rows=4, cols=2)
+    stats_table.style = 'Table Grid'
+
+    stats_data = [
+        ("AI 贡献次数", str(ai_count)),
+        ("用户贡献次数", str(human_count)),
+        ("总交互次数", str(total)),
+        ("协作比例", f"AI {round(ai_count/total*100, 1) if total > 0 else 0}% / 用户 {round(human_count/total*100, 1) if total > 0 else 0}%")
+    ]
+
+    for i, (label, value) in enumerate(stats_data):
+        stats_table.rows[i].cells[0].text = label
+        stats_table.rows[i].cells[1].text = value
+
+    doc.add_paragraph()
+
+    # 协作历史
+    if include_history:
+        doc.add_heading("协作历史", level=1)
+
+        # 合并并按时间排序
+        all_contributions = []
+        for c in session.get("aiContributions", []):
+            c["role"] = "AI"
+            all_contributions.append(c)
+        for c in session.get("humanContributions", []):
+            c["role"] = "用户"
+            all_contributions.append(c)
+
+        all_contributions.sort(key=lambda x: x.get("timestamp", ""))
+
+        for i, c in enumerate(all_contributions, 1):
+            role = c.get("role", "未知")
+            content = c.get("content", "")
+            timestamp = c.get("timestamp", "")
+
+            p = doc.add_paragraph()
+            p.add_run(f"[{i}] {role}").bold = True
+            p.add_run(f" ({timestamp})")
+
+            doc.add_paragraph(content)
+            doc.add_paragraph()  # 空行
+
+    # 导出信息
+    doc.add_paragraph()
+    p = doc.add_paragraph()
+    p.add_run(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}").italic = True
+    p.add_run("\n由教育数字人系统生成").italic = True
+
+    # 保存到字节流
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+async def _generate_collaboration_pdf(session: dict, session_type: str, include_history: bool) -> bytes:
+    """生成单个协作记录的 PDF 文档"""
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=2*cm,
+        leftMargin=2*cm,
+        topMargin=2*cm,
+        bottomMargin=2*cm
+    )
+
+    styles = getSampleStyleSheet()
+
+    # 创建中文样式
+    if CHINESE_FONT:
+        title_style = ParagraphStyle(
+            'ChineseTitle',
+            parent=styles['Title'],
+            fontName=CHINESE_FONT,
+            fontSize=18
+        )
+        heading_style = ParagraphStyle(
+            'ChineseHeading',
+            parent=styles['Heading1'],
+            fontName=CHINESE_FONT,
+            fontSize=14
+        )
+        normal_style = ParagraphStyle(
+            'ChineseNormal',
+            parent=styles['Normal'],
+            fontName=CHINESE_FONT,
+            fontSize=10
+        )
+    else:
+        title_style = styles['Title']
+        heading_style = styles['Heading1']
+        normal_style = styles['Normal']
+
+    elements = []
+
+    # 标题
+    type_names = {
+        "paper": "论文写作协作",
+        "experiment": "实验设计协作",
+        "review": "文献综述协作",
+        "tutoring": "虚拟导师辅导"
+    }
+    elements.append(Paragraph(type_names.get(session_type, "协作记录"), title_style))
+    elements.append(Spacer(1, 0.5*cm))
+
+    # 基本信息
+    elements.append(Paragraph("基本信息", heading_style))
+
+    info_data = [
+        ["会话 ID", session.get("id", "")],
+        ["开始时间", session.get("startTime", "")],
+        ["结束时间", session.get("endTime", "进行中")],
+        ["摘要", session.get("summary", "暂无摘要")]
+    ]
+
+    info_table = Table(info_data, colWidths=[4*cm, 10*cm])
+    info_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 0.5*cm))
+
+    # 协作统计
+    elements.append(Paragraph("协作统计", heading_style))
+
+    ai_count = len(session.get("aiContributions", []))
+    human_count = len(session.get("humanContributions", []))
+    total = ai_count + human_count
+
+    stats_data = [
+        ["AI 贡献次数", str(ai_count)],
+        ["用户贡献次数", str(human_count)],
+        ["总交互次数", str(total)],
+        ["协作比例", f"AI {round(ai_count/total*100, 1) if total > 0 else 0}% / 用户 {round(human_count/total*100, 1) if total > 0 else 0}%"]
+    ]
+
+    stats_table = Table(stats_data, colWidths=[4*cm, 10*cm])
+    stats_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+    ]))
+    elements.append(stats_table)
+    elements.append(Spacer(1, 0.5*cm))
+
+    # 协作历史
+    if include_history:
+        elements.append(Paragraph("协作历史", heading_style))
+
+        all_contributions = []
+        for c in session.get("aiContributions", []):
+            c["role"] = "AI"
+            all_contributions.append(c)
+        for c in session.get("humanContributions", []):
+            c["role"] = "用户"
+            all_contributions.append(c)
+
+        all_contributions.sort(key=lambda x: x.get("timestamp", ""))
+
+        for i, c in enumerate(all_contributions, 1):
+            role = c.get("role", "未知")
+            content = c.get("content", "")
+            timestamp = c.get("timestamp", "")
+
+            elements.append(Paragraph(f"<b>[{i}] {role}</b> ({timestamp})", normal_style))
+            elements.append(Paragraph(content[:500] + ("..." if len(content) > 500 else ""), normal_style))
+            elements.append(Spacer(1, 0.3*cm))
+
+    # 导出信息
+    elements.append(Spacer(1, 1*cm))
+    elements.append(Paragraph(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", normal_style))
+    elements.append(Paragraph("由教育数字人系统生成", normal_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+async def _generate_all_collaborations_docx(sessions: list) -> bytes:
+    """生成所有协作记录汇总的 Word 文档"""
+    doc = Document()
+
+    # 标题
+    title = doc.add_heading("协作记录汇总", level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    doc.add_paragraph(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    doc.add_paragraph(f"共 {len(sessions)} 条协作记录")
+    doc.add_paragraph()
+
+    # 汇总统计
+    doc.add_heading("汇总统计", level=1)
+
+    total_ai = sum(len(s.get("aiContributions", [])) for s in sessions)
+    total_human = sum(len(s.get("humanContributions", [])) for s in sessions)
+    total = total_ai + total_human
+
+    stats_table = doc.add_table(rows=3, cols=2)
+    stats_table.style = 'Table Grid'
+    stats_data = [
+        ("总会话数", str(len(sessions))),
+        ("总交互次数", str(total)),
+        ("协作比例", f"AI {total_ai} 次 ({round(total_ai/total*100, 1) if total > 0 else 0}%) / 用户 {total_human} 次 ({round(total_human/total*100, 1) if total > 0 else 0}%)")
+    ]
+    for i, (label, value) in enumerate(stats_data):
+        stats_table.rows[i].cells[0].text = label
+        stats_table.rows[i].cells[1].text = value
+
+    doc.add_paragraph()
+
+    # 各会话详情
+    doc.add_heading("会话列表", level=1)
+
+    for i, session in enumerate(sessions, 1):
+        type_name = session.get("_type_name", "未知类型")
+        title_text = session.get("title", "无标题")
+        start_time = session.get("startTime", "")
+
+        p = doc.add_paragraph()
+        p.add_run(f"{i}. [{type_name}] {title_text}").bold = True
+
+        ai_count = len(session.get("aiContributions", []))
+        human_count = len(session.get("humanContributions", []))
+
+        doc.add_paragraph(f"   开始时间: {start_time}")
+        doc.add_paragraph(f"   交互次数: AI {ai_count} 次 / 用户 {human_count} 次")
+
+        if session.get("summary"):
+            doc.add_paragraph(f"   摘要: {session.get('summary')}")
+
+        doc.add_paragraph()
+
+    # 页脚
+    p = doc.add_paragraph()
+    p.add_run("由教育数字人系统生成").italic = True
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+async def _generate_all_collaborations_pdf(sessions: list) -> bytes:
+    """生成所有协作记录汇总的 PDF 文档"""
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=2*cm,
+        leftMargin=2*cm,
+        topMargin=2*cm,
+        bottomMargin=2*cm
+    )
+
+    styles = getSampleStyleSheet()
+
+    if CHINESE_FONT:
+        title_style = ParagraphStyle('ChineseTitle', parent=styles['Title'], fontName=CHINESE_FONT, fontSize=18)
+        heading_style = ParagraphStyle('ChineseHeading', parent=styles['Heading1'], fontName=CHINESE_FONT, fontSize=14)
+        normal_style = ParagraphStyle('ChineseNormal', parent=styles['Normal'], fontName=CHINESE_FONT, fontSize=10)
+    else:
+        title_style = styles['Title']
+        heading_style = styles['Heading1']
+        normal_style = styles['Normal']
+
+    elements = []
+
+    # 标题
+    elements.append(Paragraph("协作记录汇总", title_style))
+    elements.append(Spacer(1, 0.3*cm))
+    elements.append(Paragraph(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", normal_style))
+    elements.append(Paragraph(f"共 {len(sessions)} 条协作记录", normal_style))
+    elements.append(Spacer(1, 0.5*cm))
+
+    # 汇总统计
+    elements.append(Paragraph("汇总统计", heading_style))
+
+    total_ai = sum(len(s.get("aiContributions", [])) for s in sessions)
+    total_human = sum(len(s.get("humanContributions", [])) for s in sessions)
+    total = total_ai + total_human
+
+    stats_data = [
+        ["总会话数", str(len(sessions))],
+        ["总交互次数", str(total)],
+        ["协作比例", f"AI {total_ai} 次 / 用户 {total_human} 次"]
+    ]
+
+    stats_table = Table(stats_data, colWidths=[4*cm, 10*cm])
+    stats_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+    ]))
+    elements.append(stats_table)
+    elements.append(Spacer(1, 0.5*cm))
+
+    # 会话列表
+    elements.append(Paragraph("会话列表", heading_style))
+
+    for i, session in enumerate(sessions, 1):
+        type_name = session.get("_type_name", "未知类型")
+        title_text = session.get("title", "无标题")
+
+        elements.append(Paragraph(f"<b>{i}. [{type_name}] {title_text}</b>", normal_style))
+
+        ai_count = len(session.get("aiContributions", []))
+        human_count = len(session.get("humanContributions", []))
+
+        elements.append(Paragraph(f"   交互次数: AI {ai_count} 次 / 用户 {human_count} 次", normal_style))
+        elements.append(Spacer(1, 0.2*cm))
+
+    elements.append(Spacer(1, 1*cm))
+    elements.append(Paragraph("由教育数字人系统生成", normal_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# ==================== 学习报告生成 API ====================
+
+@router.get("/report/generate")
+async def generate_learning_report():
+    """
+    生成学习报告
+
+    汇总成长数据、协作统计、技能使用、成就等信息
+    """
+    await ensure_storage()
+    cache = await get_cache()
+
+    # 获取各类数据
+    growth_data = await cache.get("growth", {
+        "level": 1, "exp": 0, "totalExp": 0, "achievements": [], "stats": {}, "skillUsage": {}
+    })
+
+    collab_data = await cache.get("collaboration", {
+        "papers": [], "experiments": [], "reviews": [], "sessions": []
+    })
+
+    achievement_data = await cache.get("achievement", {"unlocked": [], "history": []})
+
+    # 计算统计数据
+    total_sessions = sum(len(collab_data.get(k, [])) for k in ["papers", "experiments", "reviews", "sessions"])
+
+    total_ai_contrib = 0
+    total_human_contrib = 0
+    for key in ["papers", "experiments", "reviews", "sessions"]:
+        for session in collab_data.get(key, []):
+            total_ai_contrib += len(session.get("aiContributions", []))
+            total_human_contrib += len(session.get("humanContributions", []))
+
+    # 技能使用统计
+    skill_usage = growth_data.get("skillUsage", {})
+    skill_names = {
+        "research-assistant": "科研助手",
+        "literature-review": "文献综述",
+        "paper-writing": "论文写作",
+        "academic-tutoring": "虚拟导师"
+    }
+
+    # 成就统计
+    unlocked_count = len(achievement_data.get("unlocked", []))
+
+    # 构建报告
+    report = {
+        "generatedAt": datetime.now().isoformat(),
+        "summary": {
+            "level": growth_data.get("level", 1),
+            "totalExp": growth_data.get("totalExp", 0),
+            "currentExp": growth_data.get("exp", 0),
+            "expForNextLevel": growth_data.get("level", 1) * 100
+        },
+        "stats": growth_data.get("stats", {}),
+        "collaboration": {
+            "totalSessions": total_sessions,
+            "aiContributions": total_ai_contrib,
+            "humanContributions": total_human_contrib,
+            "collaborationRatio": {
+                "ai": round(total_ai_contrib / (total_ai_contrib + total_human_contrib) * 100, 1) if (total_ai_contrib + total_human_contrib) > 0 else 0,
+                "human": round(total_human_contrib / (total_ai_contrib + total_human_contrib) * 100, 1) if (total_ai_contrib + total_human_contrib) > 0 else 0
+            }
+        },
+        "skills": {
+            "usage": {skill_names.get(k, k): v for k, v in skill_usage.items()},
+            "mostUsed": max(skill_usage.items(), key=lambda x: x[1])[0] if skill_usage else None
+        },
+        "achievements": {
+            "unlockedCount": unlocked_count,
+            "recentUnlocks": achievement_data.get("history", [])[-5:]  # 最近5个成就
+        },
+        "recommendations": _generate_recommendations(growth_data, skill_usage, total_sessions)
+    }
+
+    return report
+
+
+def _generate_recommendations(growth_data: dict, skill_usage: dict, total_sessions: int) -> list:
+    """生成学习建议"""
+    recommendations = []
+
+    stats = growth_data.get("stats", {})
+
+    # 基于对话次数
+    conversations = stats.get("conversations", 0)
+    if conversations < 10:
+        recommendations.append("建议多与数字人互动，探索不同的教育技能")
+    elif conversations > 100:
+        recommendations.append("您是活跃用户！可以尝试更高级的科研协作功能")
+
+    # 基于技能使用
+    if skill_usage:
+        used_skills = set(skill_usage.keys())
+        all_skills = {"research-assistant", "literature-review", "paper-writing", "academic-tutoring"}
+        unused_skills = all_skills - used_skills
+
+        if unused_skills:
+            skill_names = {
+                "research-assistant": "科研助手",
+                "literature-review": "文献综述",
+                "paper-writing": "论文写作",
+                "academic-tutoring": "虚拟导师"
+            }
+            unused_names = [skill_names.get(s, s) for s in unused_skills]
+            recommendations.append(f"建议尝试使用: {', '.join(unused_names)}")
+
+    # 基于协作次数
+    if total_sessions < 5:
+        recommendations.append("开始您的第一个协作项目，记录学习过程")
+    elif total_sessions > 20:
+        recommendations.append("协作经验丰富！可以考虑导出学习报告进行总结")
+
+    # 基于等级
+    level = growth_data.get("level", 1)
+    if level < 3:
+        recommendations.append("继续积累经验，解锁更多成就")
+    elif level >= 10:
+        recommendations.append("您已是资深学者！欢迎分享您的学习经验")
+
+    return recommendations if recommendations else ["继续保持学习热情！"]
+
+
+@router.post("/report/export")
+async def export_learning_report(format: str = Body(default="word")):
+    """
+    导出学习报告
+
+    Args:
+        format: 导出格式 (word/pdf)
+
+    Returns:
+        文件下载流
+    """
+    # 获取报告数据
+    report = await generate_learning_report()
+
+    if format == "pdf":
+        if not PDF_AVAILABLE:
+            raise HTTPException(status_code=400, detail="PDF 导出功能不可用")
+        file_bytes = await _generate_report_pdf(report)
+        filename = f"学习报告_{datetime.now().strftime('%Y%m%d')}.pdf"
+        media_type = "application/pdf"
+    else:
+        if not DOCX_AVAILABLE:
+            raise HTTPException(status_code=400, detail="Word 导出功能不可用")
+        file_bytes = await _generate_report_docx(report)
+        filename = f"学习报告_{datetime.now().strftime('%Y%m%d')}.docx"
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    return StreamingResponse(
+        BytesIO(file_bytes),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
+async def _generate_report_docx(report: dict) -> bytes:
+    """生成学习报告 Word 文档"""
+    doc = Document()
+
+    # 标题
+    title = doc.add_heading("学习报告", level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    doc.add_paragraph(f"生成时间: {report.get('generatedAt', '')}")
+    doc.add_paragraph()
+
+    # 成长概览
+    doc.add_heading("成长概览", level=1)
+
+    summary = report.get("summary", {})
+    summary_table = doc.add_table(rows=4, cols=2)
+    summary_table.style = 'Table Grid'
+
+    summary_data = [
+        ("当前等级", f"Lv.{summary.get('level', 1)}"),
+        ("累计经验", f"{summary.get('totalExp', 0)} 点"),
+        ("当前经验", f"{summary.get('currentExp', 0)} / {summary.get('expForNextLevel', 100)} 点"),
+        ("升级进度", f"{round(summary.get('currentExp', 0) / summary.get('expForNextLevel', 100) * 100, 1)}%")
+    ]
+
+    for i, (label, value) in enumerate(summary_data):
+        summary_table.rows[i].cells[0].text = label
+        summary_table.rows[i].cells[1].text = value
+
+    doc.add_paragraph()
+
+    # 学习统计
+    doc.add_heading("学习统计", level=1)
+
+    stats = report.get("stats", {})
+    stats_table = doc.add_table(rows=6, cols=2)
+    stats_table.style = 'Table Grid'
+
+    stats_data = [
+        ("对话次数", str(stats.get("conversations", 0))),
+        ("阅读文献", f"{stats.get('papers_read', 0)} 篇"),
+        ("设计实验", f"{stats.get('experiments_designed', 0)} 个"),
+        ("论文写作", f"{stats.get('papers_written', 0)} 篇"),
+        ("辅导会话", f"{stats.get('tutoring_sessions', 0)} 次"),
+        ("学习时长", f"{round(stats.get('hours_spent', 0), 1)} 小时")
+    ]
+
+    for i, (label, value) in enumerate(stats_data):
+        stats_table.rows[i].cells[0].text = label
+        stats_table.rows[i].cells[1].text = value
+
+    doc.add_paragraph()
+
+    # 协作统计
+    doc.add_heading("协作统计", level=1)
+
+    collab = report.get("collaboration", {})
+    collab_table = doc.add_table(rows=4, cols=2)
+    collab_table.style = 'Table Grid'
+
+    ratio = collab.get("collaborationRatio", {})
+    collab_data = [
+        ("协作会话", f"{collab.get('totalSessions', 0)} 次"),
+        ("AI 贡献", f"{collab.get('aiContributions', 0)} 次 ({ratio.get('ai', 0)}%)"),
+        ("用户贡献", f"{collab.get('humanContributions', 0)} 次 ({ratio.get('human', 0)}%)"),
+        ("协作比例", f"AI {ratio.get('ai', 0)}% : 用户 {ratio.get('human', 0)}%")
+    ]
+
+    for i, (label, value) in enumerate(collab_data):
+        collab_table.rows[i].cells[0].text = label
+        collab_table.rows[i].cells[1].text = value
+
+    doc.add_paragraph()
+
+    # 技能使用
+    doc.add_heading("技能使用", level=1)
+
+    skills = report.get("skills", {})
+    usage = skills.get("usage", {})
+
+    if usage:
+        skills_table = doc.add_table(rows=len(usage) + 1, cols=2)
+        skills_table.style = 'Table Grid'
+        skills_table.rows[0].cells[0].text = "技能名称"
+        skills_table.rows[0].cells[1].text = "使用次数"
+
+        for i, (skill_name, count) in enumerate(usage.items(), 1):
+            skills_table.rows[i].cells[0].text = skill_name
+            skills_table.rows[i].cells[1].text = str(count)
+    else:
+        doc.add_paragraph("暂无技能使用记录")
+
+    doc.add_paragraph()
+
+    # 成就
+    doc.add_heading("成就", level=1)
+
+    achievements = report.get("achievements", {})
+    doc.add_paragraph(f"已解锁成就: {achievements.get('unlockedCount', 0)} 个")
+
+    recent = achievements.get("recentUnlocks", [])
+    if recent:
+        doc.add_paragraph("最近解锁:")
+        for ach in recent:
+            doc.add_paragraph(f"  - {ach.get('id', '')} ({ach.get('unlockedAt', '')})")
+
+    doc.add_paragraph()
+
+    # 学习建议
+    doc.add_heading("学习建议", level=1)
+
+    recommendations = report.get("recommendations", [])
+    for rec in recommendations:
+        doc.add_paragraph(f"• {rec}")
+
+    # 页脚
+    doc.add_paragraph()
+    p = doc.add_paragraph()
+    p.add_run("由教育数字人系统生成").italic = True
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+async def _generate_report_pdf(report: dict) -> bytes:
+    """生成学习报告 PDF 文档"""
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=2*cm,
+        leftMargin=2*cm,
+        topMargin=2*cm,
+        bottomMargin=2*cm
+    )
+
+    styles = getSampleStyleSheet()
+
+    if CHINESE_FONT:
+        title_style = ParagraphStyle('ChineseTitle', parent=styles['Title'], fontName=CHINESE_FONT, fontSize=18)
+        heading_style = ParagraphStyle('ChineseHeading', parent=styles['Heading1'], fontName=CHINESE_FONT, fontSize=14)
+        normal_style = ParagraphStyle('ChineseNormal', parent=styles['Normal'], fontName=CHINESE_FONT, fontSize=10)
+    else:
+        title_style = styles['Title']
+        heading_style = styles['Heading1']
+        normal_style = styles['Normal']
+
+    elements = []
+
+    # 标题
+    elements.append(Paragraph("学习报告", title_style))
+    elements.append(Spacer(1, 0.3*cm))
+    elements.append(Paragraph(f"生成时间: {report.get('generatedAt', '')}", normal_style))
+    elements.append(Spacer(1, 0.5*cm))
+
+    # 成长概览
+    elements.append(Paragraph("成长概览", heading_style))
+
+    summary = report.get("summary", {})
+    summary_data = [
+        ["当前等级", f"Lv.{summary.get('level', 1)}"],
+        ["累计经验", f"{summary.get('totalExp', 0)} 点"],
+        ["当前经验", f"{summary.get('currentExp', 0)} / {summary.get('expForNextLevel', 100)} 点"],
+    ]
+
+    summary_table = Table(summary_data, colWidths=[4*cm, 10*cm])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 0.5*cm))
+
+    # 学习统计
+    elements.append(Paragraph("学习统计", heading_style))
+
+    stats = report.get("stats", {})
+    stats_data = [
+        ["对话次数", str(stats.get("conversations", 0))],
+        ["阅读文献", f"{stats.get('papers_read', 0)} 篇"],
+        ["设计实验", f"{stats.get('experiments_designed', 0)} 个"],
+        ["学习时长", f"{round(stats.get('hours_spent', 0), 1)} 小时"]
+    ]
+
+    stats_table = Table(stats_data, colWidths=[4*cm, 10*cm])
+    stats_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+    ]))
+    elements.append(stats_table)
+    elements.append(Spacer(1, 0.5*cm))
+
+    # 协作统计
+    elements.append(Paragraph("协作统计", heading_style))
+
+    collab = report.get("collaboration", {})
+    ratio = collab.get("collaborationRatio", {})
+    collab_data = [
+        ["协作会话", f"{collab.get('totalSessions', 0)} 次"],
+        ["AI 贡献", f"{collab.get('aiContributions', 0)} 次 ({ratio.get('ai', 0)}%)"],
+        ["用户贡献", f"{collab.get('humanContributions', 0)} 次 ({ratio.get('human', 0)}%)"]
+    ]
+
+    collab_table = Table(collab_data, colWidths=[4*cm, 10*cm])
+    collab_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTNAME', (0, 0), (-1, -1), CHINESE_FONT or 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+    ]))
+    elements.append(collab_table)
+    elements.append(Spacer(1, 0.5*cm))
+
+    # 学习建议
+    elements.append(Paragraph("学习建议", heading_style))
+
+    recommendations = report.get("recommendations", [])
+    for rec in recommendations:
+        elements.append(Paragraph(f"• {rec}", normal_style))
+
+    elements.append(Spacer(1, 1*cm))
+    elements.append(Paragraph("由教育数字人系统生成", normal_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+

@@ -4,8 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>教育数字人 - 智能教育助手</title>
-  <link href="https://cdn.jsdelivr.net/npm/element-plus@2.4.4/dist/index.css" rel="stylesheet">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <!-- 预加载关键资源 -->
+  <link rel="preload" href="libs/element-plus.css" as="style">
+  <link rel="preload" href="libs/vue.global.prod.js" as="script">
+  <!-- 本地化静态资源 -->
+  <link href="libs/element-plus.css" rel="stylesheet">
+  <link href="fontawesome/css/all.min.css" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -64,6 +68,258 @@
       display: flex;
       align-items: center;
       gap: 10px;
+    }
+
+    .settings-link {
+      padding: 8px 16px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.2);
+      color: white;
+      text-decoration: none;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.3s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .settings-link:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    /* 设置弹窗样式 */
+    .settings-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .settings-modal {
+      background: var(--card-bg);
+      border-radius: 16px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .settings-modal-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .settings-modal-header h3 {
+      margin: 0;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .settings-modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .settings-group {
+      margin-bottom: 20px;
+    }
+
+    .settings-group-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .settings-input {
+      width: 100%;
+      padding: 12px 15px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-color);
+      color: var(--text-color);
+      font-size: 14px;
+      margin-bottom: 12px;
+      box-sizing: border-box;
+    }
+
+    .settings-input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+    }
+
+    .settings-input::placeholder {
+      color: var(--text-secondary);
+    }
+
+    .settings-hint {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: -8px;
+      margin-bottom: 12px;
+    }
+
+    .settings-status {
+      padding: 12px 15px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .settings-status.configured {
+      background: rgba(76, 175, 80, 0.1);
+      color: var(--success-color);
+    }
+
+    .settings-status.not-configured {
+      background: rgba(255, 152, 0, 0.1);
+      color: #ff9800;
+    }
+
+    .settings-modal-footer {
+      padding: 15px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .settings-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .settings-btn-primary {
+      background: var(--primary-color);
+      color: white;
+    }
+
+    .settings-btn-primary:hover {
+      opacity: 0.9;
+    }
+
+    .settings-btn-secondary {
+      background: var(--bg-color);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
+    }
+
+    .settings-btn-secondary:hover {
+      border-color: var(--primary-color);
+    }
+
+    /* 开关样式 */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 26px;
+    }
+
+    .toggle-switch.small {
+      width: 40px;
+      height: 22px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--border-color);
+      transition: 0.3s;
+      border-radius: 26px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+
+    .toggle-switch.small .toggle-slider:before {
+      height: 16px;
+      width: 16px;
+    }
+
+    input:checked + .toggle-slider {
+      background: linear-gradient(135deg, var(--success-color), #059669);
+    }
+
+    input:checked + .toggle-slider:before {
+      transform: translateX(22px);
+    }
+
+    .toggle-switch.small input:checked + .toggle-slider:before {
+      transform: translateX(18px);
+    }
+
+    /* 单选选项样式 */
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+      color: var(--text-color);
+    }
+
+    .radio-option:hover {
+      border-color: var(--primary-color);
+    }
+
+    .radio-option.active {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      border-color: transparent;
+      color: white;
+    }
+
+    .radio-option input {
+      display: none;
     }
 
     .avatar-type-switch {
@@ -466,6 +722,11 @@
       margin-bottom: 20px;
     }
 
+    /* 导出下拉菜单 */
+    .export-menu button:hover {
+      background: var(--bg-color);
+    }
+
     .collaboration-stats {
       display: flex;
       gap: 20px;
@@ -614,6 +875,191 @@
       color: var(--text-color);
       font-size: 14px;
       outline: none;
+    }
+
+    /* 对话历史管理样式 */
+    .chat-history-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+    }
+
+    .history-btn {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-color);
+      color: var(--text-color);
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .history-btn:hover:not(:disabled) {
+      border-color: var(--primary-color);
+      color: var(--primary-color);
+    }
+
+    .history-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .history-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .history-modal {
+      background: var(--card-bg);
+      border-radius: 16px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .history-modal-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .history-modal-header h3 {
+      margin: 0;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 0;
+      line-height: 1;
+    }
+
+    .close-btn:hover {
+      color: var(--text-color);
+    }
+
+    .history-modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .loading-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      background: var(--bg-color);
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+    }
+
+    .history-item-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .session-id {
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .message-count {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .history-item-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .load-btn, .delete-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .load-btn {
+      background: var(--primary-color);
+      color: white;
+    }
+
+    .load-btn:hover {
+      opacity: 0.9;
+    }
+
+    .delete-btn {
+      background: #ff4757;
+      color: white;
+    }
+
+    .delete-btn:hover {
+      opacity: 0.9;
+    }
+
+    .history-modal-footer {
+      padding: 15px 20px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .clear-all-btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #ff4757;
+      background: transparent;
+      color: #ff4757;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .clear-all-btn:hover:not(:disabled) {
+      background: #ff4757;
+      color: white;
+    }
+
+    .clear-all-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .chat-messages {
@@ -1076,6 +1522,9 @@
     <div class="left-panel">
       <div class="avatar-header">
         <h1><i class="fa-solid fa-graduation-cap"></i> 教育数字人</h1>
+        <button class="settings-link" @click="showSettingsModal = true" title="配置API">
+          <i class="fa-solid fa-gear"></i> 设置
+        </button>
         <div class="avatar-type-switch">
           <button class="avatar-type-btn" :class="{ active: digitalHumanType === 'vrm' }" @click="switchAvatarType('vrm')">VRM</button>
           <button class="avatar-type-btn" :class="{ active: digitalHumanType === 'tencent' }" @click="switchAvatarType('tencent')">腾讯数智人</button>
@@ -1244,9 +1693,27 @@
         <div class="tab-panel" :class="{ active: activeTab === 'records' }">
           <div class="collaboration-header">
             <h3><i class="fa-solid fa-handshake"></i> 人机协作统计</h3>
-            <button class="btn-secondary" @click="refreshCollaboration" style="padding: 8px 16px; font-size: 13px; border: none; border-radius: 20px; cursor: pointer;">
-              <i class="fa-solid fa-refresh"></i> 刷新
-            </button>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button class="btn-secondary" @click="openReportModal" style="padding: 8px 16px; font-size: 13px; border: none; border-radius: 20px; cursor: pointer; background: var(--primary-color); color: white;">
+                <i class="fa-solid fa-chart-pie"></i> 学习报告
+              </button>
+              <div class="export-dropdown" style="position: relative;">
+                <button class="btn-secondary" @click="showExportMenu = !showExportMenu" :disabled="exportLoading || filteredRecords.length === 0" style="padding: 8px 16px; font-size: 13px; border: none; border-radius: 20px; cursor: pointer;">
+                  <i class="fa-solid fa-download"></i> {{ exportLoading ? '导出中...' : '导出全部' }} <i class="fa-solid fa-caret-down"></i>
+                </button>
+                <div v-if="showExportMenu" class="export-menu" style="position: absolute; top: 100%; right: 0; margin-top: 5px; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; overflow: hidden;">
+                  <button @click="exportAllCollaborations('docx'); showExportMenu = false" style="display: block; width: 100%; padding: 10px 20px; border: none; background: none; text-align: left; cursor: pointer; font-size: 13px;">
+                    <i class="fa-solid fa-file-word" style="color: #2b579a;"></i> 导出为 Word
+                  </button>
+                  <button @click="exportAllCollaborations('pdf'); showExportMenu = false" style="display: block; width: 100%; padding: 10px 20px; border: none; background: none; text-align: left; cursor: pointer; font-size: 13px;">
+                    <i class="fa-solid fa-file-pdf" style="color: #e74c3c;"></i> 导出为 PDF
+                  </button>
+                </div>
+              </div>
+              <button class="btn-secondary" @click="refreshCollaboration" style="padding: 8px 16px; font-size: 13px; border: none; border-radius: 20px; cursor: pointer;">
+                <i class="fa-solid fa-refresh"></i> 刷新
+              </button>
+            </div>
           </div>
 
           <div class="collab-ratio" v-if="collabStats.totalSessions > 0">
@@ -1374,6 +1841,95 @@
             <div v-if="selectedRecord.summary" style="margin-top: 15px; padding: 12px; background: var(--bg-color); border-radius: 8px; font-size: 14px;">
               <strong>摘要:</strong> {{ selectedRecord.summary }}
             </div>
+            <!-- 导出按钮 -->
+            <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+              <button @click="exportCollaboration(selectedRecord, 'docx')" :disabled="exportLoading" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: var(--primary-color); color: white; font-size: 14px;">
+                <i class="fa-solid fa-file-word"></i> 导出 Word
+              </button>
+              <button @click="exportCollaboration(selectedRecord, 'pdf')" :disabled="exportLoading" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: #e74c3c; color: white; font-size: 14px;">
+                <i class="fa-solid fa-file-pdf"></i> 导出 PDF
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 学习报告弹窗 -->
+        <div v-if="showReportModal" class="modal-overlay" @click.self="showReportModal = false">
+          <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+              <h3><i class="fa-solid fa-chart-pie"></i> 学习报告</h3>
+              <button class="modal-close" @click="showReportModal = false">&times;</button>
+            </div>
+            <div v-if="reportLoading" style="text-align: center; padding: 40px;">
+              <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--primary-color);"></i>
+              <p style="margin-top: 15px; color: var(--text-secondary);">正在生成学习报告...</p>
+            </div>
+            <div v-else-if="learningReport" style="padding: 10px 0;">
+              <!-- 概览统计 -->
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+                <div style="text-align: center; padding: 15px; background: var(--bg-color); border-radius: 10px;">
+                  <div style="font-size: 28px; font-weight: bold; color: var(--primary-color);">{{ learningReport.collaboration?.totalSessions || 0 }}</div>
+                  <div style="font-size: 13px; color: var(--text-secondary);">学习会话</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: var(--bg-color); border-radius: 10px;">
+                  <div style="font-size: 28px; font-weight: bold; color: var(--success-color);">{{ (learningReport.collaboration?.aiContributions || 0) + (learningReport.collaboration?.humanContributions || 0) }}</div>
+                  <div style="font-size: 13px; color: var(--text-secondary);">总贡献数</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: var(--bg-color); border-radius: 10px;">
+                  <div style="font-size: 28px; font-weight: bold; color: #e67e22;">{{ learningReport.stats?.studyTime || 0 }}</div>
+                  <div style="font-size: 13px; color: var(--text-secondary);">学习时长(分钟)</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: var(--bg-color); border-radius: 10px;">
+                  <div style="font-size: 28px; font-weight: bold; color: #9b59b6;">{{ learningReport.summary?.level || 1 }}</div>
+                  <div style="font-size: 13px; color: var(--text-secondary);">当前等级</div>
+                </div>
+              </div>
+              <!-- 学习建议 -->
+              <div v-if="learningReport.recommendations?.length" style="margin-bottom: 20px;">
+                <h4 style="margin-bottom: 12px; font-size: 15px;"><i class="fa-solid fa-lightbulb" style="color: #f1c40f;"></i> 学习建议</h4>
+                <ul style="list-style: none; padding: 0; margin: 0;">
+                  <li v-for="(rec, idx) in learningReport.recommendations" :key="idx" style="padding: 10px 15px; background: var(--bg-color); border-radius: 8px; margin-bottom: 8px; font-size: 14px; border-left: 3px solid var(--primary-color);">
+                    {{ rec }}
+                  </li>
+                </ul>
+              </div>
+              <!-- 协作类型分布 -->
+              <div v-if="learningReport.collaboration?.collaborationRatio" style="margin-bottom: 20px;">
+                <h4 style="margin-bottom: 12px; font-size: 15px;"><i class="fa-solid fa-chart-pie" style="color: #3498db;"></i> 协作贡献比例</h4>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                  <div style="flex: 1; height: 20px; background: var(--bg-color); border-radius: 10px; overflow: hidden; display: flex;">
+                    <div :style="{ width: learningReport.collaboration.collaborationRatio.ai + '%', background: 'var(--primary-color)' }"></div>
+                    <div :style="{ width: learningReport.collaboration.collaborationRatio.human + '%', background: 'var(--success-color)' }"></div>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 20px; margin-top: 8px; font-size: 13px;">
+                  <span><i class="fa-solid fa-robot" style="color: var(--primary-color);"></i> AI: {{ learningReport.collaboration.collaborationRatio.ai }}%</span>
+                  <span><i class="fa-solid fa-user" style="color: var(--success-color);"></i> 用户: {{ learningReport.collaboration.collaborationRatio.human }}%</span>
+                </div>
+              </div>
+              <!-- 技能使用统计 -->
+              <div v-if="learningReport.skills?.usage && Object.keys(learningReport.skills.usage).length" style="margin-bottom: 20px;">
+                <h4 style="margin-bottom: 12px; font-size: 15px;"><i class="fa-solid fa-chart-bar" style="color: #9b59b6;"></i> 技能使用统计</h4>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <div v-for="(count, skillName) in learningReport.skills.usage" :key="skillName" style="padding: 10px 16px; background: var(--bg-color); border-radius: 20px; font-size: 13px;">
+                    <strong>{{ skillName }}</strong>: {{ count }}次
+                  </div>
+                </div>
+              </div>
+              <!-- 导出按钮 -->
+              <div style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                <button @click="exportLearningReport('docx')" :disabled="reportLoading" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: var(--primary-color); color: white; font-size: 14px;">
+                  <i class="fa-solid fa-file-word"></i> 导出 Word
+                </button>
+                <button @click="exportLearningReport('pdf')" :disabled="reportLoading" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: #e74c3c; color: white; font-size: 14px;">
+                  <i class="fa-solid fa-file-pdf"></i> 导出 PDF
+                </button>
+              </div>
+            </div>
+            <div v-else style="text-align: center; padding: 40px; color: var(--text-secondary);">
+              <i class="fa-solid fa-exclamation-circle" style="font-size: 24px;"></i>
+              <p style="margin-top: 10px;">无法生成学习报告</p>
+            </div>
           </div>
         </div>
 
@@ -1389,6 +1945,55 @@
               <span v-if="currentSkill" style="color: var(--success-color); font-size: 14px;">
                 <i class="fa-solid fa-check-circle"></i> 已激活
               </span>
+              <!-- 对话历史管理按钮 -->
+              <div class="chat-history-actions">
+                <button @click="showHistoryModal = true" title="查看历史" class="history-btn">
+                  <i class="fa-solid fa-clock-rotate-left"></i>
+                </button>
+                <button @click="clearCurrentChat" title="清空对话" class="history-btn" :disabled="messages.length === 0">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- 对话历史模态框 -->
+            <div v-if="showHistoryModal" class="history-modal-overlay" @click.self="showHistoryModal = false">
+              <div class="history-modal">
+                <div class="history-modal-header">
+                  <h3><i class="fa-solid fa-clock-rotate-left"></i> 对话历史</h3>
+                  <button @click="showHistoryModal = false" class="close-btn">&times;</button>
+                </div>
+                <div class="history-modal-body">
+                  <div v-if="loadingHistory" class="loading-state">
+                    <i class="fa-solid fa-spinner fa-spin"></i> 加载中...
+                  </div>
+                  <div v-else-if="chatHistoryList.length === 0" class="empty-state">
+                    <i class="fa-solid fa-comments"></i>
+                    <p>暂无历史对话</p>
+                  </div>
+                  <div v-else class="history-list">
+                    <div v-for="session in chatHistoryList" :key="session.session_id" class="history-item">
+                      <div class="history-item-header">
+                        <span class="session-id">{{ session.session_id }}</span>
+                        <span class="message-count">{{ session.message_count }} 条消息</span>
+                      </div>
+                      <div class="history-item-actions">
+                        <button @click="loadHistorySession(session.session_id)" class="load-btn">
+                          <i class="fa-solid fa-arrow-right-to-bracket"></i> 加载
+                        </button>
+                        <button @click="deleteHistorySession(session.session_id)" class="delete-btn">
+                          <i class="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="history-modal-footer">
+                  <button @click="clearAllHistory" class="clear-all-btn" :disabled="chatHistoryList.length === 0">
+                    <i class="fa-solid fa-trash-can"></i> 清空所有历史
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div class="chat-messages" ref="chatMessages">
@@ -1408,7 +2013,8 @@
                 </div>
               </div>
               <template v-for="(msg, index) in messages" :key="index">
-                <div class="message" :class="msg.role">
+                <!-- 助手消息内容为空时不显示，等待流式内容 -->
+                <div v-if="msg.content || msg.role === 'user'" class="message" :class="msg.role">
                   <div class="message-header">
                     {{ msg.role === 'user' ? '我' : '教育助手' }}
                     <span v-if="msg.timestamp" style="margin-left: 10px; opacity: 0.7;">{{ formatTime(msg.timestamp) }}</span>
@@ -1416,7 +2022,8 @@
                   <div class="message-content" v-html="formatMessage(msg.content)"></div>
                 </div>
               </template>
-              <div v-if="isTyping" class="typing-indicator">
+              <!-- 只在没有流式消息时显示typing动画 -->
+              <div v-if="isTyping && !hasStreamingContent" class="typing-indicator">
                 <span></span><span></span><span></span>
               </div>
             </div>
@@ -1457,10 +2064,283 @@
         </div>
       </div>
     </div>
+
+    <!-- 设置弹窗 - 放在最外层，确保所有页面都能访问 -->
+    <div v-if="showSettingsModal" class="settings-modal-overlay" @click.self="showSettingsModal = false">
+      <div class="settings-modal">
+        <div class="settings-modal-header">
+          <h3><i class="fa-solid fa-gear"></i> 模型配置</h3>
+          <button @click="showSettingsModal = false" class="close-btn">&times;</button>
+        </div>
+        <div class="settings-modal-body">
+          <!-- 状态指示 -->
+          <div class="settings-status" :class="apiSettings.api_key_configured ? 'configured' : 'not-configured'">
+            <i :class="apiSettings.api_key_configured ? 'fa-solid fa-check-circle' : 'fa-solid fa-exclamation-triangle'"></i>
+            {{ apiSettings.api_key_configured ? '模型服务已配置' : '模型服务未配置' }}
+          </div>
+
+          <!-- 说明文字 -->
+          <div style="padding: 15px; background: var(--bg-color); border-radius: 10px; margin-bottom: 20px;">
+            <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.8;">
+              <i class="fa-solid fa-info-circle" style="color: var(--primary-color);"></i>
+              教育数字人使用<strong style="color: var(--text-color);">主页面</strong>的模型服务配置。
+            </p>
+            <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.8; margin-top: 8px;">
+              如需修改配置，请前往主页面进行设置。
+            </p>
+          </div>
+
+          <!-- 当前配置信息 -->
+          <div class="settings-group">
+            <div class="settings-group-title"><i class="fa-solid fa-sliders"></i> 当前配置</div>
+
+            <div style="display: grid; gap: 12px;">
+              <div style="display: flex; justify-content: space-between; padding: 10px 15px; background: var(--bg-color); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">API 状态</span>
+                <span :style="{ color: apiSettings.api_key_configured ? 'var(--success-color)' : 'var(--danger-color)' }">
+                  <i :class="apiSettings.api_key_configured ? 'fa-solid fa-check' : 'fa-solid fa-times'"></i>
+                  {{ apiSettings.api_key_configured ? '已配置' : '未配置' }}
+                </span>
+              </div>
+
+              <!-- 当前选择的模型提供商 -->
+              <div v-if="apiSettings.providerInfo" style="padding: 15px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%); border-radius: 10px; border: 1px solid var(--primary-color);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <i class="fa-solid fa-microchip" style="color: var(--primary-color);"></i>
+                  <span style="font-weight: 600;">当前模型服务</span>
+                </div>
+                <div style="font-size: 16px; color: var(--text-color); margin-bottom: 4px;">
+                  {{ apiSettings.providerInfo.name }}
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary);">
+                  模型: {{ apiSettings.raw_model || apiSettings.providerInfo.model }}
+                </div>
+              </div>
+
+              <div v-if="apiSettings.model && !apiSettings.providerInfo" style="display: flex; justify-content: space-between; padding: 10px 15px; background: var(--bg-color); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">模型</span>
+                <span style="color: var(--text-color);">{{ apiSettings.model }}</span>
+              </div>
+
+              <div v-if="apiSettings.base_url" style="display: flex; flex-direction: column; gap: 4px; padding: 10px 15px; background: var(--bg-color); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">API 地址</span>
+                <span style="color: var(--text-color); font-size: 12px; word-break: break-all;">{{ apiSettings.base_url }}</span>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; padding: 10px 15px; background: var(--bg-color); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">温度</span>
+                <span style="color: var(--text-color);">{{ apiSettings.temperature }}</span>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; padding: 10px 15px; background: var(--bg-color); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">最大令牌数</span>
+                <span style="color: var(--text-color);">{{ apiSettings.max_tokens }}</span>
+              </div>
+
+              <!-- 可用的模型提供商列表 -->
+              <div v-if="apiSettings.modelProviders && apiSettings.modelProviders.length > 0" style="margin-top: 10px;">
+                <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">
+                  <i class="fa-solid fa-list"></i> 可用的模型服务 ({{ apiSettings.modelProviders.length }})
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                  <span
+                    v-for="provider in apiSettings.modelProviders"
+                    :key="provider.id"
+                    :style="{
+                      padding: '6px 12px',
+                      borderRadius: '15px',
+                      fontSize: '13px',
+                      background: provider.id === apiSettings.selectedProvider ? 'linear-gradient(135deg, var(--primary-color), var(--secondary-color))' : 'var(--bg-color)',
+                      color: provider.id === apiSettings.selectedProvider ? 'white' : 'var(--text-color)',
+                      border: provider.id === apiSettings.selectedProvider ? 'none' : '1px solid var(--border-color)'
+                    }"
+                  >
+                    <i :class="provider.type === 'builtin' ? 'fa-solid fa-cube' : 'fa-solid fa-puzzle-piece'" style="margin-right: 4px;"></i>
+                    {{ provider.name }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 模型选项 -->
+          <div class="settings-group" style="margin-top: 15px;">
+            <div class="settings-group-title">
+              <i class="fa-solid fa-brain"></i> 模型选项
+            </div>
+
+            <div style="display: grid; gap: 12px;">
+              <!-- 启用思考 -->
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: var(--bg-color); border-radius: 8px;">
+                <div>
+                  <span style="color: var(--text-color); font-weight: 500;">启用深度思考</span>
+                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                    让模型先思考再回答，适合复杂问题（会增加响应时间）
+                  </div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="modelOptions.enableThinking">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <!-- 思考模式说明 -->
+              <div v-if="modelOptions.enableThinking" style="padding: 10px 15px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); border-radius: 8px; border: 1px solid var(--primary-color);">
+                <div style="display: flex; align-items: flex-start; gap: 8px; font-size: 13px;">
+                  <i class="fa-solid fa-lightbulb" style="color: var(--primary-color); margin-top: 2px;"></i>
+                  <div>
+                    <div style="color: var(--text-color); margin-bottom: 4px;">深度思考模式已启用</div>
+                    <div style="color: var(--text-secondary); font-size: 12px;">
+                      模型会先进行推理分析，然后给出更详细的回答。适用于：
+                      <ul style="margin: 4px 0; padding-left: 16px;">
+                        <li>复杂学术问题</li>
+                        <li>需要推理的任务</li>
+                        <li>深度分析需求</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else style="padding: 10px 15px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border: 1px solid var(--success-color);">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                  <i class="fa-solid fa-bolt" style="color: var(--success-color);"></i>
+                  <span style="color: var(--text-color);">快速响应模式 - 适合日常对话和简单问题</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 快速应答模型设置 -->
+          <div class="settings-group" style="margin-top: 15px;">
+            <div class="settings-group-title">
+              <i class="fa-solid fa-bolt"></i> 快速应答模型
+              <span style="margin-left: auto; font-size: 12px; font-weight: normal; color: var(--text-secondary);">
+                优先使用快速模型获得即时响应
+              </span>
+            </div>
+
+            <div style="display: grid; gap: 12px;">
+              <!-- 启用开关 -->
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: var(--bg-color); border-radius: 8px;">
+                <div>
+                  <span style="color: var(--text-color); font-weight: 500;">启用快速模型</span>
+                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">自动选择更快的模型响应</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="fastModelSettings.enabled">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <!-- 触发模式 -->
+              <div v-if="fastModelSettings.enabled" style="padding: 12px 15px; background: var(--bg-color); border-radius: 8px;">
+                <div style="color: var(--text-secondary); margin-bottom: 8px; font-size: 13px;">触发模式</div>
+                <div style="display: flex; gap: 10px;">
+                  <label class="radio-option" :class="{ active: fastModelSettings.triggerMode === 'conditional' }">
+                    <input type="radio" v-model="fastModelSettings.triggerMode" value="conditional">
+                    <span>条件触发</span>
+                  </label>
+                  <label class="radio-option" :class="{ active: fastModelSettings.triggerMode === 'always' }">
+                    <input type="radio" v-model="fastModelSettings.triggerMode" value="always">
+                    <span>始终使用</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 条件设置 -->
+              <div v-if="fastModelSettings.enabled && fastModelSettings.triggerMode === 'conditional'" style="padding: 12px 15px; background: var(--bg-color); border-radius: 8px;">
+                <div style="color: var(--text-secondary); margin-bottom: 10px; font-size: 13px;">触发条件</div>
+
+                <div style="display: grid; gap: 10px;">
+                  <!-- 字数限制 -->
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 14px; color: var(--text-color);">消息字数上限</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <input type="number" v-model.number="fastModelSettings.conditionMaxLen" min="0" max="1000"
+                        style="width: 80px; padding: 6px 10px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-color); text-align: center;">
+                      <span style="color: var(--text-secondary); font-size: 12px;">字 (0=不限)</span>
+                    </div>
+                  </div>
+
+                  <!-- 禁止换行 -->
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 14px; color: var(--text-color);">禁止换行消息</span>
+                    <label class="toggle-switch small">
+                      <input type="checkbox" v-model="fastModelSettings.conditionNoNewline">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+
+                  <!-- 禁止文件 -->
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 14px; color: var(--text-color);">禁止带文件消息</span>
+                    <label class="toggle-switch small">
+                      <input type="checkbox" v-model="fastModelSettings.conditionNoFiles">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 快速模型提供商选择 -->
+              <div v-if="fastModelSettings.enabled && apiSettings.modelProviders && apiSettings.modelProviders.length > 0"
+                   style="padding: 12px 15px; background: var(--bg-color); border-radius: 8px;">
+                <div style="color: var(--text-secondary); margin-bottom: 8px; font-size: 13px;">
+                  <i class="fa-solid fa-microchip"></i> 选择快速模型
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                  <span
+                    v-for="provider in apiSettings.modelProviders"
+                    :key="'fast-' + provider.id"
+                    @click="fastModelSettings.selectedProvider = provider.id"
+                    :style="{
+                      padding: '8px 14px',
+                      borderRadius: '15px',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      background: provider.id === fastModelSettings.selectedProvider ? 'linear-gradient(135deg, var(--success-color), #059669)' : 'var(--card-bg)',
+                      color: provider.id === fastModelSettings.selectedProvider ? 'white' : 'var(--text-color)',
+                      border: provider.id === fastModelSettings.selectedProvider ? 'none' : '1px solid var(--border-color)',
+                      transition: 'all 0.2s'
+                    }"
+                  >
+                    <i class="fa-solid fa-bolt" style="margin-right: 4px;"></i>
+                    {{ provider.name }}
+                  </span>
+                </div>
+                <div v-if="!fastModelSettings.selectedProvider" style="margin-top: 8px; font-size: 12px; color: var(--warning-color);">
+                  <i class="fa-solid fa-exclamation-triangle"></i> 请选择一个快速模型
+                </div>
+              </div>
+
+              <!-- 当前状态提示 -->
+              <div v-if="fastModelSettings.enabled" style="padding: 10px 15px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%); border-radius: 8px; border: 1px solid var(--success-color);">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                  <i class="fa-solid fa-bolt" style="color: var(--success-color);"></i>
+                  <span style="color: var(--text-color);">
+                    快速模型已启用
+                    <span v-if="fastModelSettings.triggerMode === 'conditional'">- 条件触发模式</span>
+                    <span v-else>- 始终使用模式</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-modal-footer">
+          <button @click="showSettingsModal = false" class="settings-btn settings-btn-secondary">关闭</button>
+          <button @click="saveFastModelSettings" class="settings-btn settings-btn-primary">
+            <i class="fa-solid fa-save"></i> 保存快速模型设置
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.21/dist/vue.global.prod.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- 本地化 JS 库 -->
+  <script src="libs/vue.global.prod.js"></script>
+  <script src="libs/marked.min.js"></script>
   <script>
     const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
 
@@ -1476,11 +2356,46 @@
         const chatMessages = ref(null);
         const sessionId = ref('session_' + Date.now());
 
+        // 对话历史管理
+        const showHistoryModal = ref(false);
+        const chatHistoryList = ref([]);
+        const loadingHistory = ref(false);
+
+        // 设置弹窗
+        const showSettingsModal = ref(false);
+        const apiSettings = ref({
+          api_key: '',
+          api_key_configured: false,
+          base_url: '',
+          model: '',
+          raw_model: '',
+          selectedProvider: null,
+          providerInfo: null,
+          temperature: 0.7,
+          max_tokens: 2048,
+          modelProviders: []
+        });
+
         const tencentSession = ref({
           sessionId: null,
           playUrl: null,
           status: 'disconnected',
           isConnected: false
+        });
+
+        // 模型选项
+        const modelOptions = ref({
+          enableThinking: false  // 是否启用深度思考
+        });
+
+        // 快速应答模型设置
+        const fastModelSettings = ref({
+          enabled: false,
+          triggerMode: 'conditional',  // 'conditional' 或 'always'
+          selectedProvider: null,
+          conditionMaxLen: 100,  // 消息字数上限，0表示不限
+          conditionNoNewline: true,  // 禁止换行消息
+          conditionNoFiles: true  // 禁止带文件消息
         });
 
         const growth = ref({
@@ -1645,6 +2560,12 @@
           return collaborationRecords.value.filter(r => r.type === collabFilter.value);
         });
 
+        // 检查是否有流式内容正在显示（最后一条助手消息有内容）
+        const hasStreamingContent = computed(() => {
+          const lastMsg = messages.value[messages.value.length - 1];
+          return lastMsg && lastMsg.role === 'assistant' && lastMsg.content && lastMsg.content.length > 0;
+        });
+
         const quickQuestions = computed(() => {
           const questions = {
             'research-assistant': [
@@ -1760,6 +2681,249 @@
           });
         };
 
+        // ==================== 对话历史管理 ====================
+
+        // 加载历史会话列表
+        const loadChatHistoryList = async () => {
+          loadingHistory.value = true;
+          try {
+            const response = await fetch('/api/education/chat/history');
+            const data = await response.json();
+            chatHistoryList.value = (data.sessions || []).sort((a, b) =>
+              (b.last_message_time || '').localeCompare(a.last_message_time || '')
+            );
+          } catch (error) {
+            console.error('加载历史失败:', error);
+          } finally {
+            loadingHistory.value = false;
+          }
+        };
+
+        // 加载指定会话
+        const loadHistorySession = async (targetSessionId) => {
+          try {
+            const response = await fetch(`/api/education/chat/history?session_id=${targetSessionId}`);
+            const data = await response.json();
+            if (data.history) {
+              messages.value = data.history;
+              sessionId.value = targetSessionId;
+              showHistoryModal.value = false;
+              await nextTick();
+              scrollToBottom();
+            }
+          } catch (error) {
+            console.error('加载会话失败:', error);
+            alert('加载会话失败');
+          }
+        };
+
+        // 删除指定会话
+        const deleteHistorySession = async (targetSessionId) => {
+          if (!confirm('确定要删除这个会话吗？')) return;
+
+          try {
+            await fetch(`/api/education/chat/history/${targetSessionId}`, {
+              method: 'DELETE'
+            });
+            chatHistoryList.value = chatHistoryList.value.filter(s => s.session_id !== targetSessionId);
+
+            // 如果删除的是当前会话，清空消息
+            if (sessionId.value === targetSessionId) {
+              messages.value = [];
+              sessionId.value = 'session_' + Date.now();
+            }
+          } catch (error) {
+            console.error('删除会话失败:', error);
+            alert('删除会话失败');
+          }
+        };
+
+        // 清空当前对话
+        const clearCurrentChat = () => {
+          if (messages.value.length === 0) return;
+          if (!confirm('确定要清空当前对话吗？')) return;
+
+          messages.value = [];
+          sessionId.value = 'session_' + Date.now();
+        };
+
+        // 清空所有历史
+        const clearAllHistory = async () => {
+          if (!confirm('确定要清空所有历史对话吗？此操作不可恢复！')) return;
+
+          try {
+            // 逐个删除
+            for (const session of chatHistoryList.value) {
+              await fetch(`/api/education/chat/history/${session.session_id}`, {
+                method: 'DELETE'
+              });
+            }
+            chatHistoryList.value = [];
+            messages.value = [];
+            sessionId.value = 'session_' + Date.now();
+            showHistoryModal.value = false;
+          } catch (error) {
+            console.error('清空历史失败:', error);
+            alert('清空历史失败');
+          }
+        };
+
+        // 监听模态框打开时加载历史
+        watch(showHistoryModal, (newVal) => {
+          if (newVal) {
+            loadChatHistoryList();
+          }
+        });
+
+        // ==================== API 设置管理 ====================
+
+        // 加载 API 设置
+        const loadApiSettings = async () => {
+          try {
+            const response = await fetch('/api/education/settings');
+            if (response.ok) {
+              const data = await response.json();
+              apiSettings.value = {
+                api_key: '',  // 始终为空，用户需要重新输入才能修改
+                api_key_configured: data.api_key_configured || false,
+                base_url: data.base_url || '',
+                model: data.model || '',
+                raw_model: data.raw_model || '',
+                selectedProvider: data.selectedProvider || null,
+                providerInfo: data.providerInfo || null,
+                temperature: data.temperature ?? 0.7,
+                max_tokens: data.max_tokens ?? 2048,
+                modelProviders: data.modelProviders || []
+              };
+            }
+          } catch (error) {
+            console.error('加载设置失败:', error);
+          }
+        };
+
+        // 保存 API 设置
+        const saveApiSettings = async () => {
+          try {
+            // 只发送非空字段，避免覆盖已配置的设置
+            const settingsToSave = {};
+            if (apiSettings.value.api_key && apiSettings.value.api_key.trim()) {
+              settingsToSave.api_key = apiSettings.value.api_key.trim();
+            }
+            if (apiSettings.value.base_url) {
+              settingsToSave.base_url = apiSettings.value.base_url.trim();
+            }
+            if (apiSettings.value.model) {
+              settingsToSave.model = apiSettings.value.model.trim();
+            }
+            if (apiSettings.value.temperature !== undefined) {
+              settingsToSave.temperature = apiSettings.value.temperature;
+            }
+            if (apiSettings.value.max_tokens !== undefined) {
+              settingsToSave.max_tokens = apiSettings.value.max_tokens;
+            }
+
+            const response = await fetch('/api/education/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(settingsToSave)
+            });
+
+            if (response.ok) {
+              alert('设置保存成功！');
+              showSettingsModal.value = false;
+              // 重新加载设置以更新状态
+              await loadApiSettings();
+            } else {
+              const error = await response.json();
+              alert('保存失败: ' + (error.detail || '未知错误'));
+            }
+          } catch (error) {
+            console.error('保存设置失败:', error);
+            alert('保存设置失败');
+          }
+        };
+
+        // 保存快速应答模型设置
+        const saveFastModelSettings = async () => {
+          try {
+            // 获取当前完整设置
+            const currentSettingsResponse = await fetch('/api/education/settings');
+            let currentSettings = {};
+            if (currentSettingsResponse.ok) {
+              currentSettings = await currentSettingsResponse.json();
+            }
+
+            // 合并设置
+            const settingsToSave = {
+              ...currentSettings,
+              fast: fastModelSettings.value,
+              modelOptions: modelOptions.value
+            };
+
+            const response = await fetch('/api/education/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(settingsToSave)
+            });
+
+            if (response.ok) {
+              alert('设置已保存！');
+              showSettingsModal.value = false;
+            } else {
+              const error = await response.json();
+              alert('保存失败: ' + (error.detail || '未知错误'));
+            }
+          } catch (error) {
+            console.error('保存设置失败:', error);
+            alert('保存设置失败');
+          }
+        };
+
+        // 加载快速模型设置
+        const loadFastModelSettings = async () => {
+          try {
+            const response = await fetch('/api/education/settings');
+            if (response.ok) {
+              const data = await response.json();
+              // 加载快速模型配置
+              if (data.fast) {
+                fastModelSettings.value = {
+                  enabled: data.fast.enabled ?? false,
+                  triggerMode: data.fast.triggerMode ?? 'conditional',
+                  selectedProvider: data.fast.selectedProvider ?? null,
+                  conditionMaxLen: data.fast.conditionMaxLen ?? 100,
+                  conditionNoNewline: data.fast.conditionNoNewline ?? true,
+                  conditionNoFiles: data.fast.conditionNoFiles ?? true
+                };
+              }
+              // 加载模型选项
+              if (data.modelOptions) {
+                modelOptions.value = {
+                  enableThinking: data.modelOptions.enableThinking ?? false
+                };
+              }
+              // 如果没有选择快速模型提供商，默认选择一个不同的
+              if (!fastModelSettings.value.selectedProvider && data.modelProviders && data.modelProviders.length > 1) {
+                const currentProviderId = data.selectedProvider;
+                const otherProvider = data.modelProviders.find(p => p.id !== currentProviderId);
+                if (otherProvider) {
+                  fastModelSettings.value.selectedProvider = otherProvider.id;
+                }
+              }
+            }
+          } catch (error) {
+            console.error('加载快速模型设置失败:', error);
+          }
+        };
+
+        // 监听设置弹窗打开时加载设置
+        watch(showSettingsModal, (newVal) => {
+          if (newVal) {
+            loadApiSettings();
+            loadFastModelSettings();
+          }
+        });
+
         const sendMessage = async () => {
           if (!chatInput.value.trim() || isTyping.value) return;
 
@@ -1778,7 +2942,8 @@
               content: m.content
             }));
 
-            const response = await fetch('/api/education/chat', {
+            // 使用流式传输
+            const response = await fetch('/api/education/chat/stream', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1789,52 +2954,101 @@
               })
             });
 
-            const data = await response.json();
+            if (!response.ok) {
+              throw new Error('请求失败');
+            }
 
-            if (response.ok) {
-              messages.value.push({
-                role: 'assistant',
-                content: data.response,
-                timestamp: new Date().toISOString()
-              });
+            // 创建助手消息占位
+            const assistantIndex = messages.value.length;
+            messages.value.push({
+              role: 'assistant',
+              content: '',
+              timestamp: new Date().toISOString()
+            });
 
-              // 更新经验值
-              if (data.exp_gained) {
-                growth.value.exp += data.exp_gained;
-                growth.value.totalExp += data.exp_gained;
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullContent = '';
+            let emotion = 'neutral';
+            let expGained = 10;
 
-                // 检查升级
-                while (growth.value.exp >= expForNextLevel.value) {
-                  growth.value.exp -= expForNextLevel.value;
-                  growth.value.level++;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value, { stream: true });
+              const lines = chunk.split('\n');
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
+
+                    if (data.error) {
+                      messages.value[assistantIndex].content = `抱歉，出现问题：${data.error}`;
+                      break;
+                    }
+
+                    if (data.content) {
+                      fullContent += data.content;
+                      messages.value[assistantIndex].content = fullContent;
+                      await nextTick();
+                      scrollToBottom();
+                    }
+
+                    if (data.done) {
+                      emotion = data.emotion || 'neutral';
+                      expGained = data.exp_gained || 10;
+                    }
+                  } catch (e) {
+                    // 忽略解析错误
+                  }
                 }
+              }
+            }
 
-                // 更新统计
-                growth.value.stats.conversations = (growth.value.stats.conversations || 0) + 1;
+            // 确保消息有内容
+            if (!messages.value[assistantIndex].content) {
+              messages.value[assistantIndex].content = fullContent || '（无回复）';
+            }
+
+            // 更新经验值
+            if (expGained) {
+              growth.value.exp += expGained;
+              growth.value.totalExp += expGained;
+
+              // 检查升级
+              while (growth.value.exp >= expForNextLevel.value) {
+                growth.value.exp -= expForNextLevel.value;
+                growth.value.level++;
               }
 
-              // 保存对话历史
-              await fetch('/api/education/chat/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  session_id: sessionId.value,
-                  message: { role: 'user', content: userMessage }
-                })
-              });
+              // 更新统计
+              growth.value.stats.conversations = (growth.value.stats.conversations || 0) + 1;
 
-              await fetch('/api/education/chat/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  session_id: sessionId.value,
-                  message: { role: 'assistant', content: data.response }
-                })
-              });
-
-            } else {
-              throw new Error(data.detail || '请求失败');
+              // 检查成就
+              await checkAchievements();
             }
+
+            // 保存对话历史
+            await fetch('/api/education/chat/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: sessionId.value,
+                message: { role: 'user', content: userMessage }
+              })
+            });
+
+            await fetch('/api/education/chat/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: sessionId.value,
+                message: { role: 'assistant', content: fullContent }
+              })
+            });
+
           } catch (error) {
             messages.value.push({
               role: 'assistant',
@@ -1934,6 +3148,143 @@
           }
         };
 
+        // ==================== 导出和学习报告功能 ====================
+
+        const exportLoading = ref(false);
+        const showExportMenu = ref(false);
+
+        // 格式转换：前端使用 docx，后端使用 word
+        const convertFormat = (format) => format === 'docx' ? 'word' : format;
+
+        // 导出单个协作记录
+        const exportCollaboration = async (record, format = 'docx') => {
+          if (!record || !record.id) {
+            alert('请选择要导出的协作记录');
+            return;
+          }
+          exportLoading.value = true;
+          try {
+            const response = await fetch('/api/education/collaboration/export', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: record.id,
+                format: convertFormat(format)
+              })
+            });
+            if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              throw new Error(errData.detail || '导出失败');
+            }
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ext = format === 'pdf' ? 'pdf' : 'docx';
+            a.download = `协作记录_${record.title || record.type}_${new Date().toISOString().slice(0,10)}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+          } catch (e) {
+            console.error('导出协作记录失败:', e);
+            alert('导出失败: ' + e.message);
+          } finally {
+            exportLoading.value = false;
+          }
+        };
+
+        // 导出所有协作记录
+        const exportAllCollaborations = async (format = 'docx') => {
+          exportLoading.value = true;
+          try {
+            const response = await fetch('/api/education/collaboration/export_all', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                format: convertFormat(format),
+                session_type: collabFilter.value === 'all' ? null : collabFilter.value
+              })
+            });
+            if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              throw new Error(errData.detail || '导出失败');
+            }
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ext = format === 'pdf' ? 'pdf' : 'docx';
+            a.download = `协作记录汇总_${new Date().toISOString().slice(0,10)}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+          } catch (e) {
+            console.error('导出所有协作记录失败:', e);
+            alert('导出失败: ' + e.message);
+          } finally {
+            exportLoading.value = false;
+          }
+        };
+
+        // 生成学习报告
+        const learningReport = ref(null);
+        const reportLoading = ref(false);
+
+        const generateLearningReport = async () => {
+          reportLoading.value = true;
+          try {
+            const response = await fetch('/api/education/report/generate');
+            if (!response.ok) throw new Error('生成报告失败');
+            learningReport.value = await response.json();
+          } catch (e) {
+            console.error('生成学习报告失败:', e);
+            alert('生成报告失败: ' + e.message);
+          } finally {
+            reportLoading.value = false;
+          }
+        };
+
+        // 导出学习报告文档
+        const exportLearningReport = async (format = 'docx') => {
+          reportLoading.value = true;
+          try {
+            const response = await fetch('/api/education/report/export', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ format: convertFormat(format) })
+            });
+            if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              throw new Error(errData.detail || '导出报告失败');
+            }
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ext = format === 'pdf' ? 'pdf' : 'docx';
+            a.download = `学习报告_${new Date().toISOString().slice(0,10)}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+          } catch (e) {
+            console.error('导出学习报告失败:', e);
+            alert('导出失败: ' + e.message);
+          } finally {
+            reportLoading.value = false;
+          }
+        };
+
+        // 显示学习报告弹窗
+        const showReportModal = ref(false);
+
+        const openReportModal = async () => {
+          showReportModal.value = true;
+          await generateLearningReport();
+        };
+
         // ==================== 语音交互功能 ====================
 
         const toggleVoiceRecording = async () => {
@@ -2006,13 +3357,20 @@
               const base64Audio = e.target.result.split(',')[1];
 
               try {
+                // 构建历史消息
+                const history = messages.value.slice(-10).map(m => ({
+                  role: m.role,
+                  content: m.content
+                }));
+
                 // 构建请求参数，根据数字人类型决定路由
                 const requestBody = {
                   audio_data: base64Audio,
                   skill_id: currentSkill.value,
                   session_id: sessionId.value,
                   language: 'zh',
-                  digital_human_type: digitalHumanType.value
+                  digital_human_type: digitalHumanType.value,
+                  history: history
                 };
 
                 // 如果是腾讯数智人，传递会话 ID
@@ -2066,6 +3424,9 @@
                     }
 
                     growth.value.stats.conversations = (growth.value.stats.conversations || 0) + 1;
+
+                    // 检查成就
+                    await checkAchievements();
                   }
 
                   await nextTick();
@@ -2184,6 +3545,131 @@
           };
         };
 
+        // ==================== 成就系统 ====================
+
+        const checkAchievements = async () => {
+          // 检查所有成就条件
+          const conditions = {
+            'first_chat': growth.value.stats.conversations >= 1,
+            'paper_reader': growth.value.stats.papersRead >= 10,
+            'experiment_designer': growth.value.stats.experimentsDesigned >= 5,
+            'paper_writer': growth.value.stats.papersWritten >= 1,
+            'level_5': growth.value.level >= 5,
+            'level_10': growth.value.level >= 10,
+            'collaboration_master': collabStats.value.totalSessions >= 20,
+            'knowledge_seeker': Object.keys(skillUsage.value).length >= 4
+          };
+
+          for (const [achievementId, condition] of Object.entries(conditions)) {
+            if (condition) {
+              const achievement = achievements.value.find(a => a.id === achievementId);
+              if (achievement && !achievement.unlocked) {
+                await unlockAchievement(achievementId);
+              }
+            }
+          }
+        };
+
+        const unlockAchievement = async (achievementId) => {
+          try {
+            const response = await fetch('/api/education/achievements/unlock', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ achievement_id: achievementId })
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.status === 'success') {
+                // 更新本地状态
+                const achievement = achievements.value.find(a => a.id === achievementId);
+                if (achievement) {
+                  achievement.unlocked = true;
+                  achievement.unlockedAt = new Date().toISOString();
+                }
+
+                // 显示通知
+                showAchievementNotification(achievement);
+              }
+            }
+          } catch (error) {
+            console.error('解锁成就失败:', error);
+          }
+        };
+
+        const showAchievementNotification = (achievement) => {
+          // 创建通知元素
+          const notification = document.createElement('div');
+          notification.className = 'achievement-notification';
+          notification.innerHTML = `
+            <div class="achievement-notification-content">
+              <i class="${achievement.icon}"></i>
+              <div>
+                <div class="achievement-title">🎉 成就解锁！</div>
+                <div class="achievement-name">${achievement.name}</div>
+                <div class="achievement-desc">${achievement.description}</div>
+              </div>
+            </div>
+          `;
+
+          // 添加样式
+          notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 16px 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+            z-index: 9999;
+            animation: slideIn 0.5s ease, fadeOut 0.5s ease 3s forwards;
+          `;
+
+          // 添加动画样式
+          if (!document.getElementById('achievement-styles')) {
+            const style = document.createElement('style');
+            style.id = 'achievement-styles';
+            style.textContent = `
+              @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+              }
+              @keyframes fadeOut {
+                to { opacity: 0; transform: translateX(100%); }
+              }
+              .achievement-notification-content {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+              }
+              .achievement-notification-content i {
+                font-size: 32px;
+              }
+              .achievement-title {
+                font-size: 12px;
+                opacity: 0.8;
+              }
+              .achievement-name {
+                font-size: 16px;
+                font-weight: bold;
+              }
+              .achievement-desc {
+                font-size: 12px;
+                opacity: 0.8;
+              }
+            `;
+            document.head.appendChild(style);
+          }
+
+          document.body.appendChild(notification);
+
+          // 3.5秒后移除
+          setTimeout(() => {
+            notification.remove();
+          }, 4000);
+        };
+
         // 加载数据
         const loadData = async () => {
           try {
@@ -2233,6 +3719,13 @@
           setTimeout(() => {
             document.getElementById('loadingOverlay').classList.add('hidden');
           }, 500);
+
+          // 点击外部关闭下拉菜单
+          document.addEventListener('click', (e) => {
+            if (showExportMenu.value && !e.target.closest('.export-dropdown')) {
+              showExportMenu.value = false;
+            }
+          });
         });
 
         return {
@@ -2264,6 +3757,7 @@
           expPercentage,
           unlockedAchievements,
           filteredRecords,
+          hasStreamingContent,
           quickQuestions,
           switchAvatarType,
           createTencentSession,
@@ -2280,7 +3774,39 @@
           formatDate,
           showRecordDetail,
           getMergedContributions,
-          refreshCollaboration
+          refreshCollaboration,
+          checkAchievements,
+          // 导出和学习报告
+          exportLoading,
+          showExportMenu,
+          exportCollaboration,
+          exportAllCollaborations,
+          learningReport,
+          reportLoading,
+          generateLearningReport,
+          exportLearningReport,
+          showReportModal,
+          openReportModal,
+          // 对话历史管理
+          showHistoryModal,
+          chatHistoryList,
+          loadingHistory,
+          loadChatHistoryList,
+          loadHistorySession,
+          deleteHistorySession,
+          clearCurrentChat,
+          clearAllHistory,
+          // 设置弹窗
+          showSettingsModal,
+          apiSettings,
+          loadApiSettings,
+          saveApiSettings,
+          // 模型选项
+          modelOptions,
+          // 快速应答模型
+          fastModelSettings,
+          saveFastModelSettings,
+          loadFastModelSettings
         };
       }
     }).mount('#app');

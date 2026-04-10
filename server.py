@@ -802,7 +802,15 @@ async def lifespan(app: FastAPI):
     for ext_id in ext_ids:
         try: await node_mgr.stop(ext_id)
         except: pass
-        
+
+    # 关闭教育数字人数据存储
+    try:
+        from py.edu_storage import close_cache
+        await close_cache()
+        print("Education storage cache closed.")
+    except Exception as e:
+        print(f"Error closing education cache: {e}")
+
     if global_http_client:
         await global_http_client.aclose()
     print("All processes terminated.")
@@ -8912,6 +8920,129 @@ async def delete_file_endpoint(request: Request):
             return JSONResponse(content={"success": False, "message": "File not found"})
     except Exception as e:
         return JSONResponse(content={"success": False, "message": str(e)})
+
+# ========== 手写公式识别 API ==========
+class FormulaOCRRequest(BaseModel):
+    """公式识别请求"""
+    image: str  # base64 编码的图片（不含前缀）
+    api_key: Optional[str] = None  # 可选的 SimpleTex API Key（覆盖全局配置）
+
+@app.post("/api/formula_ocr")
+async def formula_ocr_endpoint(request: FormulaOCRRequest):
+    """
+    手写公式识别 API
+
+    接收 base64 编码的图片，返回 LaTeX 格式的公式
+    优先使用 SimpleTex API，失败时回退到多模态模型
+    """
+    from py.formula_ocr import recognize_formula, strip_base64_prefix
+
+    # 清理 base64 前缀
+    image_base64 = strip_base64_prefix(request.image)
+
+    # 从 settings 获取 API Key（优先使用请求参数覆盖）
+    formula_settings = settings.get("formulaOcrSettings", {}) if settings else {}
+    api_key = request.api_key or formula_settings.get("api_key", "")
+    model = formula_settings.get("model", "standard")  # standard 或 turbo
+
+    # 获取多模态客户端作为 fallback
+    fallback_client = client  # 全局 OpenAI 客户端
+    fallback_model = settings.get("openai_model", "gpt-4o") if settings else "gpt-4o"
+
+    result = await recognize_formula(
+        image_base64=image_base64,
+        api_key=api_key,
+        model=model,
+        fallback_client=fallback_client,
+        fallback_model=fallback_model
+    )
+
+    return JSONResponse(content=result)
+
+# ========== PDF 预览 API ==========
+class PDFPreviewRequest(BaseModel):
+    """PDF预览请求"""
+    file_path: str  # PDF文件路径
+    page_numbers: Optional[List[int]] = None  # 指定页码，None表示全部
+    scale: Optional[float] = 0.5  # 缩放比例
+
+class PDFInfoRequest(BaseModel):
+    """PDF信息请求"""
+    file_path: str  # PDF文件路径
+
+class PDFExtractRequest(BaseModel):
+    """PDF提取请求"""
+    file_path: str  # PDF文件路径
+    page_range: Optional[str] = None  # 页码范围，如 "1-5,8,10-12"
+    return_page_images: Optional[bool] = False  # 是否返回页面图像
+
+@app.post("/api/pdf_info")
+async def pdf_info_endpoint(request: PDFInfoRequest):
+    """
+    获取PDF文件信息
+
+    返回页数、元数据等信息
+    """
+    from py.load_files import get_pdf_info
+
+    try:
+        # 读取PDF文件
+        with open(request.file_path, 'rb') as f:
+            content = f.read()
+
+        info = await get_pdf_info(content)
+        return JSONResponse(content={"success": True, **info})
+    except Exception as e:
+        logger.error(f"PDF info error: {str(e)}")
+        return JSONResponse(content={"success": False, "error": str(e)})
+
+@app.post("/api/pdf_pages")
+async def pdf_pages_endpoint(request: PDFPreviewRequest):
+    """
+    获取PDF页面预览图像
+
+    返回指定页面的base64编码图像
+    """
+    from py.load_files import get_pdf_page_images
+
+    try:
+        # 读取PDF文件
+        with open(request.file_path, 'rb') as f:
+            content = f.read()
+
+        pages = await get_pdf_page_images(
+            content,
+            page_numbers=request.page_numbers,
+            scale=request.scale
+        )
+        return JSONResponse(content={"success": True, "pages": pages})
+    except Exception as e:
+        logger.error(f"PDF pages error: {str(e)}")
+        return JSONResponse(content={"success": False, "error": str(e)})
+
+@app.post("/api/pdf_extract")
+async def pdf_extract_endpoint(request: PDFExtractRequest):
+    """
+    提取PDF指定页面内容
+
+    支持页码范围选择和图像预览
+    """
+    from py.load_files import handle_pdf_enhanced
+
+    try:
+        # 读取PDF文件
+        with open(request.file_path, 'rb') as f:
+            content = f.read()
+
+        result = await handle_pdf_enhanced(
+            content,
+            page_range=request.page_range,
+            return_page_images=request.return_page_images
+        )
+        return JSONResponse(content={"success": True, **result})
+    except Exception as e:
+        logger.error(f"PDF extract error: {str(e)}")
+        return JSONResponse(content={"success": False, "error": str(e)})
 
 class FileNames(BaseModel):
     fileNames: List[str]

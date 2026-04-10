@@ -2583,9 +2583,18 @@ let vue_methods = {
             if (error.name !== 'AbortError') {
                 showNotification(error.message, 'error');
                 
-                // 【满足需求】：后端返回错误时，助手消息填入占位文本 "response error"
+                // 【满足需求】：后端返回错误时，助手消息填入具体错误信息
                 if (currentMsg) {
-                    const fallbackText = 'response error';
+                    // 提取更友好的错误提示
+                    let errorMsg = 'response error';
+                    if (error.message) {
+                        errorMsg = error.message;
+                        // 针对常见错误提供更友好的提示
+                        if (error.message.includes('没有配置模型服务商') || error.message.includes('NoModelProvidersConfigured')) {
+                            errorMsg = '⚠️ 未配置模型服务商\n\n请在设置页面配置模型提供商（如 OpenAI、DeepSeek、Ollama 等）后再使用对话功能。\n\n操作步骤：\n1. 点击右上角设置图标\n2. 选择"模型配置"或"Model Providers"\n3. 添加您的 API Key 和 Base URL';
+                        }
+                    }
+                    const fallbackText = errorMsg;
                     if (!currentMsg.pure_content && currentMsg.backend_content.length <= 1) {
                         currentMsg.content = fallbackText;
                         currentMsg.pure_content = fallbackText;
@@ -17058,6 +17067,340 @@ closeTaskCenter() {
         return await response.json();
       } catch (error) {
         return { status: 'error', message: error.message };
+      }
+    },
+
+    // ==================== 手写公式识别方法 ====================
+    // 打开手写板对话框
+    openHandwriteDialog() {
+      this.showHandwriteDialog = true;
+      this.handwriteResult = '';
+      this.handwriteError = null;
+      // 等待 DOM 渲染后初始化 Canvas
+      this.$nextTick(() => {
+        this.initHandwriteCanvas();
+      });
+    },
+
+    // 初始化手写 Canvas
+    initHandwriteCanvas() {
+      const canvas = document.getElementById('handwriteCanvas');
+      if (!canvas) return;
+
+      this.handwriteCanvas = canvas;
+      this.handwriteCtx = canvas.getContext('2d');
+
+      // 设置 Canvas 尺寸
+      const container = canvas.parentElement;
+      canvas.width = container.offsetWidth || 400;
+      canvas.height = 300;
+
+      // 设置白色背景
+      this.handwriteCtx.fillStyle = '#ffffff';
+      this.handwriteCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 设置画笔样式
+      this.handwriteCtx.strokeStyle = this.handwriteColor;
+      this.handwriteCtx.lineWidth = this.handwriteLineWidth;
+      this.handwriteCtx.lineCap = 'round';
+      this.handwriteCtx.lineJoin = 'round';
+
+      // 绑定事件
+      this.bindHandwriteEvents();
+    },
+
+    // 绑定手写事件
+    bindHandwriteEvents() {
+      const canvas = this.handwriteCanvas;
+      if (!canvas) return;
+
+      // 鼠标事件
+      canvas.onmousedown = (e) => this.startDrawing(e);
+      canvas.onmousemove = (e) => this.draw(e);
+      canvas.onmouseup = () => this.stopDrawing();
+      canvas.onmouseout = () => this.stopDrawing();
+
+      // 触摸事件
+      canvas.ontouchstart = (e) => {
+        e.preventDefault();
+        this.startDrawing(e.touches[0]);
+      };
+      canvas.ontouchmove = (e) => {
+        e.preventDefault();
+        this.draw(e.touches[0]);
+      };
+      canvas.ontouchend = () => this.stopDrawing();
+    },
+
+    // 开始绘制
+    startDrawing(e) {
+      this.isDrawing = true;
+      const rect = this.handwriteCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      this.handwriteCtx.beginPath();
+      this.handwriteCtx.moveTo(x, y);
+    },
+
+    // 绘制中
+    draw(e) {
+      if (!this.isDrawing) return;
+      const rect = this.handwriteCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      this.handwriteCtx.lineTo(x, y);
+      this.handwriteCtx.stroke();
+    },
+
+    // 停止绘制
+    stopDrawing() {
+      this.isDrawing = false;
+    },
+
+    // 清空画布
+    clearHandwriteCanvas() {
+      if (!this.handwriteCtx || !this.handwriteCanvas) return;
+      this.handwriteCtx.fillStyle = '#ffffff';
+      this.handwriteCtx.fillRect(0, 0, this.handwriteCanvas.width, this.handwriteCanvas.height);
+      this.handwriteResult = '';
+      this.handwriteError = null;
+    },
+
+    // 识别手写公式
+    async recognizeHandwrite() {
+      if (!this.handwriteCanvas) return;
+
+      this.handwriteRecognizing = true;
+      this.handwriteError = null;
+
+      try {
+        // 获取 Canvas 的 base64 数据
+        const imageBase64 = this.handwriteCanvas.toDataURL('image/png').split(',')[1];
+
+        const response = await fetch('/api/formula_ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageBase64 })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          this.handwriteResult = result.latex;
+          this.$message.success('公式识别成功！');
+        } else {
+          this.handwriteError = result.error || '识别失败';
+          this.$message.error(this.handwriteError);
+        }
+      } catch (error) {
+        this.handwriteError = error.message;
+        this.$message.error('识别请求失败: ' + error.message);
+      } finally {
+        this.handwriteRecognizing = false;
+      }
+    },
+
+    // 插入公式到输入框
+    insertFormulaToInput() {
+      if (!this.handwriteResult) return;
+
+      // 使用 LaTeX 格式插入（MathJax 可以渲染）
+      const latexCode = `$$${this.handwriteResult}$$`;
+
+      // 追加到用户输入
+      if (this.userInput) {
+        this.userInput += '\n' + latexCode;
+      } else {
+        this.userInput = latexCode;
+      }
+
+      this.$message.success('公式已插入输入框');
+      this.showHandwriteDialog = false;
+    },
+
+    // 复制公式
+    copyFormula() {
+      if (!this.handwriteResult) return;
+
+      navigator.clipboard.writeText(this.handwriteResult).then(() => {
+        this.$message.success('公式已复制到剪贴板');
+      }).catch(err => {
+        this.$message.error('复制失败: ' + err);
+      });
+    },
+
+    // ========== PDF 预览方法 ==========
+    async openPdfPreview(file) {
+      this.pdfPreviewFile = file;
+      this.pdfPreviewLoading = true;
+      this.pdfPreviewPages = [];
+      this.selectedPdfPages = [];
+      this.showPdfPreviewDialog = true;
+
+      try {
+        let filePath = file.path || file.url;
+
+        // 如果是 blob URL，需要先上传到服务器
+        if (filePath && filePath.startsWith('blob:')) {
+          const uploadedPath = await this.uploadPdfForPreview(file);
+          if (!uploadedPath) {
+            this.$message.error('上传PDF文件失败');
+            this.showPdfPreviewDialog = false;
+            this.pdfPreviewLoading = false;
+            return;
+          }
+          filePath = uploadedPath;
+          // 保存服务器路径供后续使用
+          this.pdfPreviewFile.serverPath = uploadedPath;
+        }
+
+        const response = await fetch('/api/pdf_info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_path: filePath })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          this.pdfTotalPages = data.page_count || 0;
+          // 加载页面缩略图
+          await this.loadPdfPageImages();
+        } else {
+          this.$message.error(data.error || '获取PDF信息失败');
+        }
+      } catch (err) {
+        console.error('PDF preview error:', err);
+        this.$message.error('打开PDF预览失败');
+      } finally {
+        this.pdfPreviewLoading = false;
+      }
+    },
+
+    async uploadPdfForPreview(file) {
+      try {
+        const formData = new FormData();
+        // 如果有 file.file 属性（File 对象），直接使用
+        if (file.file instanceof Blob) {
+          formData.append('files', file.file, file.name);
+        } else {
+          // 否则从 blob URL 获取
+          const response = await fetch(file.path);
+          const blob = await response.blob();
+          formData.append('files', blob, file.name);
+        }
+
+        const uploadResponse = await fetch('/load_file', {
+          method: 'POST',
+          body: formData
+        });
+        const uploadData = await uploadResponse.json();
+
+        if (uploadData.success && uploadData.fileLinks && uploadData.fileLinks[0]) {
+          // 将上传的文件添加到 textFiles
+          if (uploadData.textFiles) {
+            this.textFiles = [...this.textFiles, ...uploadData.textFiles];
+          }
+          return uploadData.fileLinks[0].path;
+        }
+        return null;
+      } catch (err) {
+        console.error('Upload PDF error:', err);
+        return null;
+      }
+    },
+
+    async loadPdfPageImages() {
+      if (!this.pdfPreviewFile) return;
+
+      try {
+        // 使用服务器路径（如果有）或原始路径
+        const filePath = this.pdfPreviewFile.serverPath || this.pdfPreviewFile.path || this.pdfPreviewFile.url;
+
+        // 加载所有页面缩略图
+        const response = await fetch('/api/pdf_pages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_path: filePath,
+            scale: this.pdfPreviewScale
+          })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          this.pdfPreviewPages = data.pages.map((img, idx) => ({
+            pageNum: idx + 1,
+            image: img,
+            selected: false
+          }));
+        }
+      } catch (err) {
+        console.error('Load PDF pages error:', err);
+      }
+    },
+
+    togglePdfPageSelection(pageNum) {
+      const idx = this.selectedPdfPages.indexOf(pageNum);
+      if (idx > -1) {
+        this.selectedPdfPages.splice(idx, 1);
+      } else {
+        this.selectedPdfPages.push(pageNum);
+      }
+      // 更新页面选中状态
+      const page = this.pdfPreviewPages.find(p => p.pageNum === pageNum);
+      if (page) page.selected = !page.selected;
+    },
+
+    selectAllPdfPages() {
+      this.selectedPdfPages = this.pdfPreviewPages.map(p => p.pageNum);
+      this.pdfPreviewPages.forEach(p => p.selected = true);
+    },
+
+    clearPdfPageSelection() {
+      this.selectedPdfPages = [];
+      this.pdfPreviewPages.forEach(p => p.selected = false);
+    },
+
+    async extractSelectedPdfPages() {
+      if (this.selectedPdfPages.length === 0) {
+        this.$message.warning('请先选择要提取的页面');
+        return;
+      }
+
+      this.pdfPreviewLoading = true;
+      try {
+        // 构建页码范围字符串
+        const pageRange = this.selectedPdfPages.sort((a, b) => a - b).join(',');
+        // 使用服务器路径（如果有）或原始路径
+        const filePath = this.pdfPreviewFile.serverPath || this.pdfPreviewFile.path || this.pdfPreviewFile.url;
+
+        const response = await fetch('/api/pdf_extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_path: filePath,
+            page_range: pageRange,
+            return_page_images: false
+          })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          // 将提取的内容添加到输入框
+          const text = data.text || '';
+          if (text) {
+            this.userInput += `\n[PDF内容 - 第${pageRange}页]\n${text}\n`;
+            this.$message.success(`已提取 ${this.selectedPdfPages.length} 页内容`);
+          }
+          this.showPdfPreviewDialog = false;
+        } else {
+          this.$message.error(data.error || '提取PDF内容失败');
+        }
+      } catch (err) {
+        console.error('Extract PDF error:', err);
+        this.$message.error('提取PDF内容失败');
+      } finally {
+        this.pdfPreviewLoading = false;
       }
     },
 

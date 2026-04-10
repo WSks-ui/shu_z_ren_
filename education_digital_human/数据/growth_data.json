@@ -1,17 +1,17 @@
 {
-  "level": 2,
-  "exp": 140,
-  "totalExp": 240,
+  "level": 4,
+  "exp": 200,
+  "totalExp": 750,
   "achievements": [
     "first_paper"
   ],
   "stats": {
     "papersReviewed": 0,
     "papersWritten": 2,
-    "experimentsDesigned": 2,
+    "experimentsDesigned": 4,
     "questionsAsked": 0,
     "learningHours": 0,
-    "conversations": 5,
+    "conversations": 50,
     "papers_read": 0,
     "experiments_designed": 0,
     "papers_written": 0,
@@ -20,20 +20,10 @@
     "papersRead": null,
     "tutoringSessions": null
   },
-  "emotionHistory": [
-    {
-      "emotion": "excited",
-      "intensity": 0.8,
-      "timestamp": "2026-04-09T10:05:49.908341"
-    },
-    {
-      "emotion": "excited",
-      "intensity": 0.8,
-      "timestamp": "2026-04-09T17:11:37.719693"
-    }
-  ],
   "skillUsage": {
-    "research-assistant": 2,
-    "literature-review": 1
+    "literature-review": 1,
+    "research-assistant": 4,
+    "academic-tutoring": 12,
+    "paper-writing": 2
   }
 }

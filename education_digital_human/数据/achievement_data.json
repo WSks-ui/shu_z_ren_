@@ -1,11 +1,31 @@
 {
   "unlocked": [
-    "first_paper"
+    "first_paper",
+    "first_chat",
+    "paper_writer",
+    "collaboration_master",
+    "knowledge_seeker"
   ],
   "history": [
     {
       "id": "first_paper",
       "unlockedAt": "2026-04-09T10:05:28.819570"
+    },
+    {
+      "id": "first_chat",
+      "unlockedAt": "2026-04-09T18:17:46.377592"
+    },
+    {
+      "id": "paper_writer",
+      "unlockedAt": "2026-04-09T18:17:46.382647"
+    },
+    {
+      "id": "collaboration_master",
+      "unlockedAt": "2026-04-09T18:32:44.965951"
+    },
+    {
+      "id": "knowledge_seeker",
+      "unlockedAt": "2026-04-10T01:17:12.881825"
     }
   ]
 }
