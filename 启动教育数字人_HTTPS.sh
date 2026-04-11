@@ -5,8 +5,8 @@ echo "========================================"
 echo ""
 
 # 设置魔珐星云配置（请修改为你的实际值）
-export XINGYUN_APP_ID="869cc917e55e42ffacb3abde578d597d"
-export XINGYUN_APP_SECRET="3b226e202c07463cb5db3c4c4575c75f"
+export XINGYUN_APP_ID=""
+export XINGYUN_APP_SECRET=""
 
 # 设置 SSL 证书路径（可选，默认使用项目目录下的 certs/）
 # export SSL_KEYFILE=/path/to/key.pem

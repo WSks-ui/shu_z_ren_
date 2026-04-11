@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>教育数字人 - 智能教育助手</title>
+
+  <!-- 预加载关键资源 -->
+  <link rel="preload" href="libs/element-plus.css" as="style">
+  <link rel="preload" href="libs/vue.global.prod.js" as="script">
+
+  <!-- 样式表 -->
+  <link href="libs/element-plus.css" rel="stylesheet">
+  <link href="fontawesome/css/all.min.css" rel="stylesheet">
+  <link href="css/education-glass.css" rel="stylesheet">
+
+  <!-- 字体 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- 加载动画 -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <p class="loading-text">正在加载教育数字人系统...</p>
+  </div>
+
+  <!-- 主应用 -->
+  <div class="app-container" id="app">
+    <!-- ==================== 左侧面板 - 数字人区域 ==================== -->
+    <div class="left-panel">
+      <header class="avatar-header">
+        <h1>
+          <i class="fa-solid fa-graduation-cap"></i>
+          教育数字人
+        </h1>
+        <button class="settings-btn" @click="showSettingsModal = true" title="配置API">
+          <i class="fa-solid fa-gear"></i>
+          <span>设置</span>
+        </button>
+      </header>
+
+      <div class="avatar-container">
+        <div id="xingyun-sdk-container"></div>
+        <div class="status-indicator">
+          <span class="status-dot" :class="{ connected: xingyunSession.isConnected }"></span>
+          {{ statusText }}
+        </div>
+      </div>
+
+      <div class="avatar-controls">
+        <input
+          type="text"
+          v-model="quickText"
+          placeholder="输入文字让数字人播报..."
+          @keyup.enter="sendQuickText"
+          :disabled="!xingyunSession.isConnected"
+        >
+        <button
+          v-if="!xingyunSession.isConnected"
+          class="btn btn-primary"
+          @click="createXingYunSession"
+          :disabled="xingyunSession.status === 'connecting'"
+        >
+          <i class="fa-solid fa-plug"></i> 连接
+        </button>
+        <button
+          v-else
+          class="btn btn-secondary"
+          @click="closeXingYunSession"
+        >
+          <i class="fa-solid fa-plug-circle-xmark"></i> 断开
+        </button>
+        <button
+          class="btn btn-primary"
+          @click="sendQuickText"
+          :disabled="!xingyunSession.isConnected"
+        >
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== 右侧面板 - 功能区域 ==================== -->
+    <div class="right-panel">
+      <!-- 标签页导航 -->
+      <nav class="tabs-header">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          class="tab-btn"
+          :class="{ active: activeTab === tab.id }"
+          @click="activeTab = tab.id"
+        >
+          <i :class="tab.icon"></i>
+          {{ tab.name }}
+        </button>
+      </nav>
+
+      <!-- 标签页内容 -->
+      <div class="tab-content">
+        <!-- 教育技能 -->
+        <div class="tab-panel" :class="{ active: activeTab === 'skills' }">
+          <div class="skills-grid">
+            <div
+              v-for="skill in skills"
+              :key="skill.id"
+              class="skill-card"
+              :class="{ active: currentSkill === skill.id }"
+              @click="selectSkill(skill.id)"
+            >
+              <div class="skill-icon">
+                <i :class="skill.icon"></i>
+              </div>
+              <h3>{{ skill.name }}</h3>
+              <p>{{ skill.description }}</p>
+              <span v-if="skillUsage[skill.id]" class="skill-badge">
+                使用 {{ skillUsage[skill.id] }} 次
+              </span>
+            </div>
+          </div>
+
+          <!-- 技能详情面板 -->
+          <div v-if="currentSkill && currentSkillDetail" class="skill-detail-panel">
+            <div class="skill-detail-header">
+              <div class="skill-detail-icon" :style="{ background: currentSkillDetail.gradient }">
+                <i :class="currentSkillDetail.icon" style="color: white;"></i>
+              </div>
+              <div class="skill-detail-info">
+                <h3>{{ currentSkillDetail.name }}</h3>
+                <p>{{ currentSkillDetail.description }}</p>
+              </div>
+            </div>
+            <div class="skill-features">
+              <div class="skill-feature" v-for="(feature, idx) in currentSkillDetail.features" :key="idx">
+                <i class="fa-solid fa-check-circle"></i>
+                <span>{{ feature }}</span>
+              </div>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: center; margin-top: 20px;">
+              <button class="btn btn-primary" @click="startConversation" style="padding: 14px 36px; font-size: 16px;">
+                <i class="fa-solid fa-play"></i> 开始使用
+              </button>
+              <button class="btn btn-secondary" @click="currentSkill = null" style="padding: 14px 24px;">
+                取消选择
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 成长系统 -->
+        <div class="tab-panel" :class="{ active: activeTab === 'growth' }">
+          <div class="growth-overview">
+            <div class="level-display">
+              <div class="level-badge">
+                <span class="level-num">{{ growth.level }}</span>
+                <span class="level-label">等级</span>
+              </div>
+              <div class="exp-info">
+                <h2>{{ levelTitle }}</h2>
+                <div class="exp-bar">
+                  <div class="exp-bar-fill" :style="{ width: expPercentage + '%' }"></div>
+                </div>
+                <span style="font-size: 14px; color: var(--text-secondary);">
+                  {{ growth.exp }} / {{ expForNextLevel }} 经验值 (总经验: {{ growth.totalExp }})
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card" v-for="stat in statCards" :key="stat.key">
+              <i :class="stat.icon"></i>
+              <div class="stat-value">{{ growth.stats[stat.key] || 0 }}</div>
+              <div class="stat-label">{{ stat.label }}</div>
+            </div>
+          </div>
+
+          <div class="achievements-section">
+            <h3><i class="fa-solid fa-trophy"></i> 成就徽章 ({{ unlockedAchievements }}/{{ achievements.length }})</h3>
+            <div class="achievements-grid">
+              <div
+                v-for="achievement in achievements"
+                :key="achievement.id"
+                class="achievement-card"
+                :class="{ unlocked: achievement.unlocked }"
+              >
+                <i :class="achievement.icon"></i>
+                <div class="achievement-name">{{ achievement.name }}</div>
+                <div class="achievement-desc">{{ achievement.description }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 协作记录 -->
+        <div class="tab-panel" :class="{ active: activeTab === 'records' }">
+          <div class="collaboration-header">
+            <h3><i class="fa-solid fa-handshake"></i> 人机协作统计</h3>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <button class="btn btn-primary" @click="openReportModal" style="padding: 8px 16px; font-size: 13px;">
+                <i class="fa-solid fa-chart-pie"></i> 学习报告
+              </button>
+              <div class="export-dropdown" style="position: relative;">
+                <button
+                  class="btn btn-secondary"
+                  @click="showExportMenu = !showExportMenu"
+                  :disabled="exportLoading || filteredRecords.length === 0"
+                  style="padding: 8px 16px; font-size: 13px;"
+                >
+                  <i class="fa-solid fa-download"></i>
+                  {{ exportLoading ? '导出中...' : (selectedSessionIds.length > 0 ? '导出选中' : '导出全部') }}
+                  <i class="fa-solid fa-caret-down"></i>
+                </button>
+                <div v-if="showExportMenu" class="export-menu">
+                  <button @click="exportSelectedCollaborations(); showExportMenu = false">
+                    <i class="fa-solid fa-file-word" style="color: var(--primary-400);"></i>
+                    导出为 Word
+                  </button>
+                  <div style="padding: 8px 15px; border-top: 1px solid var(--glass-border); font-size: 12px; color: var(--text-secondary);">
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                      <input type="checkbox" v-model="includeChatHistory" style="width: 14px; height: 14px;">
+                      包含聊天记录
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-secondary" @click="refreshCollaboration" style="padding: 8px 16px; font-size: 13px;">
+                <i class="fa-solid fa-refresh"></i> 刷新
+              </button>
+            </div>
+          </div>
+
+          <div class="collab-ratio" v-if="collabStats.totalSessions > 0">
+            <h4 style="margin-bottom: 15px;">协作贡献比例</h4>
+            <div class="ratio-bar">
+              <div class="ratio-ai" :style="{ width: collabStats.collaborationRatio?.ai + '%' }"></div>
+              <div class="ratio-human" :style="{ width: collabStats.collaborationRatio?.human + '%' }"></div>
+            </div>
+            <div class="ratio-labels">
+              <span><i class="fa-solid fa-robot"></i> AI 贡献: {{ collabStats.collaborationRatio?.ai || 0 }}%</span>
+              <span><i class="fa-solid fa-user"></i> 用户贡献: {{ collabStats.collaborationRatio?.human || 0 }}%</span>
+            </div>
+          </div>
+
+          <div class="collaboration-stats">
+            <div class="collab-stat">
+              <div class="value">{{ collabStats.totalSessions || 0 }}</div>
+              <div class="label">总会话数</div>
+            </div>
+            <div class="collab-stat">
+              <div class="value">{{ collabStats.totalAIContributions || 0 }}</div>
+              <div class="label">AI贡献</div>
+            </div>
+            <div class="collab-stat">
+              <div class="value">{{ collabStats.totalHumanContributions || 0 }}</div>
+              <div class="label">用户贡献</div>
+            </div>
+          </div>
+
+          <!-- 按类型筛选 -->
+          <div style="display: flex; gap: 8px; margin: 15px 0; flex-wrap: wrap;">
+            <button
+              v-for="ft in collabFilters"
+              :key="ft.key"
+              class="btn"
+              :class="collabFilter === ft.key ? 'btn-primary' : 'btn-secondary'"
+              @click="collabFilter = ft.key"
+              style="padding: 6px 14px; font-size: 13px;"
+            >{{ ft.label }}</button>
+          </div>
+
+          <!-- 导出选项 -->
+          <div style="display: flex; gap: 10px; margin: 10px 0; align-items: center; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" v-model="includeChatHistory" style="width: 16px; height: 16px;">
+              包含聊天记录
+            </label>
+            <span v-if="selectedSessionIds.length > 0" style="font-size: 13px; color: var(--primary-400);">
+              已选择 {{ selectedSessionIds.length }} 条记录
+            </span>
+            <button
+              v-if="selectedSessionIds.length > 0"
+              @click="selectedSessionIds = []"
+              class="btn btn-ghost"
+              style="padding: 4px 10px; font-size: 12px;"
+            >
+              清除选择
+            </button>
+          </div>
+
+          <div class="collaboration-list" style="margin-top: 10px;">
+            <div v-if="filteredRecords.length === 0" class="empty-state">
+              <i class="fa-solid fa-folder-open"></i>
+              <h3>暂无协作记录</h3>
+              <p>开始使用教育技能后将自动记录</p>
+            </div>
+            <div
+              v-for="record in filteredRecords"
+              :key="record.id"
+              class="collab-card"
+              :class="['type-' + record.type, { 'selected': selectedSessionIds.includes(record.id) }]"
+              @click="showRecordDetail(record)"
+              style="position: relative;"
+            >
+              <div @click.stop style="position: absolute; top: 10px; right: 10px;">
+                <input
+                  type="checkbox"
+                  :checked="selectedSessionIds.includes(record.id)"
+                  @change="toggleSessionSelection(record.id)"
+                  style="width: 18px; height: 18px; cursor: pointer;"
+                  @click.stop
+                >
+              </div>
+              <div class="collab-icon">
+                <i :class="getTypeIcon(record.type)"></i>
+              </div>
+              <div class="collab-info">
+                <h4>{{ record.title || getTypeName(record.type) + '协作' }}</h4>
+                <p>{{ record.summary || formatDate(record.startTime) }}</p>
+                <div class="collab-stats-inline">
+                  <span><i class="fa-solid fa-robot"></i> AI: {{ record.aiContributions?.length || 0 }}</span>
+                  <span><i class="fa-solid fa-user"></i> 用户: {{ record.humanContributions?.length || 0 }}</span>
+                  <span v-if="record.duration"><i class="fa-solid fa-clock"></i> {{ record.duration }}分钟</span>
+                  <span :style="{ color: record.endTime ? 'var(--text-secondary)' : 'var(--success-400)' }">
+                    <i :class="record.endTime ? 'fa-solid fa-check-circle' : 'fa-solid fa-circle-play'"></i>
+                    {{ record.endTime ? '已完成' : '进行中' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 对话 -->
+        <div class="tab-panel" :class="{ active: activeTab === 'chat' }">
+          <div class="chat-container">
+            <div class="chat-skill-selector">
+              <label>当前技能:</label>
+              <select v-model="currentSkill">
+                <option :value="null">-- 选择教育技能 --</option>
+                <option v-for="skill in skills" :key="skill.id" :value="skill.id">{{ skill.name }}</option>
+              </select>
+              <span v-if="currentSkill" style="color: var(--success-400); font-size: 14px;">
+                <i class="fa-solid fa-check-circle"></i> 已激活
+              </span>
+              <div style="margin-left: auto; display: flex; gap: 8px;">
+                <button @click="showHistoryModal = true" title="查看历史" class="btn btn-icon btn-sm btn-ghost">
+                  <i class="fa-solid fa-clock-rotate-left"></i>
+                </button>
+                <button
+                  @click="clearCurrentChat"
+                  title="清空对话"
+                  class="btn btn-icon btn-sm btn-ghost"
+                  :disabled="messages.length === 0"
+                >
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="chat-messages" ref="chatMessages">
+              <div v-if="messages.length === 0" class="empty-state">
+                <i class="fa-solid fa-comments"></i>
+                <h3>开始对话</h3>
+                <p>选择一个教育技能，输入你的问题</p>
+                <div v-if="currentSkill" style="margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+                  <button
+                    v-for="q in quickQuestions"
+                    :key="q"
+                    @click="chatInput = q"
+                    class="btn btn-secondary"
+                    style="padding: 8px 16px; font-size: 13px;"
+                  >{{ q }}</button>
+                </div>
+              </div>
+
+              <template v-for="(msg, index) in messages" :key="index">
+                <div v-if="msg.content || msg.role === 'user'" class="message" :class="msg.role">
+                  <div class="message-header">
+                    {{ msg.role === 'user' ? '我' : '教育助手' }}
+                    <span v-if="msg.timestamp" style="margin-left: 10px; opacity: 0.7;">{{ formatTime(msg.timestamp) }}</span>
+                  </div>
+                  <!-- 思考过程显示 -->
+                  <div v-if="msg.role === 'assistant' && msg.reasoning" class="reasoning-block">
+                    <div class="reasoning-header" @click="msg.showReasoning = !msg.showReasoning">
+                      <i :class="msg.showReasoning ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'"></i>
+                      <span>💭 思考过程</span>
+                    </div>
+                    <div v-if="msg.showReasoning" class="reasoning-content">{{ msg.reasoning }}</div>
+                  </div>
+                  <div class="message-content" :class="{ typing: msg.isTyping }" v-html="formatMessage(msg.content)"></div>
+                </div>
+              </template>
+
+              <div v-if="isTyping && !hasStreamingContent" class="typing-indicator">
+                <span></span><span></span><span></span>
+              </div>
+            </div>
+
+            <div class="chat-input-area">
+              <!-- 已上传文件列表 -->
+              <div v-if="uploadedFiles.length > 0" class="uploaded-files">
+                <div
+                  v-for="(file, index) in uploadedFiles"
+                  :key="index"
+                  class="uploaded-file-tag"
+                  :class="{ 'pdf-file': file.type === 'pdf' }"
+                >
+                  <i :class="getFileIcon(file.type)"></i>
+                  <span>{{ file.name }}</span>
+                  <i v-if="file.type === 'pdf'" class="fa-solid fa-eye preview-btn" @click="openPdfPreview(file)" title="PDF预览"></i>
+                  <i class="fa-solid fa-times remove-file" @click="removeUploadedFile(index)"></i>
+                </div>
+              </div>
+
+              <!-- 语音录制状态提示 -->
+              <div v-if="isRecording" class="voice-status">
+                <span class="recording-dot"></span>
+                正在录音... 点击麦克风按钮停止
+              </div>
+
+              <div class="chat-input-wrapper">
+                <textarea
+                  v-model="chatInput"
+                  placeholder="输入你的问题... (Ctrl+Enter 发送)"
+                  @keydown.enter.ctrl="sendMessage"
+                  rows="2"
+                ></textarea>
+                <div class="chat-buttons">
+                  <!-- 文件上传按钮 -->
+                  <input type="file" ref="fileInput" @change="handleFileUpload" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp" style="display: none;" multiple>
+                  <button
+                    class="btn btn-icon btn-secondary"
+                    @click="$refs.fileInput.click()"
+                    title="上传文件 (PDF/图片)"
+                  >
+                    <i class="fa-solid fa-paperclip"></i>
+                  </button>
+                  <!-- 手写公式按钮 -->
+                  <button
+                    class="btn btn-icon"
+                    style="background: linear-gradient(135deg, var(--success-500), var(--success-600)); color: white;"
+                    @click="showHandwriteDialog = true"
+                    title="手写公式识别"
+                  >
+                    <i class="fa-solid fa-pen-fancy"></i>
+                  </button>
+                  <!-- 语音按钮 -->
+                  <button
+                    class="btn btn-icon voice-btn"
+                    :class="{ recording: isRecording }"
+                    @click="toggleVoiceRecording"
+                    :disabled="isTyping"
+                    title="按住说话或点击切换"
+                  >
+                    <i :class="isRecording ? 'fa-solid fa-stop' : 'fa-solid fa-microphone'"></i>
+                  </button>
+                  <!-- 发送按钮 -->
+                  <button class="btn btn-primary" @click="sendMessage" :disabled="!chatInput.trim() || isTyping">
+                    <i class="fa-solid fa-paper-plane"></i> 发送
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 模态框 ==================== -->
+
+    <!-- 协作详情弹窗 -->
+    <div v-if="selectedRecord" class="modal-overlay" @click.self="selectedRecord = null">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>
+            <i :class="getTypeIcon(selectedRecord.type)"></i>
+            {{ selectedRecord.title || getTypeName(selectedRecord.type) + '协作' }}
+          </h3>
+          <button class="modal-close" @click="selectedRecord = null">&times;</button>
+        </div>
+        <div style="padding: 20px;">
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+            <div style="text-align: center; padding: 15px; background: var(--glass-bg); border-radius: 10px;">
+              <div style="font-size: 22px; font-weight: bold; color: var(--primary-400);">{{ selectedRecord.humanContributions?.length || 0 }}</div>
+              <div style="font-size: 12px; color: var(--text-secondary);">用户贡献</div>
+            </div>
+            <div style="text-align: center; padding: 15px; background: var(--glass-bg); border-radius: 10px;">
+              <div style="font-size: 22px; font-weight: bold; color: var(--primary-400);">{{ selectedRecord.aiContributions?.length || 0 }}</div>
+              <div style="font-size: 12px; color: var(--text-secondary);">AI 贡献</div>
+            </div>
+            <div style="text-align: center; padding: 15px; background: var(--glass-bg); border-radius: 10px;">
+              <div style="font-size: 22px; font-weight: bold; color: var(--primary-400);">{{ selectedRecord.duration || '-' }}</div>
+              <div style="font-size: 12px; color: var(--text-secondary);">时长(分钟)</div>
+            </div>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <span style="font-size: 13px; color: var(--text-secondary);">
+              开始: {{ formatDate(selectedRecord.startTime) }}
+              <span v-if="selectedRecord.endTime"> | 结束: {{ formatDate(selectedRecord.endTime) }}</span>
+            </span>
+          </div>
+          <h4 style="margin-bottom: 12px; font-size: 15px;">协作过程</h4>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <template v-if="selectedRecord.humanContributions?.length || selectedRecord.aiContributions?.length">
+              <div
+                v-for="(c, idx) in getMergedContributions(selectedRecord)"
+                :key="idx"
+                style="padding: 12px; border-radius: 10px; font-size: 14px;"
+                :style="{
+                  background: c.source === 'human' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+                  borderLeft: c.source === 'human' ? '3px solid var(--success-400)' : '3px solid var(--primary-400)'
+                }"
+              >
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; opacity: 0.7;">
+                  <span>{{ c.source === 'human' ? '用户' : 'AI 助手' }}</span>
+                  <span>{{ formatTime(c.timestamp) }}</span>
+                </div>
+                <div>{{ c.content }}</div>
+              </div>
+            </template>
+            <div v-else class="empty-state" style="padding: 30px;">
+              <p>暂无详细贡献记录</p>
+            </div>
+          </div>
+          <div v-if="selectedRecord.summary" style="margin-top: 15px; padding: 12px; background: var(--glass-bg); border-radius: 8px; font-size: 14px;">
+            <strong>摘要:</strong> {{ selectedRecord.summary }}
+          </div>
+          <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+            <button
+              @click="exportCollaboration(selectedRecord, 'docx')"
+              :disabled="exportLoading"
+              class="btn btn-primary"
+              style="padding: 10px 20px; font-size: 14px;"
+            >
+              <i class="fa-solid fa-file-word"></i> 导出 Word
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 学习报告弹窗 -->
+    <div v-if="showReportModal" class="modal-overlay" @click.self="showReportModal = false">
+      <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-chart-pie"></i> 学习报告</h3>
+          <button class="modal-close" @click="showReportModal = false">&times;</button>
+        </div>
+        <div v-if="reportLoading" style="text-align: center; padding: 40px;">
+          <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--primary-400);"></i>
+          <p style="margin-top: 15px; color: var(--text-secondary);">正在生成学习报告...</p>
+        </div>
+        <div v-else-if="learningReport" style="padding: 20px;">
+          <!-- 概览统计 -->
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+            <div style="text-align: center; padding: 15px; background: var(--glass-bg); border-radius: 10px;">
+              <div style="font-size: 28px; font-weight: bold; color: var(--primary-400);">{{ learningReport.collaboration?.totalSessions || 0 }}</div>
+              <div style="font-size: 13px; color: var(--text-secondary);">学习会话</div>
+            </div>
+            <div style="text-align: center; padding: 15px; background: var(--glass-bg); border-radius: 10px;">
+              <div style="font-size: 28px; font-weight: bold; color: var(--success-400);">{{ (learningReport.collaboration?.aiContributions || 0) + (learningReport.collaboration?.humanContributions || 0) }}</div>
+              <div style="font-size: 13px; color: var(--text-secondary);">总贡献数</div>
+            </div>
+            <div style="text-align: center; padding: 15px; background: var(--glass-bg); border-radius: 10px;">
+              <div style="font-size: 28px; font-weight: bold; color: var(--warning-400);">{{ learningReport.stats?.studyTime || 0 }}</div>
+              <div style="font-size: 13px; color: var(--text-secondary);">学习时长(分钟)</div>
+            </div>
+            <div style="text-align: center; padding: 15px; background: var(--glass-bg); border-radius: 10px;">
+              <div style="font-size: 28px; font-weight: bold; color: #9b59b6;">{{ learningReport.summary?.level || 1 }}</div>
+              <div style="font-size: 13px; color: var(--text-secondary);">当前等级</div>
+            </div>
+          </div>
+          <!-- 学习建议 -->
+          <div v-if="learningReport.recommendations?.length" style="margin-bottom: 20px;">
+            <h4 style="margin-bottom: 12px; font-size: 15px;"><i class="fa-solid fa-lightbulb" style="color: var(--warning-400);"></i> 学习建议</h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+              <li v-for="(rec, idx) in learningReport.recommendations" :key="idx" style="padding: 10px 15px; background: var(--glass-bg); border-radius: 8px; margin-bottom: 8px; font-size: 14px; border-left: 3px solid var(--primary-400);">
+                {{ rec }}
+              </li>
+            </ul>
+          </div>
+          <!-- 协作类型分布 -->
+          <div v-if="learningReport.collaboration?.collaborationRatio" style="margin-bottom: 20px;">
+            <h4 style="margin-bottom: 12px; font-size: 15px;"><i class="fa-solid fa-chart-pie" style="color: var(--accent-400);"></i> 协作贡献比例</h4>
+            <div style="display: flex; gap: 15px; align-items: center;">
+              <div style="flex: 1; height: 20px; background: var(--glass-bg); border-radius: 10px; overflow: hidden; display: flex;">
+                <div :style="{ width: learningReport.collaboration.collaborationRatio.ai + '%', background: 'var(--primary-500)' }"></div>
+                <div :style="{ width: learningReport.collaboration.collaborationRatio.human + '%', background: 'var(--success-500)' }"></div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 20px; margin-top: 8px; font-size: 13px;">
+              <span><i class="fa-solid fa-robot" style="color: var(--primary-400);"></i> AI: {{ learningReport.collaboration.collaborationRatio.ai }}%</span>
+              <span><i class="fa-solid fa-user" style="color: var(--success-400);"></i> 用户: {{ learningReport.collaboration.collaborationRatio.human }}%</span>
+            </div>
+          </div>
+          <!-- 技能使用统计 -->
+          <div v-if="learningReport.skills?.usage && Object.keys(learningReport.skills.usage).length" style="margin-bottom: 20px;">
+            <h4 style="margin-bottom: 12px; font-size: 15px;"><i class="fa-solid fa-chart-bar" style="color: #9b59b6;"></i> 技能使用统计</h4>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <div v-for="(count, skillName) in learningReport.skills.usage" :key="skillName" style="padding: 10px 16px; background: var(--glass-bg); border-radius: 20px; font-size: 13px;">
+                <strong>{{ skillName }}</strong>: {{ count }}次
+              </div>
+            </div>
+          </div>
+          <!-- 导出按钮 -->
+          <div style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px; border-top: 1px solid var(--glass-border);">
+            <button
+              @click="exportLearningReport('docx')"
+              :disabled="reportLoading"
+              class="btn btn-primary"
+              style="padding: 10px 20px; font-size: 14px;"
+            >
+              <i class="fa-solid fa-file-word"></i> 导出 Word
+            </button>
+          </div>
+        </div>
+        <div v-else style="text-align: center; padding: 40px; color: var(--text-secondary);">
+          <i class="fa-solid fa-exclamation-circle" style="font-size: 24px;"></i>
+          <p style="margin-top: 10px;">无法生成学习报告</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div v-if="showSettingsModal" class="modal-overlay" @click.self="showSettingsModal = false">
+      <div class="settings-modal">
+        <div class="settings-modal-header">
+          <h3><i class="fa-solid fa-gear"></i> 模型配置</h3>
+          <button @click="showSettingsModal = false" class="modal-close">&times;</button>
+        </div>
+        <div class="settings-modal-body">
+          <!-- 状态指示 -->
+          <div class="settings-status" :class="apiSettings.api_key_configured ? 'configured' : 'not-configured'">
+            <i :class="apiSettings.api_key_configured ? 'fa-solid fa-check-circle' : 'fa-solid fa-exclamation-triangle'"></i>
+            {{ apiSettings.api_key_configured ? '模型服务已配置' : '模型服务未配置' }}
+          </div>
+
+          <!-- 说明文字 -->
+          <div style="padding: 15px; background: var(--glass-bg); border-radius: 10px; margin-bottom: 20px;">
+            <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.8;">
+              <i class="fa-solid fa-info-circle" style="color: var(--primary-400);"></i>
+              教育数字人使用<strong style="color: var(--text-primary);">主页面</strong>的模型服务配置。
+            </p>
+            <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.8; margin-top: 8px;">
+              如需修改配置，请前往主页面进行设置。
+            </p>
+          </div>
+
+          <!-- 当前配置信息 -->
+          <div class="settings-group">
+            <div class="settings-group-title"><i class="fa-solid fa-sliders"></i> 当前配置</div>
+            <div style="display: grid; gap: 12px;">
+              <div style="display: flex; justify-content: space-between; padding: 10px 15px; background: var(--glass-bg); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">API 状态</span>
+                <span :style="{ color: apiSettings.api_key_configured ? 'var(--success-400)' : 'var(--danger-400)' }">
+                  <i :class="apiSettings.api_key_configured ? 'fa-solid fa-check' : 'fa-solid fa-times'"></i>
+                  {{ apiSettings.api_key_configured ? '已配置' : '未配置' }}
+                </span>
+              </div>
+
+              <!-- 当前选择的模型提供商 -->
+              <div v-if="apiSettings.providerInfo" style="padding: 15px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(6, 182, 212, 0.15) 100%); border-radius: 10px; border: 1px solid var(--primary-400);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <i class="fa-solid fa-microchip" style="color: var(--primary-400);"></i>
+                  <span style="font-weight: 600;">当前模型服务</span>
+                </div>
+                <div style="font-size: 16px; color: var(--text-primary); margin-bottom: 4px;">
+                  {{ apiSettings.providerInfo.name }}
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary);">
+                  模型: {{ apiSettings.raw_model || apiSettings.providerInfo.model }}
+                </div>
+              </div>
+
+              <div v-if="apiSettings.model && !apiSettings.providerInfo" style="display: flex; justify-content: space-between; padding: 10px 15px; background: var(--glass-bg); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">模型</span>
+                <span style="color: var(--text-primary);">{{ apiSettings.model }}</span>
+              </div>
+
+              <div v-if="apiSettings.base_url" style="display: flex; flex-direction: column; gap: 4px; padding: 10px 15px; background: var(--glass-bg); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">API 地址</span>
+                <span style="color: var(--text-primary); font-size: 12px; word-break: break-all;">{{ apiSettings.base_url }}</span>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; padding: 10px 15px; background: var(--glass-bg); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">温度</span>
+                <span style="color: var(--text-primary);">{{ apiSettings.temperature }}</span>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; padding: 10px 15px; background: var(--glass-bg); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">最大令牌数</span>
+                <span style="color: var(--text-primary);">{{ apiSettings.max_tokens }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 模型选项 -->
+          <div class="settings-group" style="margin-top: 15px;">
+            <div class="settings-group-title">
+              <i class="fa-solid fa-brain"></i> 模型选项
+            </div>
+            <div style="display: grid; gap: 12px;">
+              <!-- 启用思考 -->
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: var(--glass-bg); border-radius: 8px;">
+                <div>
+                  <span style="color: var(--text-primary); font-weight: 500;">启用深度思考</span>
+                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                    让模型先思考再回答，适合复杂问题（会增加响应时间）
+                  </div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="modelOptions.enableThinking">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 公式识别设置 -->
+          <div class="settings-group" style="margin-top: 15px;">
+            <div class="settings-group-title">
+              <i class="fa-solid fa-pen-fancy"></i> 公式识别
+              <a href="https://simpletex.cn/user/center" target="_blank" style="margin-left: auto; font-size: 12px; color: var(--primary-400); text-decoration: none;">
+                <i class="fa-solid fa-key"></i> 获取令牌
+              </a>
+            </div>
+            <div style="display: grid; gap: 12px;">
+              <!-- 启用开关 -->
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: var(--glass-bg); border-radius: 8px;">
+                <div>
+                  <span style="color: var(--text-primary); font-weight: 500;">启用公式识别</span>
+                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">手写公式自动转换为 LaTeX 格式</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="formulaOcrSettings.enabled">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <!-- API Key 输入 -->
+              <div v-if="formulaOcrSettings.enabled" style="padding: 12px 15px; background: var(--glass-bg); border-radius: 8px;">
+                <div style="color: var(--text-secondary); margin-bottom: 8px; font-size: 13px;">
+                  <i class="fa-solid fa-key"></i> SimpleTex 用户授权令牌 (UAT)
+                </div>
+                <input
+                  type="password"
+                  v-model="formulaOcrSettings.api_key"
+                  placeholder="请输入用户授权令牌..."
+                  class="settings-input"
+                  style="margin-bottom: 0;"
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-modal-footer">
+          <button @click="showSettingsModal = false" class="btn btn-secondary">关闭</button>
+          <button @click="saveAllSettings" class="btn btn-primary">
+            <i class="fa-solid fa-save"></i> 保存设置
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 对话历史模态框 -->
+    <div v-if="showHistoryModal" class="history-modal-overlay" @click.self="showHistoryModal = false">
+      <div class="history-modal">
+        <div class="history-modal-header">
+          <h3><i class="fa-solid fa-clock-rotate-left"></i> 对话历史</h3>
+          <button @click="showHistoryModal = false" class="modal-close">&times;</button>
+        </div>
+        <div class="history-modal-body">
+          <div v-if="loadingHistory" class="empty-state">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+            <p>加载中...</p>
+          </div>
+          <div v-else-if="chatHistoryList.length === 0" class="empty-state">
+            <i class="fa-solid fa-comments"></i>
+            <p>暂无历史对话</p>
+          </div>
+          <div v-else class="history-list">
+            <div v-for="session in chatHistoryList" :key="session.session_id" class="history-item">
+              <div class="history-item-header">
+                <span class="session-id">{{ session.session_id }}</span>
+                <span class="message-count">{{ session.message_count }} 条消息</span>
+              </div>
+              <div class="history-item-actions">
+                <button @click="loadHistorySession(session.session_id)" class="load-btn">
+                  <i class="fa-solid fa-arrow-right-to-bracket"></i> 加载
+                </button>
+                <button @click="deleteHistorySession(session.session_id)" class="delete-btn">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="history-modal-footer">
+          <button @click="clearAllHistory" class="clear-all-btn" :disabled="chatHistoryList.length === 0">
+            <i class="fa-solid fa-trash-can"></i> 清空所有历史
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 手写公式对话框 -->
+    <div v-if="showHandwriteDialog" class="handwrite-dialog-overlay" @click.self="showHandwriteDialog = false">
+      <div class="handwrite-dialog">
+        <div class="handwrite-dialog-header">
+          <h3><i class="fa-solid fa-pen-fancy"></i> 手写公式识别</h3>
+          <button class="modal-close" @click="showHandwriteDialog = false">&times;</button>
+        </div>
+        <div class="handwrite-canvas-container">
+          <canvas ref="handwriteCanvas" class="handwrite-canvas" @mousedown="startDrawing" @mousemove="draw" @mouseup="stopDrawing" @mouseleave="stopDrawing" @touchstart="startDrawing" @touchmove="draw" @touchend="stopDrawing"></canvas>
+        </div>
+        <div class="handwrite-toolbar">
+          <button @click="clearHandwriteCanvas"><i class="fa-solid fa-eraser"></i> 清除</button>
+          <button @click="undoHandwrite"><i class="fa-solid fa-undo"></i> 撤销</button>
+          <button @click="recognizeHandwrite" :disabled="handwriteRecognizing">
+            <i :class="handwriteRecognizing ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-magic'"></i>
+            {{ handwriteRecognizing ? '识别中...' : '识别公式' }}
+          </button>
+        </div>
+        <div v-if="handwriteResult" class="handwrite-result">
+          <div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">识别结果：</div>
+          <div style="font-size: 18px;">{{ handwriteResult }}</div>
+        </div>
+        <div class="handwrite-dialog-footer">
+          <button class="btn btn-secondary" @click="showHandwriteDialog = false">取消</button>
+          <button class="btn btn-primary" @click="insertHandwriteResult" :disabled="!handwriteResult">
+            <i class="fa-solid fa-plus"></i> 插入到输入框
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDF 预览对话框 -->
+    <div v-if="showPdfPreviewDialog" class="pdf-preview-dialog-overlay" @click.self="showPdfPreviewDialog = false">
+      <div class="pdf-preview-dialog">
+        <div class="pdf-preview-header">
+          <h3><i class="fa-solid fa-file-pdf"></i> PDF 预览</h3>
+          <button class="modal-close" @click="showPdfPreviewDialog = false">&times;</button>
+        </div>
+        <div class="pdf-preview-toolbar">
+          <button @click="selectAllPdfPages"><i class="fa-solid fa-check-double"></i> 全选</button>
+          <button @click="clearPdfPageSelection"><i class="fa-solid fa-times"></i> 取消选择</button>
+        </div>
+        <div class="pdf-preview-content">
+          <div v-if="pdfPreviewLoading" class="empty-state">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+            <span>正在加载PDF页面...</span>
+          </div>
+          <div v-else-if="pdfPreviewPages.length > 0" class="pdf-pages-grid">
+            <div
+              v-for="page in pdfPreviewPages"
+              :key="page.pageNum"
+              class="pdf-page-item"
+              :class="{ selected: page.selected }"
+              @click="togglePdfPageSelection(page.pageNum)"
+            >
+              <img :src="page.image" :alt="'第' + page.pageNum + '页'">
+              <span class="page-num">{{ page.pageNum }}</span>
+            </div>
+          </div>
+          <div v-else class="empty-state">
+            <i class="fa-solid fa-file-pdf" style="font-size: 48px; margin-bottom: 15px; display: block;"></i>
+            暂无页面
+          </div>
+        </div>
+        <div class="pdf-preview-footer">
+          <span class="selected-count">已选择 {{ selectedPdfPages.length }} 页</span>
+          <div class="footer-buttons">
+            <button class="btn btn-secondary" @click="showPdfPreviewDialog = false">关闭</button>
+            <button class="btn btn-primary" @click="extractSelectedPdfPages" :disabled="selectedPdfPages.length === 0 || pdfPreviewLoading">
+              <i class="fa-solid fa-file-import"></i> 提取选中页面
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 脚本 ==================== -->
+  <script src="libs/vue.global.prod.js"></script>
+  <script src="libs/marked.min.js"></script>
+  <!-- 魔珐星云具身驱动 SDK -->
+  <script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script>
+  <script src="js/education-app.js"></script>
+</body>
+</html>

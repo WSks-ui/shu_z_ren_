@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-教育数字人系统 API
+研伴系统 API
 包含成长系统、协作记录、情绪状态、对话系统、语音交互等功能的持久化接口
 """
 
@@ -21,10 +21,10 @@ def get_global_http_client():
     """获取全局 HTTP 客户端（复用连接池）"""
     try:
         from server import global_http_client
-        print(f"[教育数字人] 获取全局客户端: {global_http_client is not None}")
+        print(f"[研伴] 获取全局客户端: {global_http_client is not None}")
         return global_http_client
     except ImportError as e:
-        print(f"[教育数字人] 无法导入全局客户端: {e}")
+        print(f"[研伴] 无法导入全局客户端: {e}")
         return None
 
 
@@ -59,7 +59,7 @@ async def ensure_storage():
 
 # 技能系统提示词
 SKILL_PROMPTS = {
-    "research-assistant": """你是一位专业的科研助手，专注于帮助研究人员进行学术研究。你的角色是协作者，而非替代者。
+    "research-assistant": """你是"研友"，一个专业的科研助手，专注于帮助研究人员进行学术研究。你的角色是协作者，而非替代者。
 
 ## 核心能力
 - 文献检索与综述：帮助设计检索策略，选择合适的数据库
@@ -81,7 +81,7 @@ SKILL_PROMPTS = {
 
 请用专业但友好的语气回答问题，引导用户独立思考。""",
 
-    "literature-review": """你是一位文献综述专家，帮助用户进行系统性文献综述和元分析。
+    "literature-review": """你是"研友"，一位文献综述专家，帮助用户进行系统性文献综述和元分析。
 
 ## 核心能力
 - 检索策略设计：帮助制定 PICO 框架，设计检索词和布尔逻辑
@@ -100,7 +100,7 @@ SKILL_PROMPTS = {
 
 请用系统化的方法指导用户完成文献综述。""",
 
-    "paper-writing": """你是一位学术论文写作指导专家，帮助用户撰写高质量的学术论文。
+    "paper-writing": """你是"研友"，一位学术论文写作指导专家，帮助用户撰写高质量的学术论文。
 
 ## 核心能力
 - 论文结构规划：帮助设计论文框架和章节安排
@@ -121,7 +121,7 @@ SKILL_PROMPTS = {
 
 请帮助用户逐步完善论文内容。""",
 
-    "academic-tutoring": """你是一位虚拟导师，为学习者提供个性化的学习支持和答疑解惑。
+    "academic-tutoring": """你是"研友"，一位虚拟导师，为学习者提供个性化的学习支持和答疑解惑。
 
 ## 核心能力
 - 知识讲解：用通俗易懂的方式解释复杂概念
@@ -911,7 +911,7 @@ async def education_chat(request: ChatRequest = Body(...)):
         base_system_prompt = SKILL_PROMPTS[request.skill_id]
     else:
         # 默认教育助手提示词
-        base_system_prompt = """你是一位友好的教育数字人助手，帮助用户学习和研究。
+        base_system_prompt = """你是一位友好的研伴助手，帮助用户学习和研究。你的名字叫"研友"。
 请用简洁、专业的语言回答问题，必要时提供学习建议。"""
 
     # RAG: 检索知识库获取上下文
@@ -1051,7 +1051,7 @@ async def education_chat(request: ChatRequest = Body(...)):
 
     if not api_key:
         # 模拟模式下也记录协作
-        mock_response = "您好！我是教育数字人助手。\n\n⚠️ **未配置 API Key**\n\n要启用完整对话功能，请点击页面右上角的「⚙️ 设置」按钮，配置语言模型 API。"
+        mock_response = "您好！我是研伴助手。\n\n⚠️ **未配置 API Key**\n\n要启用完整对话功能，请点击页面右上角的「⚙️ 设置」按钮，配置语言模型 API。"
         await update_chat_stats(request.skill_id)
         if request.session_id and request.skill_id:
             await _auto_record_collaboration(
@@ -1066,10 +1066,32 @@ async def education_chat(request: ChatRequest = Body(...)):
             exp_gained=5
         )
 
+    def _strip_image_url(msgs):
+        """移除消息中的 image_url 内容，仅保留文本"""
+        cleaned = []
+        for msg in msgs:
+            new_msg = dict(msg)
+            if isinstance(new_msg.get('content'), list):
+                text_items = [item for item in new_msg['content'] if item.get('type') == 'text']
+                if text_items:
+                    new_msg['content'] = text_items
+                else:
+                    new_msg['content'] = [{"type": "text", "text": ""}]
+            cleaned.append(new_msg)
+        return cleaned
+
     # 调用 LLM API
     try:
         t1 = time.time()
         print(f"[性能] 准备调用 LLM API: {base_url}, model={model}")
+
+        request_payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": settings.get("temperature", 0.7),
+            "max_tokens": settings.get("max_tokens", 2048)
+        }
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{base_url.rstrip('/')}/chat/completions",
@@ -1077,13 +1099,24 @@ async def education_chat(request: ChatRequest = Body(...)):
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
                 },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": settings.get("temperature", 0.7),
-                    "max_tokens": settings.get("max_tokens", 2048)
-                }
+                json=request_payload
             )
+
+            # 如果遇到 image_url 不支持的400错误，移除图片内容后重试
+            if response.status_code == 400:
+                error_body = response.text
+                if "image_url" in error_body or "image" in error_body.lower():
+                    print(f"[教育对话] 模型不支持 image_url，自动移除图片内容后重试")
+                    request_payload["messages"] = _strip_image_url(messages)
+                    response = await client.post(
+                        f"{base_url.rstrip('/')}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json=request_payload
+                    )
+
         print(f"[性能] LLM API 调用耗时: {time.time() - t1:.2f}s")
 
         if response.status_code == 200:
@@ -1172,12 +1205,12 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
         if request.skill_id and request.skill_id in SKILL_PROMPTS:
             base_system_prompt = SKILL_PROMPTS[request.skill_id]
         else:
-            base_system_prompt = """你是一位友好的教育数字人助手，帮助用户学习和研究。
+            base_system_prompt = """你是一位友好的研伴助手，帮助用户学习和研究。你的名字叫"研友"。
 请用简洁、专业的语言回答问题，必要时提供学习建议。"""
 
         # 语音模式使用更简洁的提示词
         if voice_mode:
-            base_system_prompt = """你是一位教育数字人助手，正在通过语音与用户交流。
+            base_system_prompt = """你是研伴助手"研友"，正在通过语音与用户交流。
 
 **图片识别能力**：
 你可以识别用户上传的图片，包括：
@@ -1382,7 +1415,7 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
                     if "\n" in user_message:
                         condition_pass = False
 
-                # 禁止文件/图片 (当前教育数字人暂不支持文件)
+                # 禁止文件/图片 (当前研伴暂不支持文件)
                 if condition_pass and fast_settings.get("conditionNoFiles", True):
                     # 如果未来添加文件支持，这里需要检查
                     pass
@@ -1430,7 +1463,7 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
 
         if not api_key:
             # 模拟模式
-            mock_response = "您好！我是教育数字人助手。\n\n⚠️ **未配置 API Key**\n\n要启用完整对话功能，请配置语言模型 API。"
+            mock_response = "您好！我是研伴助手。\n\n⚠️ **未配置 API Key**\n\n要启用完整对话功能，请配置语言模型 API。"
             yield f"data: {json.dumps({'content': mock_response, 'done': False}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'content': '', 'done': True, 'emotion': 'neutral', 'exp_gained': 5}, ensure_ascii=False)}\n\n"
             return
@@ -1979,8 +2012,8 @@ async def get_api_settings(request: Request):
         model_providers = settings.get("modelProviders", [])
 
         # 调试日志
-        print(f"[教育数字人设置] selectedProvider: {selected_provider} (type: {type(selected_provider)})")
-        print(f"[教育数字人设置] modelProviders 数量: {len(model_providers)}")
+        print(f"[研伴设置] selectedProvider: {selected_provider} (type: {type(selected_provider)})")
+        print(f"[研伴设置] modelProviders 数量: {len(model_providers)}")
         for p in model_providers:
             print(f"  - Provider ID: {p.get('id')} (type: {type(p.get('id'))}), vendor: {p.get('vendor')}, has apiKey: {bool(p.get('apiKey'))}")
 
@@ -2114,12 +2147,12 @@ async def save_api_settings(settings: Dict[str, Any] = Body(...), request: Reque
         # 更新快速模型设置
         if "fast" in settings:
             current_settings["fast"] = settings["fast"]
-            print(f"[教育数字人设置] 保存快速模型配置: {settings['fast']}")
+            print(f"[研伴设置] 保存快速模型配置: {settings['fast']}")
 
         # 更新模型选项设置
         if "modelOptions" in settings:
             current_settings["modelOptions"] = settings["modelOptions"]
-            print(f"[教育数字人设置] 保存模型选项: {settings['modelOptions']}")
+            print(f"[研伴设置] 保存模型选项: {settings['modelOptions']}")
 
         # 保存设置
         await save_settings(current_settings)
@@ -2172,9 +2205,10 @@ class VoiceChatRequest(BaseModel):
     skill_id: Optional[str] = None
     session_id: Optional[str] = None
     language: str = "zh"
-    digital_human_type: str = "vrm"  # "vrm" 或 "tencent"
+    digital_human_type: str = "vrm"  # "vrm" 或 "tencent" 或 "xingyun"
     tencent_session_id: Optional[str] = None  # 腾讯数智人会话 ID
     history: List[Dict[str, str]] = []  # 历史对话消息
+    frontend_drive: bool = False  # 前端自行驱动数字人播报，后端跳过TTS合成
 
 
 class VoiceChatResponse(BaseModel):
@@ -2224,7 +2258,10 @@ async def voice_chat(request: VoiceChatRequest = Body(...)):
         digital_human_driven = False
 
         # 4. 根据数字人类型处理语音输出
-        if request.digital_human_type == "tencent" and request.tencent_session_id:
+        if request.frontend_drive:
+            # 前端自行驱动数字人（如星云），后端跳过TTS合成
+            digital_human_driven = True
+        elif request.digital_human_type == "tencent" and request.tencent_session_id:
             # 腾讯数智人：直接驱动数字人播报，不生成独立音频
             try:
                 await _drive_tencent_digital_human(
@@ -2734,7 +2771,7 @@ async def _get_llm_response(
     else:
         messages.append({
             "role": "system",
-            "content": """你是一位友好的教育数字人助手，帮助用户学习和研究。
+            "content": """你是一位友好的研伴助手，帮助用户学习和研究。你的名字叫"研友"。
 请用简洁、专业的语言回答问题，必要时提供学习建议。
 由于是语音交互，请保持回复简洁，适合朗读。"""
         })
@@ -2757,7 +2794,7 @@ async def _get_llm_response(
 
     if not api_key:
         # 模拟模式
-        mock_response = "您好！我是教育数字人助手。\n\n⚠️ **未配置 API Key**\n\n要启用完整功能，请点击页面右上角的「⚙️ 设置」按钮配置语言模型 API。"
+        mock_response = "您好！我是研伴助手。\n\n⚠️ **未配置 API Key**\n\n要启用完整功能，请点击页面右上角的「⚙️ 设置」按钮配置语言模型 API。"
         return {
             "response": mock_response,
             "emotion": "neutral",
@@ -3387,7 +3424,7 @@ async def _generate_all_collaborations_docx(sessions: list, include_chat_history
 
         # 页脚
         p = doc.add_paragraph()
-        p.add_run("由教育数字人系统生成").italic = True
+        p.add_run("由研伴系统生成").italic = True
 
         buffer = BytesIO()
         doc.save(buffer)
@@ -3678,7 +3715,7 @@ async def _generate_report_docx(report: dict) -> bytes:
     # 页脚
     doc.add_paragraph()
     p = doc.add_paragraph()
-    p.add_run("由教育数字人系统生成").italic = True
+    p.add_run("由研伴系统生成").italic = True
 
     buffer = BytesIO()
     doc.save(buffer)

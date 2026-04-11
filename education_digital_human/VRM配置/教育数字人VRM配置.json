@@ -1,9 +1,9 @@
 {
-  "name": "教育数字人VRM配置",
+  "name": "研伴VRM配置",
   "version": "1.0.0",
-  "description": "专为教育场景设计的VRM数字人配置",
+  "description": "专为科研协作场景设计的VRM数字人配置",
   "VRMConfig": {
-    "name": "张教授",
+    "name": "研友",
     "enabledExpressions": true,
     "enabledMotions": true,
     "selectedModelId": "alice",
@@ -13,7 +13,7 @@
     "userModels": [
       {
         "id": "professor_zhang",
-        "name": "张教授",
+        "name": "研友",
         "path": "",
         "description": "专业的虚拟科研导师形象"
       }
