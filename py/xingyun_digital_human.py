@@ -4,6 +4,7 @@
 文档: https://xingyun3d.com/
 """
 
+import os
 import time
 import json
 import hashlib

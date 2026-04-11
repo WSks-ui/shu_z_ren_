@@ -322,27 +322,6 @@
       display: none;
     }
 
-    .avatar-type-switch {
-      display: flex;
-      gap: 10px;
-    }
-
-    .avatar-type-btn {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.3s;
-      background: rgba(255,255,255,0.2);
-      color: white;
-    }
-
-    .avatar-type-btn.active {
-      background: white;
-      color: var(--primary-color);
-    }
-
     .avatar-container {
       flex: 1;
       position: relative;
@@ -1632,18 +1611,6 @@
         font-size: 18px;
       }
 
-      .avatar-type-switch {
-        flex-direction: row;
-        gap: 5px;
-        width: 100%;
-        justify-content: center;
-      }
-
-      .avatar-type-btn {
-        flex: 1;
-        max-width: 150px;
-      }
-
       .tabs-header {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
@@ -1699,17 +1666,6 @@
       }
 
       .settings-link {
-        padding: 6px 12px;
-        font-size: 12px;
-      }
-
-      .avatar-type-switch {
-        width: 100%;
-        justify-content: center;
-        margin-top: 8px;
-      }
-
-      .avatar-type-btn {
         padding: 6px 12px;
         font-size: 12px;
       }
@@ -2297,21 +2253,12 @@
         <button class="settings-link" @click="showSettingsModal = true" title="配置API">
           <i class="fa-solid fa-gear"></i> 设置
         </button>
-        <div class="avatar-type-switch">
-          <button class="avatar-type-btn" :class="{ active: digitalHumanType === 'vrm' }" @click="switchAvatarType('vrm')">VRM</button>
-          <button class="avatar-type-btn" :class="{ active: digitalHumanType === 'xingyun' }" @click="switchAvatarType('xingyun')">魔珐星云</button>
-        </div>
       </div>
 
       <div class="avatar-container">
-        <iframe v-if="digitalHumanType === 'vrm'" src="/vrm.html" class="avatar-video" frameborder="0"></iframe>
-        <div v-else-if="digitalHumanType === 'xingyun'" id="xingyun-sdk-container" style="width: 100%; height: 100%;"></div>
-        <div v-else class="avatar-placeholder">
-          <i class="fa-solid fa-robot"></i>
-          <p>{{ digitalHumanType === 'xingyun' ? '点击下方"连接"启动数字人' : '正在加载VRM数字人...' }}</p>
-        </div>
+        <div id="xingyun-sdk-container" style="width: 100%; height: 100%; min-height: 500px;"></div>
         <div class="status-indicator">
-          <span class="status-dot" :class="{ connected: isConnected }"></span>
+          <span class="status-dot" :class="{ connected: xingyunSession.isConnected }"></span>
           {{ statusText }}
         </div>
       </div>
@@ -2322,15 +2269,15 @@
           v-model="quickText"
           placeholder="输入文字让数字人播报..."
           @keyup.enter="sendQuickText"
-          :disabled="!isConnected && digitalHumanType === 'xingyun'"
+          :disabled="!xingyunSession.isConnected"
         >
-        <button v-if="digitalHumanType === 'xingyun' && !xingyunSession.isConnected" class="btn-primary" @click="createXingYunSession" :disabled="xingyunSession.status === 'connecting'">
+        <button v-if="!xingyunSession.isConnected" class="btn-primary" @click="createXingYunSession" :disabled="xingyunSession.status === 'connecting'">
           <i class="fa-solid fa-plug"></i> 连接
         </button>
-        <button v-else-if="digitalHumanType === 'xingyun'" class="btn-secondary" @click="closeXingYunSession">
+        <button v-else class="btn-secondary" @click="closeXingYunSession">
           <i class="fa-solid fa-plug-circle-xmark"></i> 断开
         </button>
-        <button class="btn-primary" @click="sendQuickText" :disabled="!isConnected && digitalHumanType === 'xingyun'">
+        <button class="btn-primary" @click="sendQuickText" :disabled="!xingyunSession.isConnected">
           <i class="fa-solid fa-paper-plane"></i> 发送
         </button>
       </div>
@@ -2554,7 +2501,7 @@
               v-for="record in filteredRecords"
               :key="record.id"
               class="collab-card"
-              :class="{'type-' + record.type, 'selected': selectedSessionIds.includes(record.id)}"
+              :class="['type-' + record.type, { 'selected': selectedSessionIds.includes(record.id) }]"
               @click="showRecordDetail(record)"
               style="position: relative;"
             >
@@ -3331,13 +3278,52 @@
     createApp({
       setup() {
         const activeTab = ref('skills');
-        const digitalHumanType = ref('vrm');
         const currentSkill = ref(null);
         const quickText = ref('');
         const chatInput = ref('');
         const messages = ref([]);
         const isTyping = ref(false);
         const chatMessages = ref(null);
+
+        // 语音打断控制
+        let voiceAbortController = null;  // 快速语音回复的 AbortController
+        let streamAbortController = null; // 流式文本回复的 AbortController
+        let pendingSpeakTimer = null;     // 等待中的 speak 延迟计时器
+
+        // 打断当前所有语音输出和请求
+        const interruptVoiceOutput = () => {
+          console.log('[打断] 取消所有进行中的语音输出');
+
+          // 1. 取消快速语音回复请求
+          if (voiceAbortController) {
+            voiceAbortController.abort();
+            voiceAbortController = null;
+            console.log('[打断] 已取消快速语音回复请求');
+          }
+
+          // 2. 取消流式文本回复请求
+          if (streamAbortController) {
+            streamAbortController.abort();
+            streamAbortController = null;
+            console.log('[打断] 已取消流式文本回复请求');
+          }
+
+          // 3. 取消等待中的 speak 延迟
+          if (pendingSpeakTimer) {
+            clearTimeout(pendingSpeakTimer);
+            pendingSpeakTimer = null;
+            console.log('[打断] 已取消等待中的语音播放');
+          }
+
+          // 魔珐星云：打断当前播放
+          if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+            xingyunSession.value.sdk.interactiveidle();
+            xingyunSession.value.voiceState = 'idle';
+            console.log('[打断] 已打断魔珐星云当前播放');
+          }
+
+          isTyping.value = false;
+        };
         const sessionId = ref('session_' + Date.now());
 
         // 对话历史管理
@@ -3363,7 +3349,8 @@
         const xingyunSession = ref({
           sdk: null,
           status: 'disconnected',
-          isConnected: false
+          isConnected: false,
+          voiceState: 'idle' // 'idle', 'listening', 'thinking', 'speaking'
         });
 
         // 魔珐星云 SDK 配置
@@ -3372,6 +3359,43 @@
           appSecret: '',
           gatewayServer: 'https://nebula-agent.xingyun3d.com/user/v1/ttsa/session'
         });
+
+        // 魔珐星云 KA 动作映射
+        const xingyunKAActions = {
+          '欢迎': 'Welcome',
+          '你好': 'Hello',
+          '再见': 'Wave',
+          '思考': 'Thinking',
+          '好的': 'Nod',
+          '是的': 'Nod',
+          '没问题': 'Nod',
+          '请看': 'PointingSelf',
+          '这里': 'PointingSelf',
+          '跳舞': 'Dance',
+          '鼓掌': 'Clap'
+        };
+
+        // 根据文本匹配KA动作
+        const matchKAAction = (text) => {
+          for (const [keyword, action] of Object.entries(xingyunKAActions)) {
+            if (text.includes(keyword)) {
+              return action;
+            }
+          }
+          return null;
+        };
+
+        // 生成带KA动作的SSML
+        const generateSSML = (text, action = null) => {
+          if (action) {
+            return `<speak><ue4event><type>ka</type><data><action_semantic>${action}</action_semantic></data></ue4event>${text}</speak>`;
+          }
+          const matchedAction = matchKAAction(text);
+          if (matchedAction) {
+            return `<speak><ue4event><type>ka</type><data><action_semantic>${matchedAction}</action_semantic></data></ue4event>${text}</speak>`;
+          }
+          return text;
+        };
 
         // 模型选项
         const modelOptions = ref({
@@ -3532,13 +3556,7 @@
         };
 
         // 计算属性
-        const isConnected = computed(() => {
-          if (digitalHumanType.value === 'vrm') return true;
-          return xingyunSession.value.isConnected;
-        });
-
         const statusText = computed(() => {
-          if (digitalHumanType.value === 'vrm') return 'VRM 已连接';
           if (xingyunSession.value.status === 'connecting') return '连接中...';
           if (xingyunSession.value.isConnected) return '已连接';
           return '未连接';
@@ -3617,15 +3635,6 @@
           return questions[currentSkill.value] || ['你好，请介绍一下你的功能'];
         });
 
-        // 方法
-        const switchAvatarType = (type) => {
-          if (type === digitalHumanType.value) return;
-          if (type === 'xingyun' && xingyunSession.value.isConnected) {
-            closeXingYunSession();
-          }
-          digitalHumanType.value = type;
-        };
-
         // 加载魔珐星云配置
         const loadXingYunConfig = async () => {
           try {
@@ -3636,6 +3645,7 @@
               appSecret: data.appSecret,
               gatewayServer: data.gatewayServer
             };
+            console.log('魔珐星云配置加载成功:', data.appId);
           } catch (error) {
             console.error('加载魔珐星云配置失败:', error);
           }
@@ -3644,13 +3654,33 @@
         const createXingYunSession = async () => {
           xingyunSession.value.status = 'connecting';
           try {
+            // 检查 SDK 是否可用（兼容不同全局对象）
+            const XmovAvatarClass = window.XmovAvatar || self.XmovAvatar || XmovAvatar;
+            if (typeof XmovAvatarClass === 'undefined') {
+              throw new Error('魔珐星云 SDK 未加载，请刷新页面重试');
+            }
+
             // 确保配置已加载
             if (!xingyunConfig.value.appId) {
               await loadXingYunConfig();
             }
 
+            // 等待 DOM 更新，确保容器存在
+            await nextTick();
+
+            // 检查容器是否存在
+            const container = document.querySelector('#xingyun-sdk-container');
+            if (!container) {
+              throw new Error('数字人容器不存在，请确保已选择魔珐星云标签');
+            }
+
+            console.log('开始创建魔珐星云 SDK 实例...');
+            console.log('appId:', xingyunConfig.value.appId);
+            console.log('appSecret:', xingyunConfig.value.appSecret ? '已配置' : '未配置');
+            console.log('容器:', container);
+
             // 创建魔珐星云 SDK 实例
-            xingyunSession.value.sdk = new XmovAvatar({
+            xingyunSession.value.sdk = new XmovAvatarClass({
               containerId: '#xingyun-sdk-container',
               appId: xingyunConfig.value.appId,
               appSecret: xingyunConfig.value.appSecret,
@@ -3658,27 +3688,75 @@
               hardwareAcceleration: "prefer-hardware",
               onMessage(message) {
                 console.log('魔珐SDK消息:', message);
+                // 处理错误消息
+                if (message.code && message.code !== 0) {
+                  console.error('SDK错误:', message);
+                }
               },
               onStateChange(state) {
                 console.log('魔珐SDK状态变化:', state);
+                // speak, idle, listen 等状态表示已连接
+                if (state === 'speak' || state === 'idle' || state === 'listen') {
+                  xingyunSession.value.isConnected = true;
+                  xingyunSession.value.status = 'connected';
+                }
+                // 更新语音状态
+                if (state === 'speak') {
+                  xingyunSession.value.voiceState = 'speaking';
+                } else if (state === 'listen') {
+                  xingyunSession.value.voiceState = 'listening';
+                } else if (state === 'idle') {
+                  xingyunSession.value.voiceState = 'idle';
+                }
               },
               onStatusChange(status) {
-                console.log('魔珐SDK状态:', status);
+                console.log('魔珐SDK状态码:', status);
+                // SDKStatus.online = 0
+                if (status === 0) {
+                  xingyunSession.value.isConnected = true;
+                  xingyunSession.value.status = 'connected';
+                  console.log('魔珐星云已在线');
+                }
               },
               onVoiceStateChange(status) {
                 console.log('语音状态:', status);
+                // voice_start: 开始说话, voice_end: 说话结束
+                if (status === 'start') {
+                  xingyunSession.value.voiceState = 'speaking';
+                } else if (status === 'end') {
+                  xingyunSession.value.voiceState = 'idle';
+                  // 说话结束后切换到待机互动状态
+                  if (xingyunSession.value.sdk) {
+                    xingyunSession.value.sdk.interactiveidle();
+                  }
+                }
               },
-              enableLogger: false
+              enableLogger: true
             });
 
-            // 初始化连接
-            await xingyunSession.value.sdk.initModel('normal', (progress) => {
-              console.log('资源加载进度:', progress);
-              if (progress >= 100) {
+            console.log('SDK 实例创建成功，正在初始化连接...');
+
+            // 调用 init() 方法初始化连接
+            xingyunSession.value.sdk.init({
+              initModel: 'normal',
+              onDownloadProgress: (progress) => {
+                console.log('资源加载进度:', progress);
+                if (progress >= 100) {
+                  xingyunSession.value.isConnected = true;
+                  xingyunSession.value.status = 'connected';
+                  console.log('魔珐星云数字人加载完成');
+                }
+              }
+            });
+
+            // 设置超时，如果 30 秒内没有收到进度更新，也标记为已连接
+            setTimeout(() => {
+              if (xingyunSession.value.status === 'connecting') {
+                console.log('超时检测：尝试强制标记为已连接');
                 xingyunSession.value.isConnected = true;
                 xingyunSession.value.status = 'connected';
               }
-            });
+            }, 30000);
 
           } catch (error) {
             xingyunSession.value.status = 'error';
@@ -3695,14 +3773,15 @@
               console.error('销毁SDK失败:', e);
             }
           }
-          xingyunSession.value = { sdk: null, status: 'disconnected', isConnected: false };
+          xingyunSession.value = { sdk: null, status: 'disconnected', isConnected: false, voiceState: 'idle' };
         };
 
         const sendQuickText = async () => {
           if (!quickText.value.trim()) return;
-          if (digitalHumanType.value === 'xingyun' && xingyunSession.value.isConnected && xingyunSession.value.sdk) {
-            // 使用魔珐 SDK 的 speak 方法
-            xingyunSession.value.sdk.speak(quickText.value, true, true);
+          if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+            // 使用魔珐 SDK 的 speak 方法，支持KA动作
+            const ssml = generateSSML(quickText.value);
+            xingyunSession.value.sdk.speak(ssml, true, true);
           }
           quickText.value = '';
         };
@@ -4438,7 +4517,7 @@
 
           try {
             // 构建历史消息
-            const history = messages.value.slice(-10).map(m => ({
+            const history = messages.value.slice(-20).map(m => ({
               role: m.role,
               content: m.content
             }));
@@ -4902,6 +4981,345 @@
 
         // ==================== 语音交互功能 ====================
 
+        // Web Speech API 语音识别（优先使用）
+        let webSpeechRecognition = null;
+        let useWebSpeech = true; // 优先使用Web Speech API
+
+        const initWebSpeechRecognition = () => {
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!SpeechRecognition) {
+            console.log('浏览器不支持Web Speech API');
+            useWebSpeech = false;
+            return null;
+          }
+
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true; // 持续识别，不会自动断开
+          recognition.interimResults = false; // 不需要临时结果
+          recognition.lang = 'zh-CN';
+          recognition.maxAlternatives = 1;
+
+          recognition.onstart = () => {
+            console.log('Web Speech API: 开始识别');
+            isRecording.value = true;
+            // 魔珐星云：切换到倾听状态
+            if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+              xingyunSession.value.sdk.listen();
+              xingyunSession.value.voiceState = 'listening';
+            }
+          };
+
+          recognition.onresult = (event) => {
+            // 只处理最终结果
+            let finalText = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              if (result.isFinal) {
+                finalText += result[0].transcript;
+              }
+            }
+
+            if (finalText) {
+              console.log('Web Speech API最终结果:', finalText);
+              // 并发触发：快速语音回复 + 完整文本回复
+              Promise.all([
+                sendQuickVoiceResponse(finalText),
+                sendTextMessage(finalText, true)
+              ]);
+            }
+          };
+
+          recognition.onerror = (event) => {
+            console.log('Web Speech API事件:', event.error);
+            if (event.error === 'not-allowed') {
+              alert('请允许麦克风权限');
+            }
+            isRecording.value = false;
+            // 魔珐星云：回到待机状态
+            if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+              xingyunSession.value.sdk.interactiveidle();
+              xingyunSession.value.voiceState = 'idle';
+            }
+          };
+
+          recognition.onend = () => {
+            console.log('Web Speech API: 识别结束');
+            isRecording.value = false;
+          };
+
+          return recognition;
+        };
+
+        // 快速语音回复（简洁，150字以内）
+        const sendQuickVoiceResponse = async (text) => {
+          if (!text || !text.trim()) return;
+
+          // 取消之前的语音回复请求
+          if (voiceAbortController) {
+            voiceAbortController.abort();
+          }
+          voiceAbortController = new AbortController();
+          const currentAbort = voiceAbortController;
+
+          try {
+            // 构建历史消息（包含聊天窗口的对话记录）
+            const history = messages.value.slice(-20).map(m => ({
+              role: m.role,
+              content: m.content.replace(/^🎤\s*/, '') // 移除麦克风标记
+            }));
+
+            const response = await fetch('/api/education/chat/stream', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: text,
+                skill_id: currentSkill.value,
+                session_id: sessionId.value + '_voice', // 不同的session避免冲突
+                use_fast_model: false, // 不切换模型，保持一致性
+                max_tokens: 150, // 限制150字
+                voice_mode: true, // 标记为语音模式
+                history: history // 传递对话历史
+              }),
+              signal: currentAbort.signal
+            });
+
+            if (!response.ok) return;
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let quickResponse = '';
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              // 检查是否已被打断
+              if (currentAbort.signal.aborted) {
+                reader.cancel();
+                break;
+              }
+
+              const chunk = decoder.decode(value, { stream: true });
+              const lines = chunk.split('\n');
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
+
+                    // 处理后端返回的错误
+                    if (data.error) {
+                      console.error('快速语音回复错误:', data.error);
+                      return; // 直接退出，不播报
+                    }
+
+                    if (data.content && !data.done) {
+                      quickResponse += data.content;
+                    }
+                    if (data.done && quickResponse && !currentAbort.signal.aborted) {
+                      // 魔珐星云驱动数字人说话
+                      if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+                        // 先打断当前播放
+                        xingyunSession.value.sdk.interactiveidle();
+                        // 短暂延迟后播放新内容
+                        pendingSpeakTimer = setTimeout(() => {
+                          pendingSpeakTimer = null;
+                          // 再次检查是否已被打断
+                          if (!currentAbort.signal.aborted) {
+                            const ssml = generateSSML(quickResponse);
+                            xingyunSession.value.sdk.speak(ssml, true, true);
+                            console.log('快速语音回复:', quickResponse);
+                          }
+                        }, 100);
+                      }
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+          } catch (error) {
+            if (error.name === 'AbortError') {
+              console.log('[打断] 快速语音回复已取消');
+            } else {
+              console.log('快速语音回复失败:', error);
+            }
+          }
+        };
+
+        // 发送文本消息进行对话（支持流式输出）
+        // isFinal: true=最终结果显示在聊天窗口, false=临时结果只驱动数字人
+        const sendTextMessage = async (text, isFinal = true) => {
+          if (!text || !text.trim()) return;
+
+          console.log('sendTextMessage调用:', { text, isFinal });
+
+          // 取消之前的流式请求
+          if (streamAbortController) {
+            streamAbortController.abort();
+          }
+          streamAbortController = new AbortController();
+          const currentAbort = streamAbortController;
+
+          // 魔珐星云：切换到思考状态
+          if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+            xingyunSession.value.sdk.think();
+            xingyunSession.value.voiceState = 'thinking';
+          }
+
+          // 只有最终结果才添加到聊天窗口
+          if (isFinal) {
+            console.log('添加用户消息到聊天窗口');
+            // 添加用户消息
+            messages.value.push({
+              role: 'user',
+              content: `🎤 ${text}`,
+              timestamp: new Date().toISOString()
+            });
+          }
+
+          isTyping.value = true;
+
+          // 流式输出相关变量
+          let fullResponse = '';
+          let assistantMessage = null;
+
+          try {
+            // 构建历史消息
+            const history = messages.value.slice(-20).map(m => ({
+              role: m.role,
+              content: m.content.replace(/^🎤\s*/, '') // 移除麦克风标记
+            }));
+
+            // 使用流式API
+            console.log('发送流式API请求...');
+            const response = await fetch('/api/education/chat/stream', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: text,
+                skill_id: currentSkill.value,
+                session_id: sessionId.value,
+                history: history
+              }),
+              signal: currentAbort.signal
+            });
+
+            console.log('流式API响应状态:', response.status);
+            if (!response.ok) {
+              throw new Error('对话请求失败');
+            }
+
+            // 只有最终结果才创建助手消息占位并显示在聊天窗口
+            if (isFinal) {
+              assistantMessage = {
+                role: 'assistant',
+                content: '',
+                timestamp: new Date().toISOString()
+              };
+              messages.value.push(assistantMessage);
+              console.log('创建助手消息占位, 消息数量:', messages.value.length);
+            }
+
+            // 处理流式响应
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            console.log('开始读取流式响应...');
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) {
+                console.log('流式响应读取完成');
+                break;
+              }
+              // 检查是否已被打断
+              if (currentAbort.signal.aborted) {
+                reader.cancel();
+                console.log('[打断] 流式文本回复已取消');
+                break;
+              }
+
+              const chunk = decoder.decode(value, { stream: true });
+              console.log('收到流式数据块:', chunk.substring(0, 100));
+              const lines = chunk.split('\n');
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
+
+                    // 处理后端返回的错误
+                    if (data.error) {
+                      console.error('流式响应错误:', data.error);
+                      throw new Error(data.error);
+                    }
+
+                    // 处理内容 (后端格式: {content: "...", done: false})
+                    if (data.content && !data.done) {
+                      fullResponse += data.content;
+                      // 更新聊天窗口（打字机效果）
+                      if (isFinal && assistantMessage) {
+                        assistantMessage.content = fullResponse;
+                        // 触发视图更新
+                        messages.value = [...messages.value];
+                      }
+                      if (isFinal) {
+                        await nextTick();
+                        scrollToBottom();
+                      }
+                    }
+
+                    // 处理思考过程 (reasoning_content)
+                    if (data.reasoning_content) {
+                      console.log('AI思考:', data.reasoning_content);
+                    }
+
+                    // 处理结束 (后端格式: {done: true, exp_gained: 5})
+                    if (data.done) {
+                      // 更新经验值
+                      if (isFinal && data.exp_gained) {
+                        growth.value.exp += data.exp_gained;
+                        growth.value.totalExp += data.exp_gained;
+                        while (growth.value.exp >= expForNextLevel.value) {
+                          growth.value.exp -= expForNextLevel.value;
+                          growth.value.level++;
+                        }
+                        growth.value.stats.conversations = (growth.value.stats.conversations || 0) + 1;
+                        await checkAchievements();
+                      }
+                    }
+                  } catch (e) {
+                    // 忽略解析错误
+                  }
+                }
+              }
+            }
+
+          } catch (error) {
+            if (error.name === 'AbortError') {
+              console.log('[打断] 流式文本回复已取消');
+            } else {
+              console.error('对话错误:', error);
+              if (assistantMessage) {
+                assistantMessage.content = `抱歉，处理出现问题：${error.message}`;
+              } else {
+                messages.value.push({
+                  role: 'assistant',
+                  content: `抱歉，处理出现问题：${error.message}`,
+                  timestamp: new Date().toISOString()
+                });
+              }
+              // 魔珐星云：回到待机状态
+              if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+                xingyunSession.value.sdk.interactiveidle();
+                xingyunSession.value.voiceState = 'idle';
+              }
+            }
+          }
+
+          isTyping.value = false;
+          await nextTick();
+          scrollToBottom();
+        };
+
         const toggleVoiceRecording = async () => {
           if (isRecording.value) {
             // 停止录音
@@ -4913,7 +5331,34 @@
         };
 
         const startRecording = async () => {
+          // 打断当前正在进行的语音输出
+          interruptVoiceOutput();
+
+          // 优先使用Web Speech API
+          if (useWebSpeech) {
+            if (!webSpeechRecognition) {
+              webSpeechRecognition = initWebSpeechRecognition();
+            }
+            if (webSpeechRecognition) {
+              try {
+                webSpeechRecognition.start();
+                return;
+              } catch (e) {
+                console.error('Web Speech API启动失败:', e);
+                // 如果Web Speech API失败，回退到原来的方式
+              }
+            }
+          }
+
+          // 回退到原来的录音方式（Sherpa ASR）
           try {
+            // 魔珐星云：切换到倾听状态
+            if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+              xingyunSession.value.sdk.listen();
+              xingyunSession.value.voiceState = 'listening';
+              console.log('魔珐星云：进入倾听状态');
+            }
+
             const stream = await navigator.mediaDevices.getUserMedia({
               audio: {
                 echoCancellation: true,
@@ -4941,6 +5386,13 @@
               // 停止所有音轨
               stream.getTracks().forEach(track => track.stop());
 
+              // 魔珐星云：切换到思考状态
+              if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+                xingyunSession.value.sdk.think();
+                xingyunSession.value.voiceState = 'thinking';
+                console.log('魔珐星云：进入思考状态');
+              }
+
               // 处理录音
               const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' });
               await sendVoiceMessage(audioBlob);
@@ -4956,6 +5408,15 @@
         };
 
         const stopRecording = () => {
+          // 停止Web Speech API
+          if (webSpeechRecognition) {
+            try {
+              webSpeechRecognition.stop();
+            } catch (e) {
+              console.log('停止Web Speech API:', e);
+            }
+          }
+          // 停止MediaRecorder
           if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
             mediaRecorder.value.stop();
           }
@@ -4973,25 +5434,21 @@
 
               try {
                 // 构建历史消息
-                const history = messages.value.slice(-10).map(m => ({
+                const history = messages.value.slice(-20).map(m => ({
                   role: m.role,
                   content: m.content
                 }));
 
-                // 构建请求参数，根据数字人类型决定路由
+                // 构建请求参数
                 const requestBody = {
                   audio_data: base64Audio,
                   skill_id: currentSkill.value,
                   session_id: sessionId.value,
                   language: 'zh',
-                  digital_human_type: digitalHumanType.value,
+                  digital_human_type: 'xingyun',
+                  frontend_drive: true,
                   history: history
                 };
-
-                // 如果是魔珐星云，标记需要前端驱动
-                if (digitalHumanType.value === 'xingyun') {
-                  requestBody.frontend_drive = true;
-                }
 
                 const response = await fetch('/api/education/voice/chat', {
                   method: 'POST',
@@ -5018,15 +5475,18 @@
                     timestamp: new Date().toISOString()
                   });
 
-                  // VRM 模式播放音频响应
-                  if (data.audio_data && digitalHumanType.value === 'vrm') {
-                    playAudioResponse(data.audio_data);
-                  }
-
                   // 魔珐星云驱动数字人播报
-                  if (digitalHumanType.value === 'xingyun' && xingyunSession.value.isConnected && xingyunSession.value.sdk && data.response) {
-                    xingyunSession.value.sdk.speak(data.response, true, true);
-                    console.log('魔珐星云已驱动播报');
+                  if (xingyunSession.value.isConnected && xingyunSession.value.sdk && data.response) {
+                    // 先打断当前播放，避免时间戳冲突
+                    xingyunSession.value.sdk.interactiveidle();
+                    pendingSpeakTimer = setTimeout(() => {
+                      pendingSpeakTimer = null;
+                      // 生成带KA动作的SSML
+                      const ssml = generateSSML(data.response);
+                      console.log('魔珐星云SSML:', ssml);
+                      xingyunSession.value.sdk.speak(ssml, true, true);
+                      console.log('魔珐星云已驱动播报');
+                    }, 100);
                   }
 
                   // 更新经验值
@@ -5048,14 +5508,31 @@
                   await nextTick();
                   scrollToBottom();
                 } else {
-                  throw new Error(data.detail || '语音对话失败');
+                  // 处理错误详情
+                  let errorMsg = '语音对话失败';
+                  if (data.detail) {
+                    if (typeof data.detail === 'string') {
+                      errorMsg = data.detail;
+                    } else if (data.detail.message) {
+                      errorMsg = data.detail.message;
+                    } else {
+                      errorMsg = JSON.stringify(data.detail);
+                    }
+                  }
+                  throw new Error(errorMsg);
                 }
               } catch (error) {
+                console.error('语音处理错误:', error);
                 messages.value.push({
                   role: 'assistant',
                   content: `抱歉，语音处理出现问题：${error.message}`,
                   timestamp: new Date().toISOString()
                 });
+                // 魔珐星云：错误时切换到待机状态
+                if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+                  xingyunSession.value.sdk.interactiveidle();
+                  xingyunSession.value.voiceState = 'idle';
+                }
               }
 
               isTyping.value = false;
@@ -5069,15 +5546,6 @@
           }
         };
 
-        const playAudioResponse = (base64Audio) => {
-          try {
-            const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
-            audio.play().catch(e => console.log('自动播放被阻止，需要用户交互'));
-          } catch (error) {
-            console.error('播放音频失败:', error);
-          }
-        };
-
         // WebSocket 语音连接（可选，用于实时交互）
         const connectVoiceWebSocket = () => {
           const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/education/ws/voice`;
@@ -5086,19 +5554,15 @@
 
           voiceWebSocket.value.onopen = () => {
             console.log('语音 WebSocket 已连接');
-            // 发送配置，包含数字人类型信息
+            // 发送配置
             const configMsg = {
               type: 'config',
               skill_id: currentSkill.value,
               session_id: sessionId.value,
               language: 'zh',
-              digital_human_type: digitalHumanType.value
+              digital_human_type: 'xingyun',
+              frontend_drive: true
             };
-
-            // 如果是魔珐星云，标记需要前端驱动
-            if (digitalHumanType.value === 'xingyun') {
-              configMsg.frontend_drive = true;
-            }
 
             voiceWebSocket.value.send(JSON.stringify(configMsg));
           };
@@ -5114,6 +5578,11 @@
                   content: `🎤 ${data.text}`,
                   timestamp: new Date().toISOString()
                 });
+                // 魔珐星云：切换到思考状态
+                if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+                  xingyunSession.value.sdk.think();
+                  xingyunSession.value.voiceState = 'thinking';
+                }
                 break;
 
               case 'response':
@@ -5124,15 +5593,16 @@
                   timestamp: new Date().toISOString()
                 });
                 // 魔珐星云驱动数字人播报
-                if (digitalHumanType.value === 'xingyun' && xingyunSession.value.isConnected && xingyunSession.value.sdk && data.text) {
-                  xingyunSession.value.sdk.speak(data.text, true, true);
-                  console.log('魔珐星云已驱动播报');
+                if (xingyunSession.value.isConnected && xingyunSession.value.sdk && data.text) {
+                  // 先打断当前播放，避免时间戳冲突
+                  xingyunSession.value.sdk.interactiveidle();
+                  setTimeout(() => {
+                    // 生成带KA动作的SSML
+                    const ssml = generateSSML(data.text);
+                    xingyunSession.value.sdk.speak(ssml, true, true);
+                    console.log('魔珐星云已驱动播报');
+                  }, 100);
                 }
-                break;
-
-              case 'audio':
-                // 播放音频（仅 VRM 模式会收到）
-                playAudioResponse(data.data);
                 break;
 
               case 'digital_human_driven':
@@ -5147,6 +5617,11 @@
 
               case 'error':
                 console.error('WebSocket 错误:', data.message);
+                // 魔珐星云：错误时切换到待机状态
+                if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+                  xingyunSession.value.sdk.interactiveidle();
+                  xingyunSession.value.voiceState = 'idle';
+                }
                 break;
             }
 
@@ -5347,7 +5822,6 @@
 
         return {
           activeTab,
-          digitalHumanType,
           currentSkill,
           quickText,
           chatInput,
@@ -5365,7 +5839,6 @@
           selectedRecord,
           collabFilter,
           collabFilters,
-          isConnected,
           statusText,
           currentSkillName,
           currentSkillDetail,
@@ -5376,7 +5849,6 @@
           filteredRecords,
           hasStreamingContent,
           quickQuestions,
-          switchAvatarType,
           createXingYunSession,
           closeXingYunSession,
           sendQuickText,

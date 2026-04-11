@@ -1010,8 +1010,8 @@ async function getAnimationFiles() {
       [
        `${window.location.protocol}//${window.location.host}/vrm/animations/greeting.vrma`,
         `${window.location.protocol}//${window.location.host}/vrm/animations/akimbo.vrma`,
-       `${window.location.protocol}//${window.location.host}/vrm/animations/play_fingers.vrma`,
-       `${window.location.protocol}//${window.location.host}/vrm/animations/scratch_head.vrma`,
+       `${window.location.protocol}//${window.location.host}/vrm/animations/playFingers.vrma`,
+       `${window.location.protocol}//${window.location.host}/vrm/animations/scratchHead.vrma`,
        `${window.location.protocol}//${window.location.host}/vrm/animations/stretch.vrma`,
        `${window.location.protocol}//${window.location.host}/vrm/animations/shoot.vrma`,
        `${window.location.protocol}//${window.location.host}/vrm/animations/peace_sign.vrma`,

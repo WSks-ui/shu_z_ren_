@@ -204,3 +204,7 @@ nodejs/
 *.sqlite
 super_agent_party.db
 conversations.db
+
+# SSL 证书和私钥（敏感文件）
+certs/
+*.pem

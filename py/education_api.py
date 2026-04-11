@@ -66,6 +66,14 @@ SKILL_PROMPTS = {
 - 实验设计支持：帮助明确研究问题和假设，指导选择合适的研究方法
 - 数据分析指导：帮助选择合适的统计方法，解释分析结果的含义
 
+## 图片识别能力
+你可以识别和处理用户上传的图片，包括：
+- 数学公式/手写稿：识别并转换为可编辑的 LaTeX 或文本格式
+- 教材插图/实验图：解释原理、步骤或生物学/化学结构
+- 笔记截图：整理杂乱笔记，提炼核心知识点
+- 数据图表：读取图表数据，分析趋势和结论
+- 文献截图：提取关键信息，总结研究内容
+
 ## 工作原则
 - 引导式协作：通过提问帮助用户澄清思路，提供方法论层面的建议
 - 学术诚信：明确标注 AI 生成的内容，提醒用户验证重要信息
@@ -80,6 +88,13 @@ SKILL_PROMPTS = {
 - 文献筛选与管理：协助制定纳入/排除标准，指导使用 PRISMA 流程图
 - 质量评估：提供研究质量评估框架，帮助识别潜在偏倚
 
+## 图片识别能力
+你可以识别和处理用户上传的图片，包括：
+- 文献截图：提取标题、作者、摘要、关键结论等信息
+- 数据图表：读取实验数据图表，辅助数据提取和比较
+- 流程图/框架图：理解研究设计和方法流程
+- 公式图片：识别数学公式并转换为 LaTeX 格式
+
 ## PRISMA 声明提醒
 在综述过程中，提醒用户遵循 PRISMA 声明的要求。
 
@@ -91,6 +106,13 @@ SKILL_PROMPTS = {
 - 论文结构规划：帮助设计论文框架和章节安排
 - 写作技巧指导：提供学术写作的语言和风格建议
 - 引用格式支持：支持 APA、MLA、Chicago、GB/T 7714、IEEE 等引用格式
+
+## 图片识别能力
+你可以识别和处理用户上传的图片，包括：
+- 数学公式：识别并转换为 LaTeX 格式，可直接用于论文
+- 数据图表：帮助描述图表内容，撰写图注说明
+- 实验装置图：解释实验原理，辅助撰写方法部分
+- 参考文献截图：提取文献信息，生成标准引用格式
 
 ## 写作原则
 - 学术规范：确保论文符合学术写作规范
@@ -105,6 +127,14 @@ SKILL_PROMPTS = {
 - 知识讲解：用通俗易懂的方式解释复杂概念
 - 学习规划：帮助制定学习计划和目标
 - 答疑解惑：回答学习过程中的各种问题
+
+## 图片识别能力
+你可以识别和处理用户上传的图片，包括：
+- 数学公式/手写稿：识别并转换为可编辑格式，详细讲解解题步骤
+- 教材插图：解释物理、化学、生物等学科的原理和结构
+- 笔记截图：整理知识点，帮助复习和记忆
+- 错题截图：分析错误原因，提供正确解法和相关知识
+- 作业/试卷：批改答案，讲解解题思路
 
 ## 教学原则
 - 因材施教：根据用户的背景调整讲解深度
@@ -843,6 +873,9 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     history: List[Dict[str, str]] = []
     files: Optional[List[str]] = None  # 上传文件的服务器路径列表
+    use_fast_model: bool = False  # 强制使用快速模型
+    max_tokens: Optional[int] = None  # 覆盖默认max_tokens
+    voice_mode: bool = False  # 语音模式：简洁回复
 
 
 class ChatResponse(BaseModel):
@@ -920,7 +953,7 @@ async def education_chat(request: ChatRequest = Body(...)):
     })
 
     # 添加历史消息
-    for msg in request.history[-10:]:  # 最多保留10条历史
+    for msg in request.history[-20:]:  # 最多保留20条历史
         messages.append({
             "role": msg.get("role", "user"),
             "content": msg.get("content", "")
@@ -1132,12 +1165,33 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
         # 构建消息
         messages = []
 
+        # 语音模式：简洁回复
+        voice_mode = getattr(request, 'voice_mode', False)
+
         # 添加技能系统提示词
         if request.skill_id and request.skill_id in SKILL_PROMPTS:
             base_system_prompt = SKILL_PROMPTS[request.skill_id]
         else:
             base_system_prompt = """你是一位友好的教育数字人助手，帮助用户学习和研究。
 请用简洁、专业的语言回答问题，必要时提供学习建议。"""
+
+        # 语音模式使用更简洁的提示词
+        if voice_mode:
+            base_system_prompt = """你是一位教育数字人助手，正在通过语音与用户交流。
+
+**图片识别能力**：
+你可以识别用户上传的图片，包括：
+- 数学公式/手写稿：识别并转换为可编辑格式
+- 教材插图/实验图：解释原理和结构
+- 笔记截图：整理并提炼核心知识点
+- 错题/作业：分析并提供解答
+
+**重要规则**：
+1. 回复必须极其简洁，控制在50字以内
+2. 直接回答核心问题，不要展开
+3. 如果问题复杂，简短说明"详细解答已显示在对话窗口"
+4. 避免使用Markdown格式，用口语化表达
+5. 不要列举多条内容，最多说1-2个要点"""
 
         # RAG: 检索知识库获取上下文（仅在向量库已存在时执行）
         rag_context = ""
@@ -1304,7 +1358,11 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
         fast_settings = settings.get("fast", {})
         use_fast_model = False
 
-        if fast_settings.get("enabled", False):
+        # 如果前端请求强制使用快速模型
+        if request.use_fast_model:
+            use_fast_model = True
+            print("[快速模型] 前端请求强制使用快速模型")
+        elif fast_settings.get("enabled", False):
             trigger_mode = fast_settings.get("triggerMode", "conditional")
 
             if trigger_mode == "always":
@@ -1364,6 +1422,11 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
                 max_tokens = fast_settings.get("max_tokens")
 
             print(f"[快速模型] 使用快速模型: {model}")
+
+        # 如果前端指定了max_tokens，覆盖默认值
+        if request.max_tokens:
+            max_tokens = request.max_tokens
+            print(f"[快速模型] 使用前端指定的max_tokens: {max_tokens}")
 
         if not api_key:
             # 模拟模式
@@ -2267,7 +2330,8 @@ async def websocket_voice_chat(websocket: WebSocket):
         "session_id": "voice_" + datetime.now().strftime("%Y%m%d_%H%M%S"),
         "language": "zh",
         "digital_human_type": "vrm",
-        "tencent_session_id": None
+        "tencent_session_id": None,
+        "history": []  # 对话历史，最多保留20条
     }
 
     try:
@@ -2315,12 +2379,18 @@ async def websocket_voice_chat(websocket: WebSocket):
                     })
 
                     if recognized_text and recognized_text.strip():
-                        # 获取 AI 回复
+                        # 获取 AI 回复（传递历史消息）
                         response = await _get_llm_response(
                             message=recognized_text,
                             skill_id=session_config["skill_id"],
-                            session_id=session_config["session_id"]
+                            session_id=session_config["session_id"],
+                            history=session_config["history"]
                         )
+
+                        # 更新对话历史
+                        session_config["history"].append({"role": "user", "content": recognized_text})
+                        session_config["history"].append({"role": "assistant", "content": response["response"]})
+                        session_config["history"] = session_config["history"][-20:]
 
                         # 发送回复文本
                         await websocket.send_json({
@@ -2383,8 +2453,14 @@ async def websocket_voice_chat(websocket: WebSocket):
                     response = await _get_llm_response(
                         message=text_data,
                         skill_id=session_config["skill_id"],
-                        session_id=session_config["session_id"]
+                        session_id=session_config["session_id"],
+                        history=session_config["history"]
                     )
+
+                    # 更新对话历史
+                    session_config["history"].append({"role": "user", "content": text_data})
+                    session_config["history"].append({"role": "assistant", "content": response["response"]})
+                    session_config["history"] = session_config["history"][-20:]
 
                     await websocket.send_json({
                         "type": "response",
@@ -2663,9 +2739,9 @@ async def _get_llm_response(
 由于是语音交互，请保持回复简洁，适合朗读。"""
         })
 
-    # 添加历史消息（最多保留10条）
+    # 添加历史消息（最多保留20条）
     if history:
-        for msg in history[-10:]:
+        for msg in history[-20:]:
             messages.append({
                 "role": msg.get("role", "user"),
                 "content": msg.get("content", "")

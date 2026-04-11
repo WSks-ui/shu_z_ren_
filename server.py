@@ -10778,19 +10778,43 @@ app.mount("/", StaticFiles(directory=os.path.join(base_path, "static"), html=Tru
 # 简化main函数
 if __name__ == "__main__":
     import uvicorn
+    import os
+
+    # SSL 证书配置 - 优先从环境变量读取，其次使用项目目录
+    # 环境变量示例:
+    #   SSL_KEYFILE=/path/to/key.pem
+    #   SSL_CERTFILE=/path/to/cert.pem
+    ssl_keyfile = os.environ.get("SSL_KEYFILE")
+    ssl_certfile = os.environ.get("SSL_CERTFILE")
+
+    # 如果环境变量未设置，使用项目目录下的证书
+    if not ssl_keyfile or not ssl_certfile:
+        certs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "certs")
+        if not ssl_keyfile:
+            ssl_keyfile = os.path.join(certs_dir, "key.pem")
+        if not ssl_certfile:
+            ssl_certfile = os.path.join(certs_dir, "cert.pem")
+
+    # 检查证书是否存在
+    ssl_enabled = os.path.exists(ssl_keyfile) and os.path.exists(ssl_certfile)
 
     # 格式化显示地址
     display_host = "127.0.0.1" if HOST == "0.0.0.0" else HOST
-    
+    protocol = "https" if ssl_enabled else "http"
+
     print("\n" + "="*50)
     print(f"🚀 后端服务已启动")
-    print(f"🔗 本地运行地址: http://{display_host}:{PORT}")
-    print(f"📖 API 文档地址: http://{display_host}:{PORT}/docs") # 如果是 FastAPI
+    print(f"🔗 本地运行地址: {protocol}://{display_host}:{PORT}")
+    print(f"📖 API 文档地址: {protocol}://{display_host}:{PORT}/docs")
+    if ssl_enabled:
+        print(f"🔒 HTTPS 已启用")
     print("="*50 + "\n")
 
     uvicorn.run(
         app,
         host=HOST,
         port=PORT,
-        log_level="warning"
+        log_level="warning",
+        ssl_keyfile=ssl_keyfile if ssl_enabled else None,
+        ssl_certfile=ssl_certfile if ssl_enabled else None
     )
