@@ -34,7 +34,8 @@ createApp({
       { id: 'research-assistant', name: '科研助手', icon: 'fa-solid fa-flask', description: '苏格拉底式引导实验设计，培养科研思维' },
       { id: 'literature-review', name: '文献综述', icon: 'fa-solid fa-book-open', description: 'PRISMA系统综述方法，多数据库协同检索' },
       { id: 'paper-writing', name: '论文写作', icon: 'fa-solid fa-pen-fancy', description: '学术论文写作指导，支持多种引用格式' },
-      { id: 'academic-tutoring', name: '虚拟导师', icon: 'fa-solid fa-graduation-cap', description: '个性化学习支持，答疑解惑' }
+      { id: 'academic-tutoring', name: '虚拟导师', icon: 'fa-solid fa-graduation-cap', description: '个性化学习支持，答疑解惑' },
+      { id: 'math-assistant', name: '数学助手', icon: 'fa-solid fa-square-root-variable', description: '手写公式识别，数学推导与解题' }
     ]);
 
     const skillUsage = ref({});
@@ -67,7 +68,169 @@ createApp({
         description: '个性化学习支持，答疑解惑',
         gradient: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
         features: ['个性化知识讲解', '学习路径规划', '难点答疑解惑', '学习进度追踪', '因材施教策略', '启发式提问引导']
+      },
+      'math-assistant': {
+        name: '数学助手',
+        icon: 'fa-solid fa-square-root-variable',
+        description: '手写公式识别，数学推导与解题',
+        gradient: 'linear-gradient(135deg, #ec4899, #db2777)',
+        features: ['手写公式识别与解析', 'LaTeX 公式编辑', '分步解题推导', '数学概念可视化', '多领域数学支持', '错题分析与举一反三']
       }
+    };
+
+    // ==================== 技能阶段与工具栏 ====================
+
+    const skillStages = {
+      'research-assistant': [
+        { id: 'topic', name: '选题探索', icon: 'fa-solid fa-magnifying-glass' },
+        { id: 'hypothesis', name: '假设构建', icon: 'fa-solid fa-lightbulb' },
+        { id: 'design', name: '实验设计', icon: 'fa-solid fa-flask' },
+        { id: 'analysis', name: '数据分析', icon: 'fa-solid fa-chart-column' }
+      ],
+      'literature-review': [
+        { id: 'scope', name: '主题界定', icon: 'fa-solid fa-bullseye' },
+        { id: 'search', name: '检索策略', icon: 'fa-solid fa-database' },
+        { id: 'screen', name: '筛选评估', icon: 'fa-solid fa-filter' },
+        { id: 'synthesis', name: '综合撰写', icon: 'fa-solid fa-file-lines' }
+      ],
+      'paper-writing': [
+        { id: 'topic', name: '论文选题', icon: 'fa-solid fa-magnifying-glass' },
+        { id: 'outline', name: '框架搭建', icon: 'fa-solid fa-sitemap' },
+        { id: 'writing', name: '内容撰写', icon: 'fa-solid fa-pen-fancy' },
+        { id: 'polish', name: '润色定稿', icon: 'fa-solid fa-spell-check' }
+      ],
+      'academic-tutoring': [
+        { id: 'diagnose', name: '学情诊断', icon: 'fa-solid fa-stethoscope' },
+        { id: 'explain', name: '知识讲解', icon: 'fa-solid fa-chalkboard-user' },
+        { id: 'practice', name: '练习巩固', icon: 'fa-solid fa-dumbbell' },
+        { id: 'review', name: '总结提升', icon: 'fa-solid fa-arrow-up' }
+      ],
+      'math-assistant': [
+        { id: 'understand', name: '问题理解', icon: 'fa-solid fa-question' },
+        { id: 'method', name: '方法选择', icon: 'fa-solid fa-route' },
+        { id: 'solve', name: '逐步求解', icon: 'fa-solid fa-stairs' },
+        { id: 'verify', name: '验证总结', icon: 'fa-solid fa-check-double' }
+      ]
+    };
+
+    const skillToolbarActions = {
+      'research-assistant': [
+        { label: '定义变量', icon: 'fa-solid fa-list-check', prompt: '请帮我梳理并定义这个研究中的关键变量，区分自变量、因变量和控制变量，并说明各变量的操作化定义。' },
+        { label: '统计方法', icon: 'fa-solid fa-chart-bar', prompt: '请根据我的研究设计和数据类型，推荐合适的统计分析方法，并解释为什么选择这个方法。' },
+        { label: '实验检查', icon: 'fa-solid fa-clipboard-check', prompt: '请帮我检查实验设计的严谨性，包括样本量是否充足、控制变量是否完整、可能的混淆因素有哪些。' },
+        { label: '伦理审查', icon: 'fa-solid fa-shield-halved', prompt: '请帮我审查研究方案的伦理问题，包括知情同意、隐私保护、数据安全等方面。' }
+      ],
+      'literature-review': [
+        { label: 'PICO 框架', icon: 'fa-solid fa-bullseye', prompt: '请帮我使用 PICO 框架（Population, Intervention, Comparison, Outcome）明确我的文献综述研究问题。' },
+        { label: '检索策略', icon: 'fa-solid fa-database', prompt: '请帮我设计系统化的检索策略，包括选择数据库、确定检索词和布尔逻辑组合。' },
+        { label: '质量评估', icon: 'fa-solid fa-star-half-stroke', prompt: '请提供一套文献质量评估框架，帮助我评估纳入文献的方法学质量和偏倚风险。' },
+        { label: '引用格式', icon: 'fa-solid fa-quote-left', prompt: '请帮我将以下文献信息转换为标准的引用格式（请指定 APA/MLA/GB/T 7714/IEEE）：' }
+      ],
+      'paper-writing': [
+        { label: '生成大纲', icon: 'fa-solid fa-sitemap', prompt: '请根据我的研究主题，帮我生成一个完整的论文大纲，包括各章节的主要内容要点。' },
+        { label: '段落润色', icon: 'fa-solid fa-wand-magic-sparkles', prompt: '请帮我润色以下段落的学术表达，使其更加精准、流畅，同时保持原意不变：\n\n' },
+        { label: '引用插入', icon: 'fa-solid fa-quote-left', prompt: '请帮我将以下内容正确地引用到论文中，确保符合学术引用规范：\n\n' },
+        { label: '查重提示', icon: 'fa-solid fa-copy', prompt: '请帮我检查以下段落是否存在潜在的学术不端风险（如过度引用、自我抄袭等），并给出修改建议：\n\n' }
+      ],
+      'academic-tutoring': [
+        { label: '知识图谱', icon: 'fa-solid fa-diagram-project', prompt: '请帮我构建这个知识点的概念图谱，展示核心概念之间的关系和层次结构。' },
+        { label: '练习题', icon: 'fa-solid fa-pencil', prompt: '请根据当前讲解的知识点，设计 3 道由易到难的练习题，帮我巩固理解。' },
+        { label: '学习计划', icon: 'fa-solid fa-calendar-days', prompt: '请帮我制定一个学习计划，包括学习目标、时间安排和检验方式。' },
+        { label: '错题分析', icon: 'fa-solid fa-bug', prompt: '请帮我分析以下错题的错误原因，指出我理解上的偏差，并给出正确解法：\n\n' }
+      ],
+      'math-assistant': [
+        { label: 'LaTeX 公式', icon: 'fa-solid fa-code', prompt: '请将以下数学表达式转换为标准的 LaTeX 代码：\n\n' },
+        { label: '分步解题', icon: 'fa-solid fa-stairs', prompt: '请帮我分步求解以下数学问题，每一步都要标注数学依据：\n\n' },
+        { label: '函数绘图', icon: 'fa-solid fa-chart-line', prompt: '请帮我分析以下函数的性质（定义域、值域、极值、单调性等），并描述其图像特征：\n\n' },
+        { label: '验算检查', icon: 'fa-solid fa-check-double', prompt: '请帮我验算以下解题过程是否正确，如果有错误请指出具体在哪一步：\n\n' }
+      ]
+    };
+
+    const currentStage = ref(0);
+    const skillContextMap = ref(JSON.parse(localStorage.getItem('edu-skill-context') || '{}'));
+
+    const skillStagesList = computed(() => {
+      return currentSkill.value ? (skillStages[currentSkill.value] || []) : [];
+    });
+
+    const skillToolbar = computed(() => {
+      return currentSkill.value ? (skillToolbarActions[currentSkill.value] || []) : [];
+    });
+
+    const savedSkillContext = computed(() => {
+      if (!currentSkill.value) return null;
+      return skillContextMap.value[currentSkill.value] || null;
+    });
+
+    const hasSavedContext = computed(() => {
+      return !!savedSkillContext.value && savedSkillContext.value.lastTopic;
+    });
+
+    const savedContextPreview = computed(() => {
+      return hasSavedContext.value ? savedSkillContext.value.lastTopic : '';
+    });
+
+    const detectStageFromResponse = (content) => {
+      if (!currentSkill.value || !skillStages[currentSkill.value]) return;
+      const stages = skillStages[currentSkill.value];
+      for (let i = 0; i < stages.length; i++) {
+        const regex = new RegExp('【' + stages[i].name + '】');
+        if (regex.test(content)) {
+          if (i > currentStage.value) {
+            currentStage.value = i;
+          }
+          return;
+        }
+      }
+    };
+
+    const saveSkillContext = () => {
+      if (!currentSkill.value) return;
+      const lastUserMsg = [...messages.value].reverse().find(m => m.role === 'user');
+      const lastAiMsg = [...messages.value].reverse().find(m => m.role === 'assistant');
+      const topic = lastUserMsg ? lastUserMsg.content.substring(0, 50) : '';
+      const ctx = {
+        lastTopic: topic,
+        stage: currentStage.value,
+        stageName: skillStagesList.value[currentStage.value]?.name || '',
+        timestamp: new Date().toISOString()
+      };
+      skillContextMap.value[currentSkill.value] = ctx;
+      localStorage.setItem('edu-skill-context', JSON.stringify(skillContextMap.value));
+    };
+
+    const continueSkillContext = (skillId) => {
+      const ctx = skillContextMap.value[skillId];
+      if (!ctx) return;
+      currentStage.value = ctx.stage || 0;
+      chatInput = `让我们继续上次关于「${ctx.lastTopic}」的讨论，请接着上次的内容继续。`;
+    };
+
+    // 手动设置阶段进度（用户点击或AI调用）
+    const setStage = (stageIndex) => {
+      if (!skillStagesList.value.length) return;
+      if (stageIndex < 0 || stageIndex >= skillStagesList.value.length) return;
+      currentStage.value = stageIndex;
+      const stageName = skillStagesList.value[stageIndex]?.name || '';
+      console.log(`[阶段切换] 跳转到: ${stageName}`);
+      saveSkillContext();
+    };
+
+    // AI可调用的阶段跳转指令解析
+    const parseStageCommand = (content) => {
+      // 匹配 [跳转阶段:检索策略] 或 [阶段:筛选评估] 格式
+      const match = content.match(/\[(?:跳转阶段|阶段)[:：]\s*([^\]]+)\]/);
+      if (match) {
+        const targetName = match[1].trim();
+        const stages = skillStagesList.value;
+        for (let i = 0; i < stages.length; i++) {
+          if (stages[i].name === targetName || stages[i].id === targetName) {
+            setStage(i);
+            return true;
+          }
+        }
+      }
+      return false;
     };
 
     // ==================== 成长系统 ====================
@@ -91,7 +254,11 @@ createApp({
       { id: 'level_5', name: '进阶学者', description: '达到5级', icon: 'fa-solid fa-star', unlocked: false },
       { id: 'level_10', name: '资深学者', description: '达到10级', icon: 'fa-solid fa-crown', unlocked: false },
       { id: 'collaboration_master', name: '协作大师', description: '完成20次协作', icon: 'fa-solid fa-handshake', unlocked: false },
-      { id: 'knowledge_seeker', name: '知识探索者', description: '使用所有技能', icon: 'fa-solid fa-compass', unlocked: false }
+      { id: 'knowledge_seeker', name: '知识探索者', description: '使用所有技能', icon: 'fa-solid fa-compass', unlocked: false },
+      { id: 'formula_master', name: '公式达人', description: '识别10个手写公式', icon: 'fa-solid fa-square-root-variable', unlocked: false },
+      { id: 'bookworm', name: '书虫', description: '收藏20条知识书签', icon: 'fa-solid fa-bookmark', unlocked: false },
+      { id: 'night_owl', name: '夜间学者', description: '在深夜使用研伴', icon: 'fa-solid fa-moon', unlocked: false },
+      { id: 'polyglot', name: '多技能通', description: '每个技能至少使用3次', icon: 'fa-solid fa-layer-group', unlocked: false }
     ]);
 
     const statCards = [
@@ -112,7 +279,8 @@ createApp({
       { key: 'paper', label: '论文写作' },
       { key: 'experiment', label: '实验设计' },
       { key: 'review', label: '文献综述' },
-      { key: 'tutoring', label: '学习辅导' }
+      { key: 'tutoring', label: '学习辅导' },
+      { key: 'math', label: '数学助手' }
     ];
 
     // ==================== 魔珐星云数字人 ====================
@@ -131,6 +299,31 @@ createApp({
 
     // ==================== 设置弹窗 ====================
     const showSettingsModal = ref(false);
+    const settingsTab = ref('model');
+    const settingsTabDirection = ref('left');
+
+    const settingTabs = [
+      { id: 'model', icon: 'fa-solid fa-microchip', label: '模型配置' },
+      { id: 'formula', icon: 'fa-solid fa-square-root-variable', label: '公式识别' },
+      { id: 'appearance', icon: 'fa-solid fa-palette', label: '外观' },
+      { id: 'voice', icon: 'fa-solid fa-volume-high', label: '语音' },
+      { id: 'about', icon: 'fa-solid fa-circle-info', label: '关于' }
+    ];
+
+    const tabOrder = ['model', 'formula', 'appearance', 'voice', 'about'];
+
+    // 用 watch 追踪方向，不在点击事件里同时改两个 ref
+    watch(settingsTab, (newVal, oldVal) => {
+      const newIdx = tabOrder.indexOf(newVal);
+      const oldIdx = tabOrder.indexOf(oldVal);
+      settingsTabDirection.value = newIdx > oldIdx ? 'left' : 'right';
+    });
+
+    const settingsTabIndicator = computed(() => {
+      const idx = tabOrder.indexOf(settingsTab.value);
+      return { top: (16 + idx * 42) + 'px' };
+    });
+
     const apiSettings = ref({
       api_key: '',
       api_key_configured: false,
@@ -157,10 +350,20 @@ createApp({
       conditionNoFiles: true
     });
 
-    const formulaOcrSettings = ref({
+    const formulaOcrSettings = ref(JSON.parse(localStorage.getItem('edu-formula-ocr') || 'null') || {
       enabled: true,
       api_key: '',
       model: 'standard'
+    });
+
+    const displaySettings = ref(JSON.parse(localStorage.getItem('edu-display') || 'null') || {
+      fontSize: 14,
+      bubbleStyle: 'rounded'
+    });
+
+    const voiceSettings = ref(JSON.parse(localStorage.getItem('edu-voice') || 'null') || {
+      speed: 1.0,
+      volume: 80
     });
 
     // ==================== 文件上传 ====================
@@ -209,15 +412,23 @@ createApp({
 
     // ==================== 语音录制 ====================
     const isRecording = ref(false);
-    const mediaRecorder = ref(null);
-    const audioChunks = ref([]);
-    const voiceWebSocket = ref(null);
-    const audioContext = ref(null);
+    const speechRecognition = ref(null);
+    let chatGeneration = 0; // 请求代际计数器，防止旧请求干扰新请求
 
-    // 语音打断控制
-    let voiceAbortController = null;
-    let streamAbortController = null;
-    let pendingSpeakTimer = null;
+    const initSpeechRecognition = () => {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        console.warn('浏览器不支持 Web Speech API');
+        return null;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;  // 开启实时结果，加快响应
+      recognition.lang = 'zh-CN';
+      return recognition;
+    };
+
+    // toggleVoiceRecording 已在下方语音方法区域定义
 
     // ==================== 主题切换 ====================
     const currentTheme = ref(localStorage.getItem('edu-theme') || 'dark');
@@ -227,6 +438,30 @@ createApp({
 
     // ==================== 知识书签 ====================
     const bookmarks = ref(JSON.parse(localStorage.getItem('edu-bookmarks') || '[]'));
+    const bookmarkSearch = ref('');
+    const bookmarkSkillFilter = ref('');
+
+    const uniqueBookmarkSkills = computed(() => {
+      const seen = new Map();
+      bookmarks.value.forEach(bm => {
+        if (!seen.has(bm.skill)) {
+          seen.set(bm.skill, { id: bm.skill, name: bm.skillName });
+        }
+      });
+      return [...seen.values()];
+    });
+
+    const filteredBookmarks = computed(() => {
+      let list = bookmarks.value;
+      if (bookmarkSkillFilter.value) {
+        list = list.filter(bm => bm.skill === bookmarkSkillFilter.value);
+      }
+      if (bookmarkSearch.value.trim()) {
+        const q = bookmarkSearch.value.trim().toLowerCase();
+        list = list.filter(bm => bm.content.toLowerCase().includes(q));
+      }
+      return list;
+    });
 
     // ==================== 计算属性 ====================
     const statusText = computed(() => {
@@ -282,7 +517,8 @@ createApp({
         'research-assistant': ['如何设计一个对照实验？', '帮我构建研究假设', '推荐合适的统计方法', '如何控制实验变量？'],
         'literature-review': ['帮我制定检索策略', '什么是PRISMA流程？', '如何评估文献质量？', '帮我设计PICO框架'],
         'paper-writing': ['如何写好论文摘要？', '论文Introduction怎么写？', 'APA引用格式怎么用？', '如何梳理论证逻辑？'],
-        'academic-tutoring': ['解释一下什么是机器学习', '帮我制定学习计划', '推荐学习资源', '如何提高学术写作能力？']
+        'academic-tutoring': ['解释一下什么是机器学习', '帮我制定学习计划', '推荐学习资源', '如何提高学术写作能力？'],
+        'math-assistant': ['帮我解这个微分方程', '手写公式识别怎么用？', '解释一下线性代数的特征值', '如何证明数学归纳法？']
       };
       return questions[currentSkill.value] || ['你好，请介绍一下你的功能'];
     });
@@ -313,6 +549,12 @@ createApp({
           { title: '学习计划定制', description: '个性化学习路径规划', prompt: '我想系统学习[学科/领域]，背景是[当前水平]。请帮我制定8周学习计划：1) 每周学习目标 2) 推荐学习资源 3) 练习和实践建议 4) 检验学习效果的方法' },
           { title: '知识盲区检测', description: '通过提问发现薄弱环节', prompt: '请通过苏格拉底式提问帮我检测[学科/主题]的知识盲区。从基础概念开始逐步深入，根据我的回答调整难度，发现理解的薄弱环节并针对性补强' },
           { title: '学术写作提升', description: '中英文学术写作技巧', prompt: '请帮我提升学术写作能力。目前的写作难点是[描述问题]。请从以下方面指导：1) 学术语言特点 2) 常见表达方式对比 3) 段落组织原则 4) 过渡词使用 5) 修改润色策略' }
+        ],
+        'math-assistant': [
+          { title: '手写公式识别', description: '拍照/手写输入数学公式', prompt: '我手写了一个数学公式，请帮我识别并解析。你可以点击输入框旁边的"手写公式"按钮，在画板上写下你的公式，我会识别并帮你进一步分析和计算。也可以直接上传公式的图片。' },
+          { title: '分步解题推导', description: '详细的数学解题过程', prompt: '请帮我详细推导以下数学题的解题过程：[输入题目或公式]。要求：1) 写出已知条件 2) 说明解题思路 3) 逐步推导，每一步标注依据 4) 给出最终答案和验证方法' },
+          { title: 'LaTeX公式编辑', description: '数学公式的LaTeX代码', prompt: '请帮我将以下数学表达式转换为标准LaTeX代码：[输入数学表达式]。同时：1) 解释每个LaTeX命令的含义 2) 给出渲染效果 3) 提供常见的变体写法' },
+          { title: '错题分析纠错', description: '找出计算错误并纠正', prompt: '请帮我分析以下解题过程中的错误：[粘贴你的解答]。要求：1) 逐步检查每一步 2) 标注出错的步骤 3) 解释错误原因 4) 给出正确解法 5) 总结这类题目的易错点' }
         ]
       };
       return templates[currentSkill.value] || [];
@@ -339,14 +581,14 @@ createApp({
 
         const skillNames = skills.value.map(s => s.name);
         const skillValues = skills.value.map(s => skillUsage.value[s.id] || 0);
-        const skillColors = ['#10b981', '#0ea5e9', '#f97316', '#8b5cf6'];
+        const skillColors = ['#10b981', '#0ea5e9', '#f97316', '#8b5cf6', '#ec4899'];
 
         skillChart.value = new Chart(skillCanvas.getContext('2d'), {
           type: 'doughnut',
           data: {
             labels: skillNames,
             datasets: [{
-              data: skillValues.every(v => v === 0) ? [1, 1, 1, 1] : skillValues,
+              data: skillValues.every(v => v === 0) ? [1, 1, 1, 1, 1] : skillValues,
               backgroundColor: skillColors.map(c => c + '33'),
               borderColor: skillColors,
               borderWidth: 2
@@ -526,6 +768,94 @@ createApp({
       quickText.value = '';
     };
 
+    // ==================== 流式播报 ====================
+    let speakBuffer = '';           // 累积文本缓冲
+    let speakQueue = [];            // 播报队列
+    let isProcessingQueue = false;  // 是否正在处理队列
+
+    const streamSpeak = (text) => {
+      if (!xingyunSession.value.isConnected || !xingyunSession.value.sdk) return;
+
+      // 累积文本
+      speakBuffer += text;
+
+      // 检测句子结束符（中文和英文）
+      const sentenceEnders = /[。！？!?.]/g;
+      let match;
+      const sentences = [];
+
+      while ((match = sentenceEnders.exec(speakBuffer)) !== null) {
+        const idx = match.index + 1;
+        const sentence = speakBuffer.substring(0, idx).trim();
+        if (sentence) {
+          sentences.push(sentence);
+        }
+        speakBuffer = speakBuffer.substring(idx);
+      }
+
+      // 将完整句子加入队列
+      sentences.forEach(s => {
+        // 清理 Markdown 标记
+        const cleanText = s.replace(/[#*_`~>\[\]()!|\\]/g, '').trim();
+        if (cleanText.length > 1) {
+          speakQueue.push(cleanText);
+          console.log('[流式播报] 加入队列:', cleanText);
+        }
+      });
+
+      // 处理队列
+      processSpeakQueue();
+    };
+
+    const processSpeakQueue = async () => {
+      if (isProcessingQueue || speakQueue.length === 0) return;
+
+      isProcessingQueue = true;
+
+      while (speakQueue.length > 0) {
+        const text = speakQueue.shift();
+        console.log('[流式播报] 播报:', text);
+
+        // 调用魔珐SDK播报，第二个参数false表示不打断当前播报
+        xingyunSession.value.sdk.speak(text, false, true);
+
+        // 等待播报完成（检测voiceState变化）
+        await waitForSpeakEnd();
+      }
+
+      isProcessingQueue = false;
+    };
+
+    const waitForSpeakEnd = () => {
+      return new Promise((resolve) => {
+        // 先等待开始说话
+        const checkStart = setInterval(() => {
+          if (xingyunSession.value.voiceState === 'speaking') {
+            clearInterval(checkStart);
+            // 然后等待说话结束
+            const checkEnd = setInterval(() => {
+              if (xingyunSession.value.voiceState !== 'speaking') {
+                clearInterval(checkEnd);
+                resolve();
+              }
+            }, 100);
+          }
+        }, 100);
+
+        // 超时保护（最多等待10秒）
+        setTimeout(() => {
+          clearInterval(checkStart);
+          resolve();
+        }, 10000);
+      });
+    };
+
+    const resetSpeakBuffer = () => {
+      speakBuffer = '';
+      speakQueue = [];
+      isProcessingQueue = false;
+    };
+
     // ==================== 数字人布局校正 ====================
     const fixAvatarLayout = () => {
       const container = document.querySelector('#xingyun-sdk-container');
@@ -628,12 +958,62 @@ createApp({
       );
     };
 
+    // 删除单条消息
+    const deleteMessage = async (index) => {
+      if (index < 0 || index >= messages.value.length) return;
+
+      const msg = messages.value[index];
+      const confirmMsg = msg.role === 'user'
+        ? '确定要删除这条消息吗？删除后AI的回复也会一并删除。'
+        : '确定要删除这条AI回复吗？';
+
+      if (!confirm(confirmMsg)) return;
+
+      // 如果删除的是用户消息，同时删除下一条AI回复
+      if (msg.role === 'user' && index + 1 < messages.value.length && messages.value[index + 1].role === 'assistant') {
+        messages.value.splice(index, 2);
+      } else {
+        messages.value.splice(index, 1);
+      }
+
+      // 保存更新后的历史记录
+      await saveChatHistory();
+    };
+
+    // 保存聊天历史到服务器
+    const saveChatHistory = async () => {
+      try {
+        await fetch('/api/education/chat/history/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId.value,
+            messages: messages.value
+          })
+        });
+      } catch (error) {
+        console.error('保存聊天历史失败:', error);
+      }
+    };
+
     const insertBookmarkToChat = (bookmark) => {
       chatInput.value = `请详细解释以下内容：\n${bookmark.content}`;
       chatExpanded.value = true;
     };
 
     // ==================== 技能方法 ====================
+    const skillColors = {
+      'research-assistant': '#10b981',
+      'literature-review': '#0ea5e9',
+      'paper-writing': '#f97316',
+      'academic-tutoring': '#8b5cf6',
+      'math-assistant': '#ec4899'
+    };
+
+    const getSkillColor = (skillId) => {
+      return skillColors[skillId] || '#10b981';
+    };
+
     const selectSkill = (skillId) => {
       currentSkill.value = skillId;
     };
@@ -647,16 +1027,18 @@ createApp({
     };
 
     const startConversation = () => {
-      chatExpanded.value = true;  // 新布局：展开对话栏
-      activePanel.value = null;   // 收起功能面板
+      chatExpanded.value = true;
+      activePanel.value = null;
       messages.value = [];
       sessionId.value = 'session_' + Date.now();
+      currentStage.value = 0;  // 重置阶段进度
 
       const greetings = {
         'research-assistant': `你好！我是**研友**的科研助手模式。\n\n我可以帮助你：\n- 设计实验方案\n- 构建研究假设\n- 选择合适的研究方法\n- 分析实验数据\n\n请告诉我你正在研究的课题，我们一起探讨！`,
         'literature-review': `你好！我是**研友**的文献综述模式。\n\n我可以帮助你：\n- 制定 PICO 检索框架\n- 设计检索策略和布尔逻辑\n- 使用 PRISMA 流程进行文献筛选\n- 评估文献质量和偏倚风险\n\n请告诉我你的研究主题或感兴趣的领域！`,
         'paper-writing': `你好！我是**研友**的论文写作模式。\n\n我可以帮助你：\n- 规划论文结构和章节\n- 润色学术语言表达\n- 处理引用格式 (APA/MLA/GB/T 7714)\n- 梳理论证逻辑\n\n请告诉我你正在撰写什么类型的论文？`,
-        'academic-tutoring': `你好！我是**研友**的虚拟导师模式。\n\n我可以帮助你：\n- 解释复杂概念和知识点\n- 制定个性化学习计划\n- 解答学习中的疑问\n- 推荐学习资源和路径\n\n请告诉我你想学习什么内容？`
+        'academic-tutoring': `你好！我是**研友**的虚拟导师模式。\n\n我可以帮助你：\n- 解释复杂概念和知识点\n- 制定个性化学习计划\n- 解答学习中的疑问\n- 推荐学习资源和路径\n\n请告诉我你想学习什么内容？`,
+        'math-assistant': `你好！我是**研友**的数学助手模式。\n\n我可以帮助你：\n- 识别手写数学公式（试试输入框旁的"手写公式"按钮）\n- 分步推导数学解题过程\n- 编写和转换 LaTeX 公式\n- 分析计算错误并纠正\n\n请输入你的数学问题，或者点击"手写公式"直接书写！`
       };
 
       const greeting = greetings[currentSkill.value] || `你好！我是**研友**。\n\n请告诉我你想了解什么，我会尽力帮助你。`;
@@ -670,8 +1052,16 @@ createApp({
     };
 
     // ==================== 对话方法 ====================
-    const sendMessage = async () => {
-      if (!chatInput.value.trim() || isTyping.value) return;
+    const sendMessage = async (voiceMode = false) => {
+      if (!chatInput.value.trim()) return;
+
+      // 递增代际计数器，旧请求的写入会被忽略
+      chatGeneration++;
+      const myGeneration = chatGeneration;
+      isTyping.value = true;
+
+      // 重置流式播报缓冲区
+      resetSpeakBuffer();
 
       const userMessage = chatInput.value.trim();
 
@@ -731,6 +1121,7 @@ createApp({
           requestBody.files = filePaths;
         }
 
+        // ===== 流式请求 =====
         const response = await fetch('/api/education/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -757,6 +1148,9 @@ createApp({
         let expGained = 10;
 
         while (true) {
+          // 代际检查：如果已被新请求取代，立即退出
+          if (myGeneration !== chatGeneration) break;
+
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -769,19 +1163,27 @@ createApp({
                 const data = JSON.parse(line.slice(6));
 
                 if (data.error) {
+                  if (myGeneration !== chatGeneration) break;
                   messages.value[assistantIndex].content = `抱歉，出现问题：${data.error}`;
                   messages.value[assistantIndex].isTyping = false;
                   break;
                 }
 
                 if (data.reasoning_content) {
+                  if (myGeneration !== chatGeneration) break;
                   messages.value[assistantIndex].reasoning += data.reasoning_content;
                 }
 
                 if (data.content) {
+                  if (myGeneration !== chatGeneration) break;
                   fullContent += data.content;
                   messages.value[assistantIndex].content = fullContent;
                   scrollToBottom();
+
+                  // 流式播报：检测完整句子后立即播报
+                  if (voiceMode && autoSpeakEnabled.value && xingyunSession.value.isConnected) {
+                    streamSpeak(data.content);
+                  }
                 }
 
                 if (data.done) {
@@ -792,18 +1194,61 @@ createApp({
           }
         }
 
-        messages.value[assistantIndex].content = fullContent || '（无回复）';
-        messages.value[assistantIndex].isTyping = false;
+        // 代际检查：只有当前请求才写入最终结果
+        if (myGeneration === chatGeneration) {
+          messages.value[assistantIndex].content = fullContent || '（无回复）';
+          messages.value[assistantIndex].isTyping = false;
+          renderKatex();
+        } else {
+          // 旧请求被取代，删除空的占位消息
+          if (messages.value[assistantIndex] && !messages.value[assistantIndex].content) {
+            messages.value.splice(assistantIndex, 1);
+          }
+          return; // 直接返回，不执行后续逻辑
+        }
         renderKatex();
 
-        // 自动播报：去 Markdown 符号，限 200 字
-        if (autoSpeakEnabled.value && xingyunSession.value.isConnected && xingyunSession.value.sdk && fullContent) {
+        // 阶段检测 & 上下文保存
+        if (fullContent) {
+          // 先检查AI的阶段跳转指令
+          parseStageCommand(fullContent);
+          // 再检测标记格式
+          detectStageFromResponse(fullContent);
+          saveSkillContext();
+        }
+
+        // 处理剩余未播报的文本（语音模式下流式播报的剩余部分）
+        if (voiceMode && autoSpeakEnabled.value && xingyunSession.value.isConnected && speakBuffer.trim()) {
+          const cleanText = speakBuffer.replace(/[#*_`~>\[\]()!|\\]/g, '').trim();
+          if (cleanText.length > 1) {
+            speakQueue.push(cleanText);
+            processSpeakQueue();
+          }
+        }
+
+        // 非语音模式的播报逻辑
+        if (!voiceMode && autoSpeakEnabled.value && fullContent) {
           const speakText = fullContent.replace(/[#*_`~>\[\]()!|\\]/g, '').replace(/\n+/g, '。').substring(0, 200);
           if (speakText.trim()) {
-            xingyunSession.value.sdk.interactiveidle();
-            setTimeout(() => {
-              xingyunSession.value.sdk.speak(speakText, true, true);
-            }, 200);
+            // 魔珐星云播报（如果已连接）
+            if (xingyunSession.value.isConnected && xingyunSession.value.sdk) {
+              xingyunSession.value.sdk.interactiveidle();
+              setTimeout(() => {
+                xingyunSession.value.sdk.speak(speakText, true, true);
+              }, 200);
+            } else {
+              // 魔珐未连接时使用 Web Speech API TTS 播报
+              if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(speakText);
+                utterance.lang = 'zh-CN';
+                utterance.rate = 1.0;
+                const voices = window.speechSynthesis.getVoices();
+                const zhVoice = voices.find(v => v.lang.includes('zh'));
+                if (zhVoice) utterance.voice = zhVoice;
+                window.speechSynthesis.speak(utterance);
+              }
+            }
           }
         }
 
@@ -839,17 +1284,22 @@ createApp({
         });
 
       } catch (error) {
-        messages.value.push({
-          role: 'assistant',
-          content: `抱歉，连接出现问题：${error.message}\n\n请确保已在主界面配置 API Key。`,
-          timestamp: new Date().toISOString()
-        });
+        if (myGeneration === chatGeneration) {
+          messages.value.push({
+            role: 'assistant',
+            content: `抱歉，连接出现问题：${error.message}\n\n请确保已在主界面配置 API Key。`,
+            timestamp: new Date().toISOString()
+          });
+        }
       }
 
-      isTyping.value = false;
-      await nextTick();
-      scrollToBottom();
-      renderKatex();
+      // 只有当前代际的请求才能重置 isTyping
+      if (myGeneration === chatGeneration) {
+        isTyping.value = false;
+        await nextTick();
+        scrollToBottom();
+        renderKatex();
+      }
     };
 
     const scrollToBottom = () => {
@@ -954,7 +1404,8 @@ createApp({
         paper: 'fa-solid fa-pen',
         experiment: 'fa-solid fa-flask',
         review: 'fa-solid fa-book',
-        tutoring: 'fa-solid fa-graduation-cap'
+        tutoring: 'fa-solid fa-graduation-cap',
+        math: 'fa-solid fa-square-root-variable'
       };
       return icons[type] || 'fa-solid fa-file';
     };
@@ -964,7 +1415,8 @@ createApp({
         paper: '论文写作',
         experiment: '实验设计',
         review: '文献综述',
-        tutoring: '学习辅导'
+        tutoring: '学习辅导',
+        math: '数学助手'
       };
       return names[type] || '协作';
     };
@@ -1240,6 +1692,12 @@ createApp({
             max_tokens: data.max_tokens ?? 2048,
             modelProviders: data.modelProviders || []
           };
+
+          // 从服务端同步公式识别设置
+          if (data.formulaOcr) {
+            formulaOcrSettings.value = data.formulaOcr;
+            localStorage.setItem('edu-formula-ocr', JSON.stringify(data.formulaOcr));
+          }
         }
       } catch (error) {
         console.error('加载设置失败:', error);
@@ -1248,6 +1706,11 @@ createApp({
 
     const saveAllSettings = async () => {
       try {
+        // 本地设置先保存
+        localStorage.setItem('edu-display', JSON.stringify(displaySettings.value));
+        localStorage.setItem('edu-voice', JSON.stringify(voiceSettings.value));
+        localStorage.setItem('edu-formula-ocr', JSON.stringify(formulaOcrSettings.value));
+
         const currentSettingsResponse = await fetch('/api/education/settings');
         let currentSettings = {};
         if (currentSettingsResponse.ok) {
@@ -1268,7 +1731,6 @@ createApp({
         });
 
         if (response.ok) {
-          alert('设置已保存！');
           showSettingsModal.value = false;
         } else {
           const error = await response.json();
@@ -1672,158 +2134,69 @@ createApp({
     };
 
     // ==================== 语音方法 ====================
+    const startRecording = async () => {
+      if (!speechRecognition.value) {
+        speechRecognition.value = initSpeechRecognition();
+      }
+      if (!speechRecognition.value) {
+        alert('您的浏览器不支持语音识别，请使用 Chrome 或 Edge 浏览器。');
+        return;
+      }
+
+      speechRecognition.value.onstart = () => {
+        isRecording.value = true;
+        console.log('Web Speech API: 开始识别');
+      };
+
+      speechRecognition.value.onresult = (event) => {
+        const lastResult = event.results[event.results.length - 1];
+        const transcript = lastResult[0].transcript;
+
+        // 实时显示识别中的文本
+        chatInput.value = transcript;
+
+        // 只有最终结果才发送消息
+        if (lastResult.isFinal && transcript) {
+          console.log('Web Speech API最终结果:', transcript);
+          sendMessage(true);
+        }
+      };
+
+      speechRecognition.value.onerror = (event) => {
+        console.error('语音识别错误:', event.error);
+        isRecording.value = false;
+        if (event.error === 'not-allowed') {
+          alert('请允许浏览器访问麦克风权限。');
+        } else if (event.error !== 'aborted') {
+          alert('语音识别失败，请重试。');
+        }
+      };
+
+      speechRecognition.value.onend = () => {
+        console.log('Web Speech API: 识别结束');
+        isRecording.value = false;
+      };
+
+      try {
+        speechRecognition.value.start();
+      } catch (e) {
+        console.error('启动语音识别失败:', e);
+        isRecording.value = false;
+      }
+    };
+
+    const stopRecording = () => {
+      if (speechRecognition.value && isRecording.value) {
+        speechRecognition.value.stop();
+      }
+      isRecording.value = false;
+    };
+
     const toggleVoiceRecording = async () => {
       if (isRecording.value) {
         stopRecording();
       } else {
         await startRecording();
-      }
-    };
-
-    const startRecording = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            sampleRate: 16000
-          }
-        });
-
-        const options = { mimeType: 'audio/webm' };
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options.mimeType = 'audio/mp4';
-        }
-
-        mediaRecorder.value = new MediaRecorder(stream, options);
-        audioChunks.value = [];
-
-        mediaRecorder.value.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunks.value.push(event.data);
-          }
-        };
-
-        mediaRecorder.value.onstop = async () => {
-          stream.getTracks().forEach(track => track.stop());
-          const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' });
-          await sendVoiceMessage(audioBlob);
-        };
-
-        mediaRecorder.value.start();
-        isRecording.value = true;
-
-      } catch (error) {
-        console.error('无法访问麦克风:', error);
-        alert('无法访问麦克风，请确保已授予权限。');
-      }
-    };
-
-    const stopRecording = () => {
-      if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
-        mediaRecorder.value.stop();
-      }
-      isRecording.value = false;
-    };
-
-    const sendVoiceMessage = async (audioBlob) => {
-      isTyping.value = true;
-
-      try {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const base64Audio = e.target.result.split(',')[1];
-
-          try {
-            const history = messages.value.slice(-20).map(m => ({
-              role: m.role,
-              content: m.content
-            }));
-
-            const requestBody = {
-              audio_data: base64Audio,
-              skill_id: currentSkill.value,
-              session_id: sessionId.value,
-              language: 'zh',
-              digital_human_type: 'xingyun',
-              frontend_drive: true,
-              history: history
-            };
-
-            const response = await fetch('/api/education/voice/chat', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(requestBody)
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-              if (data.text) {
-                messages.value.push({
-                  role: 'user',
-                  content: `🎤 ${data.text}`,
-                  timestamp: new Date().toISOString()
-                });
-              }
-
-              messages.value.push({
-                role: 'assistant',
-                content: data.response,
-                timestamp: new Date().toISOString()
-              });
-
-              if (xingyunSession.value.isConnected && xingyunSession.value.sdk && data.response) {
-                xingyunSession.value.sdk.interactiveidle();
-                setTimeout(() => {
-                  xingyunSession.value.sdk.speak(data.response, true, true);
-                }, 100);
-              }
-
-              if (data.exp_gained) {
-                growth.value.exp += data.exp_gained;
-                growth.value.totalExp += data.exp_gained;
-
-                while (growth.value.exp >= expForNextLevel.value) {
-                  growth.value.exp -= expForNextLevel.value;
-                  growth.value.level++;
-                }
-
-                growth.value.stats.conversations = (growth.value.stats.conversations || 0) + 1;
-                await checkAchievements();
-              }
-
-              await nextTick();
-              scrollToBottom();
-              renderKatex();
-            } else {
-              let errorMsg = '语音对话失败';
-              if (data.detail) {
-                if (typeof data.detail === 'string') {
-                  errorMsg = data.detail;
-                } else if (data.detail.message) {
-                  errorMsg = data.detail.message;
-                }
-              }
-              throw new Error(errorMsg);
-            }
-          } catch (error) {
-            console.error('语音处理错误:', error);
-            messages.value.push({
-              role: 'assistant',
-              content: `抱歉，语音处理出现问题：${error.message}`,
-              timestamp: new Date().toISOString()
-            });
-          }
-
-          isTyping.value = false;
-        };
-
-        reader.readAsDataURL(audioBlob);
-
-      } catch (error) {
-        console.error('发送语音消息失败:', error);
-        isTyping.value = false;
       }
     };
 
@@ -1956,6 +2329,7 @@ createApp({
     onMounted(async () => {
       applyTheme();
       await loadData();
+      await loadApiSettings();
       setTimeout(() => {
         document.getElementById('loadingOverlay').classList.add('hidden');
       }, 500);
@@ -2001,10 +2375,15 @@ createApp({
 
       // 书签
       bookmarks,
+      bookmarkSearch,
+      bookmarkSkillFilter,
+      filteredBookmarks,
+      uniqueBookmarkSkills,
       toggleBookmark,
       deleteBookmark,
       isBookmarked,
       insertBookmarkToChat,
+      deleteMessage,
 
       // 标签页
       tabs,
@@ -2015,6 +2394,14 @@ createApp({
       currentSkillName,
       currentSkillDetail,
       selectSkill,
+      getSkillColor,
+      currentStage,
+      skillStagesList,
+      skillToolbar,
+      setStage,
+      hasSavedContext,
+      savedContextPreview,
+      continueSkillContext,
       togglePanel,
       startConversation,
       quickQuestions,
@@ -2052,10 +2439,16 @@ createApp({
 
       // 设置
       showSettingsModal,
+      settingsTab,
+      settingsTabDirection,
+      settingsTabIndicator,
+      settingTabs,
       apiSettings,
       modelOptions,
       fastModelSettings,
       formulaOcrSettings,
+      displaySettings,
+      voiceSettings,
       saveAllSettings,
 
       // 文件上传

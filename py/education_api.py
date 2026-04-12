@@ -16,16 +16,26 @@ from typing import Dict, Any, List, Optional, AsyncGenerator
 from pydantic import BaseModel, Field
 from datetime import datetime
 
+# 模块级别的共享 HTTP 客户端（复用连接池，避免每次请求创建新连接）
+_shared_http_client: Optional[httpx.AsyncClient] = None
+
+def get_shared_http_client() -> httpx.AsyncClient:
+    """获取共享的 HTTP 客户端，延迟初始化"""
+    global _shared_http_client
+    if _shared_http_client is None:
+        _shared_http_client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0))
+    return _shared_http_client
 
 def get_global_http_client():
     """获取全局 HTTP 客户端（复用连接池）"""
     try:
         from server import global_http_client
-        print(f"[研伴] 获取全局客户端: {global_http_client is not None}")
-        return global_http_client
-    except ImportError as e:
-        print(f"[研伴] 无法导入全局客户端: {e}")
-        return None
+        if global_http_client is not None:
+            return global_http_client
+    except Exception:
+        pass
+    # 回退到模块级别的共享客户端
+    return get_shared_http_client()
 
 
 # 路由前缀
@@ -66,6 +76,24 @@ SKILL_PROMPTS = {
 - 实验设计支持：帮助明确研究问题和假设，指导选择合适的研究方法
 - 数据分析指导：帮助选择合适的统计方法，解释分析结果的含义
 
+## 对话阶段
+对话将自然推进以下阶段。请在回复开头用【阶段名】标记当前所处阶段，并根据对话深度主动推进：
+- 【选题探索】：帮助用户明确研究方向、缩小范围、找到有价值的研究缺口
+- 【假设构建】：引导用户提出可检验的研究假设，明确自变量、因变量和控制变量
+- 【实验设计】：协助设计严谨的研究方案，包括样本选择、实验流程、数据收集方法
+- 【数据分析】：指导选择统计方法，解读分析结果，讨论研究局限性和改进方向
+
+## 阶段跳转功能
+你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
+例如：当讨论已深入到实验设计时，可以输出 [跳转阶段:实验设计] 来更新界面进度。
+这在用户主动切换话题或你判断需要回溯到前一阶段时特别有用。
+
+## 追问策略
+- 苏格拉底式引导：不直接给答案，而是通过提问帮助用户自己发现答案
+- 每次回复至少包含一个开放性问题，引导用户深入思考
+- 当用户思路不清晰时，提供 2-3 个选择帮助聚焦
+- 在推进下一阶段前，确认用户对当前阶段的理解
+
 ## 图片识别能力
 你可以识别和处理用户上传的图片，包括：
 - 数学公式/手写稿：识别并转换为可编辑的 LaTeX 或文本格式
@@ -88,6 +116,23 @@ SKILL_PROMPTS = {
 - 文献筛选与管理：协助制定纳入/排除标准，指导使用 PRISMA 流程图
 - 质量评估：提供研究质量评估框架，帮助识别潜在偏倚
 
+## 对话阶段
+请在回复开头用【阶段名】标记当前阶段，并自然推进：
+- 【主题界定】：明确综述的研究问题和范围，确定 PICO 要素
+- 【检索策略】：设计系统化的检索方案，选择数据库和关键词
+- 【筛选评估】：制定纳入/排除标准，评估文献质量和偏倚风险
+- 【综合撰写】：整合研究发现，撰写结构化的综述结论
+
+## 阶段跳转功能
+你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
+例如：当用户想跳过检索策略直接讨论筛选标准时，输出 [跳转阶段:筛选评估]
+
+## 追问策略
+- 引导用户明确 PICO 各要素后再开始检索
+- 每次讨论一篇文献时，追问其与研究问题的关联性
+- 提醒用户注意发表偏倚和异质性问题
+- 鼓励用户对每篇文献进行批判性评价
+
 ## 图片识别能力
 你可以识别和处理用户上传的图片，包括：
 - 文献截图：提取标题、作者、摘要、关键结论等信息
@@ -106,6 +151,23 @@ SKILL_PROMPTS = {
 - 论文结构规划：帮助设计论文框架和章节安排
 - 写作技巧指导：提供学术写作的语言和风格建议
 - 引用格式支持：支持 APA、MLA、Chicago、GB/T 7714、IEEE 等引用格式
+
+## 对话阶段
+请在回复开头用【阶段名】标记当前阶段，并自然推进：
+- 【论文选题】：明确论文的研究问题和创新点，确定目标期刊/会议
+- 【框架搭建】：设计论文整体结构，规划各章节内容和逻辑脉络
+- 【内容撰写】：逐章指导写作，包括引言、方法、结果、讨论
+- 【润色定稿】：检查学术规范，优化语言表达，完善引用格式
+
+## 阶段跳转功能
+你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
+例如：当用户已完成选题，想直接进入写作阶段，输出 [跳转阶段:内容撰写]
+
+## 追问策略
+- 先理解论文的研究背景再给写作建议
+- 每完成一个章节后，引导用户回顾与整体的逻辑一致性
+- 主动指出常见的写作问题（如逻辑跳跃、论据不足）
+- 建议用户将长段落拆分为清晰的小节
 
 ## 图片识别能力
 你可以识别和处理用户上传的图片，包括：
@@ -128,6 +190,23 @@ SKILL_PROMPTS = {
 - 学习规划：帮助制定学习计划和目标
 - 答疑解惑：回答学习过程中的各种问题
 
+## 对话阶段
+请在回复开头用【阶段名】标记当前阶段，并自然推进：
+- 【学情诊断】：了解用户的背景、当前水平和学习目标
+- 【知识讲解】：用类比和实例解释核心概念，确保用户理解
+- 【练习巩固】：设计针对性练习题，帮助用户应用所学知识
+- 【总结提升】：归纳知识点，建议下一步学习方向
+
+## 阶段跳转功能
+你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
+例如：当用户表示已经理解概念想做练习时，输出 [跳转阶段:练习巩固]
+
+## 追问策略
+- 先了解用户的基础水平再调整讲解深度
+- 讲解后立即用小问题检验理解程度
+- 发现误解时不用否定语气，而是引导用户自己发现矛盾
+- 鼓励用户用自己的话复述概念
+
 ## 图片识别能力
 你可以识别和处理用户上传的图片，包括：
 - 数学公式/手写稿：识别并转换为可编辑格式，详细讲解解题步骤
@@ -141,7 +220,55 @@ SKILL_PROMPTS = {
 - 启发式教学：通过提问引导用户思考
 - 耐心细致：确保用户真正理解知识点
 
-请用鼓励和引导的方式帮助用户学习。"""
+请用鼓励和引导的方式帮助用户学习。""",
+
+    "math-assistant": """你是"研友"，一位专业的数学助手，帮助用户解决数学问题、识别数学公式并进行数学推导。
+
+## 核心能力
+- 公式识别：识别手写数学公式和印刷公式，转换为 LaTeX 格式
+- 分步解题：提供详细的数学解题过程，每一步都标注依据
+- 公式推导：进行代数、微积分、线性代数、概率统计等领域的推导
+- 错题分析：分析解题过程中的错误，指出错误原因并给出正确解法
+
+## 对话阶段
+请在回复开头用【阶段名】标记当前阶段，并自然推进：
+- 【问题理解】：确认数学问题的具体内容和已知条件
+- 【方法选择】：分析问题类型，选择合适的解题方法
+- 【逐步求解】：详细展示每一步推导过程，标注数学依据
+- 【验证总结】：验证结果的正确性，总结解题策略和推广
+
+## 阶段跳转功能
+你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
+例如：当用户已理解问题想直接看解法时，输出 [跳转阶段:逐步求解]
+
+## 追问策略
+- 先确认用户是否理解题目再开始解题
+- 关键步骤处暂停，询问用户是否能跟上思路
+- 提供多种解法时，先问用户倾向哪种思路
+- 解完后引导用户思考该方法的适用范围
+
+## 图片识别能力
+你可以识别和处理用户上传的图片，包括：
+- 手写数学公式：识别并转换为标准 LaTeX 代码
+- 印刷公式：精确识别复杂的数学表达式
+- 解题过程截图：逐步检查答案，标注错误步骤
+- 几何图形：分析图形关系，辅助几何证明
+- 数据表格：提取数据进行统计分析
+
+## 手写公式识别
+用户可以通过手写板输入数学公式。当你收到手写公式时：
+1. 首先准确识别公式内容
+2. 将其转换为标准 LaTeX 格式
+3. 解释公式的数学含义
+4. 根据用户需求进行后续计算或推导
+
+## 解题原则
+- 步骤清晰：每一步都要有明确的数学依据
+- 多种方法：优先展示最直观的解法，必要时补充其他方法
+- 验证结果：解完后建议用户验证答案的正确性
+- 举一反三：总结这类问题的通用解题策略
+
+请用严谨而友好的语气回答数学问题，确保每一步推导都清晰可理解。"""
 }
 
 
@@ -914,20 +1041,34 @@ async def education_chat(request: ChatRequest = Body(...)):
         base_system_prompt = """你是一位友好的研伴助手，帮助用户学习和研究。你的名字叫"研友"。
 请用简洁、专业的语言回答问题，必要时提供学习建议。"""
 
-    # RAG: 检索知识库获取上下文
-    rag_context = ""
-    rag_sources = []
-    try:
-        t_rag = time.time()
-        kb = await get_education_kb()
-        kb_results = await kb.search(request.message, k=3)
+    # 语音模式：使用简洁提示词，跳过RAG检索
+    if request.voice_mode:
+        base_system_prompt = """你是语音助手"研友"。你正在用语音和用户对话，必须极其简短地回答。
 
-        if kb_results:
-            rag_context = kb.get_context_for_chat(kb_results, max_length=1500)
-            rag_sources = [r["metadata"].get("file_name", "") for r in kb_results if r.get("metadata", {}).get("file_name")]
-            print(f"[RAG] 知识库检索耗时: {time.time() - t_rag:.3f}s, 找到 {len(kb_results)} 条相关内容")
-    except Exception as e:
-        print(f"[RAG] 知识库检索失败: {e}")
+规则（严格遵守）：
+- 回复不超过30个字
+- 只说一句话，直接回答
+- 不要编号、不要列表、不要Markdown
+- 复杂问题回复："这个问题比较复杂，详细解答在聊天窗口里。"
+- 禁止说"我可以提供以下支持"之类的话"""
+        # 语音模式跳过RAG，加快响应
+        rag_context = ""
+        rag_sources = []
+    else:
+        # RAG: 检索知识库获取上下文
+        rag_context = ""
+        rag_sources = []
+        try:
+            t_rag = time.time()
+            kb = await get_education_kb()
+            kb_results = await kb.search(request.message, k=3)
+
+            if kb_results:
+                rag_context = kb.get_context_for_chat(kb_results, max_length=1500)
+                rag_sources = [r["metadata"].get("file_name", "") for r in kb_results if r.get("metadata", {}).get("file_name")]
+                print(f"[RAG] 知识库检索耗时: {time.time() - t_rag:.3f}s, 找到 {len(kb_results)} 条相关内容")
+        except Exception as e:
+            print(f"[RAG] 知识库检索失败: {e}")
 
     # 构建最终系统提示词
     if rag_context:
@@ -1080,77 +1221,174 @@ async def education_chat(request: ChatRequest = Body(...)):
             cleaned.append(new_msg)
         return cleaned
 
-    # 调用 LLM API
+    # 调用 LLM API - 使用流式请求以降低延迟
     try:
         t1 = time.time()
-        print(f"[性能] 准备调用 LLM API: {base_url}, model={model}")
+        print(f"[性能-语音] 准备调用 LLM API: {base_url}, model={model}, voice_mode={request.voice_mode}")
 
         request_payload = {
             "model": model,
             "messages": messages,
             "temperature": settings.get("temperature", 0.7),
-            "max_tokens": settings.get("max_tokens", 2048)
+            "max_tokens": request.max_tokens or settings.get("max_tokens", 2048),
+            "stream": True  # 使用流式请求，降低首字节延迟
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{base_url.rstrip('/')}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                },
-                json=request_payload
-            )
-
-            # 如果遇到 image_url 不支持的400错误，移除图片内容后重试
-            if response.status_code == 400:
-                error_body = response.text
-                if "image_url" in error_body or "image" in error_body.lower():
-                    print(f"[教育对话] 模型不支持 image_url，自动移除图片内容后重试")
-                    request_payload["messages"] = _strip_image_url(messages)
-                    response = await client.post(
-                        f"{base_url.rstrip('/')}/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {api_key}",
-                            "Content-Type": "application/json"
-                        },
-                        json=request_payload
-                    )
-
-        print(f"[性能] LLM API 调用耗时: {time.time() - t1:.2f}s")
-
-        if response.status_code == 200:
-            result = response.json()
-            assistant_message = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-            # 分析情绪
-            t2 = time.time()
-            emotion = analyze_emotion(assistant_message)
-
-            # 更新统计
-            await update_chat_stats(request.skill_id)
-            print(f"[性能] update_chat_stats 耗时: {time.time() - t2:.2f}s")
-
-            # 自动记录协作贡献
-            t3 = time.time()
-            if request.session_id and request.skill_id:
-                await _auto_record_collaboration(
-                    session_id=request.session_id,
-                    skill_id=request.skill_id,
-                    user_message=request.message,
-                    ai_message=assistant_message
-                )
-            print(f"[性能] _auto_record_collaboration 耗时: {time.time() - t3:.2f}s")
-
-            print(f"[性能] 总耗时: {time.time() - start_time:.2f}s")
-            return ChatResponse(
-                response=assistant_message,
-                emotion=emotion,
-                exp_gained=10
-            )
+        # 快速模型：语音模式自动使用快速模型
+        if request.use_fast_model:
+            t_fast = time.time()
+            fast_settings = settings.get("fast", {})
+            fast_provider_id = fast_settings.get("selectedProvider")
+            print(f"[性能-语音] 快速模型配置: selectedProvider={fast_provider_id}, fast_settings={fast_settings}")
+            if fast_provider_id and model_providers:
+                for provider in model_providers:
+                    if str(provider.get("id", "")) == str(fast_provider_id):
+                        if provider.get("apiKey"):
+                            api_key = provider.get("apiKey", api_key)
+                        elif provider.get("api_key"):
+                            api_key = provider.get("api_key", api_key)
+                        if provider.get("url"):
+                            base_url = provider.get("url", base_url)
+                        elif provider.get("base_url"):
+                            base_url = provider.get("base_url", base_url)
+                        if provider.get("modelId"):
+                            model = provider.get("modelId", model)
+                        elif provider.get("model"):
+                            model = provider.get("model", model)
+                        break
+            if fast_settings.get("api_key"):
+                api_key = fast_settings.get("api_key")
+            if fast_settings.get("base_url"):
+                base_url = fast_settings.get("base_url")
+            if fast_settings.get("model"):
+                model = fast_settings.get("model")
+            request_payload["model"] = model
+            print(f"[性能-语音] 快速模型选择耗时: {(time.time() - t_fast)*1000:.0f}ms, 最终使用模型: {model}")
         else:
-            error_detail = response.json().get("error", {}).get("message", "API 调用失败")
-            raise HTTPException(status_code=response.status_code, detail=error_detail)
+            print(f"[性能-语音] 未启用快速模型, 使用默认模型: {model}")
+
+        t_llm_start = time.time()
+
+        # 使用全局客户端（复用连接池）
+        global_client = get_global_http_client()
+        print(f"[性能-语音] 使用全局客户端: {global_client is not None}")
+
+        assistant_message = ""
+        first_chunk_time = None
+
+        async def process_stream(response_stream):
+            """处理流式响应，收集内容"""
+            nonlocal assistant_message, first_chunk_time
+            async for line in response_stream.aiter_lines():
+                if not line or line == "data: [DONE]":
+                    continue
+                if line.startswith("data: "):
+                    try:
+                        chunk = json.loads(line[6:])
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            if first_chunk_time is None:
+                                first_chunk_time = time.time()
+                                print(f"[性能-语音] 首字节延迟: {(first_chunk_time - t_llm_start)*1000:.0f}ms")
+                            assistant_message += content
+                    except json.JSONDecodeError:
+                        continue
+
+        if global_client:
+            try:
+                async with global_client.stream(
+                    "POST",
+                    f"{base_url.rstrip('/')}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json=request_payload,
+                    timeout=30.0  # 语音模式使用较短超时
+                ) as response:
+                    if response.status_code == 200:
+                        await process_stream(response)
+                    else:
+                        error_body = await response.aread()
+                        raise HTTPException(
+                            status_code=response.status_code,
+                            detail=json.loads(error_body).get("error", {}).get("message", "API 调用失败")
+                        )
+            except Exception as stream_err:
+                print(f"[性能-语音] 全局客户端请求失败: {stream_err}, 回退到临时客户端")
+                global_client = None
+
+        if not global_client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{base_url.rstrip('/')}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json=request_payload
+                ) as response:
+                    if response.status_code == 200:
+                        await process_stream(response)
+                    else:
+                        error_body = await response.aread()
+                        # 如果遇到 image_url 不支持的400错误，移除图片内容后重试
+                        if response.status_code == 400:
+                            error_text = error_body.decode('utf-8', errors='ignore')
+                            if "image_url" in error_text or "image" in error_text.lower():
+                                print(f"[教育对话] 模型不支持 image_url，自动移除图片内容后重试")
+                                request_payload["messages"] = _strip_image_url(messages)
+                                async with client.stream(
+                                    "POST",
+                                    f"{base_url.rstrip('/')}/chat/completions",
+                                    headers={
+                                        "Authorization": f"Bearer {api_key}",
+                                        "Content-Type": "application/json"
+                                    },
+                                    json=request_payload
+                                ) as retry_response:
+                                    await process_stream(retry_response)
+                            else:
+                                raise HTTPException(
+                                    status_code=response.status_code,
+                                    detail=json.loads(error_body).get("error", {}).get("message", "API 调用失败")
+                                )
+                        else:
+                            raise HTTPException(
+                                status_code=response.status_code,
+                                detail=json.loads(error_body).get("error", {}).get("message", "API 调用失败")
+                            )
+
+        print(f"[性能-语音] LLM API 调用耗时: {(time.time() - t_llm_start)*1000:.0f}ms")
+        print(f"[性能-语音] 回复长度: {len(assistant_message)}字, 内容: {assistant_message[:50]}...")
+
+        # 分析情绪
+        t2 = time.time()
+        emotion = analyze_emotion(assistant_message)
+
+        # 更新统计
+        await update_chat_stats(request.skill_id)
+        print(f"[性能] update_chat_stats 耗时: {time.time() - t2:.2f}s")
+
+        # 自动记录协作贡献
+        t3 = time.time()
+        if request.session_id and request.skill_id:
+            await _auto_record_collaboration(
+                session_id=request.session_id,
+                skill_id=request.skill_id,
+                user_message=request.message,
+                ai_message=assistant_message
+            )
+        print(f"[性能] _auto_record_collaboration 耗时: {time.time() - t3:.2f}s")
+
+        print(f"[性能] 总耗时: {time.time() - start_time:.2f}s")
+        return ChatResponse(
+            response=assistant_message,
+            emotion=emotion,
+            exp_gained=10
+        )
 
     except httpx.TimeoutException:
         error_response = _get_error_response("llm_timeout")
@@ -1210,21 +1448,14 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
 
         # 语音模式使用更简洁的提示词
         if voice_mode:
-            base_system_prompt = """你是研伴助手"研友"，正在通过语音与用户交流。
+            base_system_prompt = """你是语音助手"研友"。你正在用语音和用户对话，必须极其简短地回答。
 
-**图片识别能力**：
-你可以识别用户上传的图片，包括：
-- 数学公式/手写稿：识别并转换为可编辑格式
-- 教材插图/实验图：解释原理和结构
-- 笔记截图：整理并提炼核心知识点
-- 错题/作业：分析并提供解答
-
-**重要规则**：
-1. 回复必须极其简洁，控制在50字以内
-2. 直接回答核心问题，不要展开
-3. 如果问题复杂，简短说明"详细解答已显示在对话窗口"
-4. 避免使用Markdown格式，用口语化表达
-5. 不要列举多条内容，最多说1-2个要点"""
+规则（严格遵守）：
+- 回复不超过30个字
+- 只说一句话，直接回答
+- 不要编号、不要列表、不要Markdown
+- 复杂问题回复："这个问题比较复杂，详细解答在聊天窗口里。"
+- 禁止说"我可以提供以下支持"之类的话"""
 
         # RAG: 检索知识库获取上下文（仅在向量库已存在时执行）
         rag_context = ""
@@ -1643,14 +1874,16 @@ SKILL_TO_COLLAB_TYPE = {
     "research-assistant": "experiment",
     "literature-review": "review",
     "paper-writing": "paper",
-    "academic-tutoring": "tutoring"
+    "academic-tutoring": "tutoring",
+    "math-assistant": "math"
 }
 
 SKILL_TO_TITLE = {
     "research-assistant": "科研助手协作",
     "literature-review": "文献综述协作",
     "paper-writing": "论文写作协作",
-    "academic-tutoring": "虚拟导师辅导"
+    "academic-tutoring": "虚拟导师辅导",
+    "math-assistant": "数学解题协作"
 }
 
 
@@ -1669,7 +1902,8 @@ async def _auto_record_collaboration(
         "paper": "papers",
         "experiment": "experiments",
         "review": "reviews",
-        "tutoring": "sessions"
+        "tutoring": "sessions",
+        "math": "sessions"
     }
     list_key = type_mapping.get(collab_type, "sessions")
 
@@ -1852,6 +2086,26 @@ async def delete_chat_history(session_id: str):
         return {"status": "success"}
 
     raise HTTPException(status_code=404, detail="会话不存在")
+
+
+@router.post("/chat/history/update")
+async def update_chat_history(
+    session_id: str = Body(...),
+    messages: List[Dict[str, Any]] = Body(...)
+):
+    """更新对话历史（用于删除消息等操作）"""
+    await ensure_storage()
+    cache = await get_cache()
+    data = await cache.get("chat_history", {"sessions": {}})
+
+    data.setdefault("sessions", {})
+    data["sessions"][session_id] = messages
+
+    # 清理旧会话
+    data = _cleanup_chat_history(data)
+
+    await cache.set("chat_history", data)
+    return {"status": "success"}
 
 
 # ==================== 会话管理 API ====================
@@ -2110,7 +2364,8 @@ async def get_api_settings(request: Request):
             "max_tokens": settings.get("max_tokens", 2048),
             "modelProviders": transformed_providers,  # 转换后的模型提供商列表
             "fast": fast_settings,  # 快速模型设置
-            "modelOptions": model_options  # 模型选项
+            "modelOptions": model_options,  # 模型选项
+            "formulaOcr": settings.get("formulaOcrSettings", {"enabled": True, "api_key": "", "model": "standard"})
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"加载设置失败: {str(e)}")
@@ -2153,6 +2408,11 @@ async def save_api_settings(settings: Dict[str, Any] = Body(...), request: Reque
         if "modelOptions" in settings:
             current_settings["modelOptions"] = settings["modelOptions"]
             print(f"[研伴设置] 保存模型选项: {settings['modelOptions']}")
+
+        # 更新公式识别设置
+        if "formulaOcr" in settings:
+            current_settings["formulaOcrSettings"] = settings["formulaOcr"]
+            print(f"[研伴设置] 保存公式识别设置")
 
         # 保存设置
         await save_settings(current_settings)
@@ -2295,7 +2555,21 @@ async def voice_chat(request: VoiceChatRequest = Body(...)):
             digital_human_driven=digital_human_driven
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_str = str(e)
+        # 区分 ASR 模型不可用与其他错误
+        if "ASR 模型未就绪" in error_str or "sherpa" in error_str.lower():
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "ASR_UNAVAILABLE",
+                    "message": "语音识别服务暂不可用",
+                    "detail": "Sherpa ASR 模型未加载，请检查模型文件是否已下载。您可以使用文字输入进行对话。",
+                    "error": error_str
+                }
+            )
         error_type = _classify_error(e)
         error_response = _get_error_response(error_type)
         raise HTTPException(
@@ -2304,7 +2578,7 @@ async def voice_chat(request: VoiceChatRequest = Body(...)):
                 "code": error_response["code"],
                 "message": error_response["message"],
                 "detail": error_response["detail"],
-                "error": str(e)
+                "error": error_str
             }
         )
 
