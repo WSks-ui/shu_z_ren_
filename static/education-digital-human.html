@@ -80,260 +80,7 @@
       </aside>
 
       <!-- 主面板区域 -->
-      <main class="main-panel" :class="{ expanded: activePanel }">
-        <!-- 技能面板 -->
-        <div class="panel skills-panel" v-if="activePanel === 'skills'">
-          <div class="panel-header">
-            <h2><i class="fa-solid fa-wand-magic-sparkles"></i> 教育技能</h2>
-            <button class="panel-close" @click="activePanel = null">
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-
-          <div class="skills-showcase">
-            <div
-              v-for="skill in skills"
-              :key="skill.id"
-              class="skill-tile"
-              :class="{ selected: currentSkill === skill.id }"
-              @click="selectSkill(skill.id)"
-            >
-              <div class="skill-glow"></div>
-              <div class="skill-icon-wrap">
-                <i :class="skill.icon"></i>
-              </div>
-              <div class="skill-info">
-                <h3>{{ skill.name }}</h3>
-                <p>{{ skill.description }}</p>
-              </div>
-              <div class="skill-usage" v-if="skillUsage[skill.id]">
-                <span>{{ skillUsage[skill.id] }}次使用</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 技能详情 -->
-          <div class="skill-detail-drawer" v-if="currentSkill && currentSkillDetail">
-            <div class="drawer-header">
-              <div class="drawer-icon" :style="{ background: currentSkillDetail.gradient }">
-                <i :class="currentSkillDetail.icon"></i>
-              </div>
-              <div class="drawer-title">
-                <h3>{{ currentSkillDetail.name }}</h3>
-                <p>{{ currentSkillDetail.description }}</p>
-              </div>
-            </div>
-            <div class="drawer-features">
-              <div class="feature-tag" v-for="(feature, idx) in currentSkillDetail.features" :key="idx">
-                <i class="fa-solid fa-check"></i>
-                {{ feature }}
-              </div>
-            </div>
-            <div class="drawer-actions">
-              <button class="btn-start" @click="startConversation">
-                <i class="fa-solid fa-play"></i> 开始对话
-              </button>
-              <button class="btn-cancel" @click="currentSkill = null">取消</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 成长面板 -->
-        <div class="panel growth-panel" v-if="activePanel === 'growth'">
-          <div class="panel-header">
-            <h2><i class="fa-solid fa-chart-line"></i> 成长系统</h2>
-            <button class="panel-close" @click="activePanel = null">
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-
-          <!-- 等级卡片 -->
-          <div class="level-card">
-            <div class="level-ring">
-              <svg viewBox="0 0 120 120">
-                <defs>
-                  <linearGradient id="levelGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style="stop-color:#10b981"/>
-                    <stop offset="100%" style="stop-color:#0ea5e9"/>
-                  </linearGradient>
-                </defs>
-                <circle class="ring-bg" cx="60" cy="60" r="54"/>
-                <circle class="ring-progress" cx="60" cy="60" r="54"
-                  :style="{ strokeDashoffset: 339 - (339 * expPercentage / 100) }"/>
-              </svg>
-              <div class="level-value">
-                <span class="level-num">{{ growth.level }}</span>
-                <span class="level-label">LEVEL</span>
-              </div>
-            </div>
-            <div class="level-meta">
-              <h3>{{ levelTitle }}</h3>
-              <div class="exp-info">
-                <span>{{ growth.exp }} / {{ expForNextLevel }} EXP</span>
-                <span class="total-exp">总经验: {{ growth.totalExp }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 统计网格 -->
-          <div class="stats-flow">
-            <div class="stat-item" v-for="stat in statCards" :key="stat.key">
-              <i :class="stat.icon"></i>
-              <div class="stat-num">{{ growth.stats[stat.key] || 0 }}</div>
-              <div class="stat-name">{{ stat.label }}</div>
-            </div>
-          </div>
-
-          <!-- 学习图表 -->
-          <div class="charts-section">
-            <div class="chart-container">
-              <h4 class="chart-title"><i class="fa-solid fa-chart-pie"></i> 技能使用分布</h4>
-              <div class="chart-wrapper">
-                <canvas id="skill-usage-chart"></canvas>
-              </div>
-            </div>
-            <div class="chart-container">
-              <h4 class="chart-title"><i class="fa-solid fa-chart-bar"></i> 学习活动统计</h4>
-              <div class="chart-wrapper">
-                <canvas id="activity-chart"></canvas>
-              </div>
-            </div>
-          </div>
-
-          <!-- 成就墙 -->
-          <div class="achievements-wall">
-            <h4><i class="fa-solid fa-trophy"></i> 成就徽章</h4>
-            <div class="achievement-grid">
-              <div
-                v-for="achievement in achievements"
-                :key="achievement.id"
-                class="achievement-item"
-                :class="{ unlocked: achievement.unlocked }"
-              >
-                <i :class="achievement.icon"></i>
-                <span class="achievement-name">{{ achievement.name }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 协作记录面板 -->
-        <div class="panel records-panel" v-if="activePanel === 'records'">
-          <div class="panel-header">
-            <h2><i class="fa-solid fa-history"></i> 协作记录</h2>
-            <div class="panel-actions">
-              <button class="action-btn" @click="openReportModal">
-                <i class="fa-solid fa-chart-pie"></i>
-              </button>
-              <button class="action-btn" @click="refreshCollaboration">
-                <i class="fa-solid fa-refresh"></i>
-              </button>
-              <button class="panel-close" @click="activePanel = null">
-                <i class="fa-solid fa-xmark"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- 协作统计 -->
-          <div class="collab-stats-row">
-            <div class="stat-chip">
-              <span class="chip-value">{{ collabStats.totalSessions || 0 }}</span>
-              <span class="chip-label">会话</span>
-            </div>
-            <div class="stat-chip">
-              <span class="chip-value">{{ collabStats.totalAIContributions || 0 }}</span>
-              <span class="chip-label">AI贡献</span>
-            </div>
-            <div class="stat-chip">
-              <span class="chip-value">{{ collabStats.totalHumanContributions || 0 }}</span>
-              <span class="chip-label">用户贡献</span>
-            </div>
-          </div>
-
-          <!-- 协作比例可视化 -->
-          <div class="collab-visual" v-if="collabStats.totalSessions > 0">
-            <div class="visual-bar">
-              <div class="bar-ai" :style="{ width: collabStats.collaborationRatio?.ai + '%' }"></div>
-              <div class="bar-human" :style="{ width: collabStats.collaborationRatio?.human + '%' }"></div>
-            </div>
-            <div class="visual-labels">
-              <span><i class="fa-solid fa-robot"></i> AI {{ collabStats.collaborationRatio?.ai || 0 }}%</span>
-              <span><i class="fa-solid fa-user"></i> 用户 {{ collabStats.collaborationRatio?.human || 0 }}%</span>
-            </div>
-          </div>
-
-          <!-- 筛选标签 -->
-          <div class="filter-tags">
-            <button
-              v-for="ft in collabFilters"
-              :key="ft.key"
-              class="filter-tag"
-              :class="{ active: collabFilter === ft.key }"
-              @click="collabFilter = ft.key"
-            >{{ ft.label }}</button>
-          </div>
-
-          <!-- 记录列表 -->
-          <div class="records-list">
-            <div v-if="filteredRecords.length === 0" class="empty-hint">
-              <i class="fa-solid fa-folder-open"></i>
-              <p>暂无协作记录</p>
-            </div>
-            <div
-              v-for="record in filteredRecords"
-              :key="record.id"
-              class="record-card"
-              @click="showRecordDetail(record)"
-            >
-              <div class="record-type" :class="record.type">
-                <i :class="getTypeIcon(record.type)"></i>
-              </div>
-              <div class="record-content">
-                <h4>{{ record.title || getTypeName(record.type) + '协作' }}</h4>
-                <p>{{ record.summary || formatDate(record.startTime) }}</p>
-                <div class="record-meta">
-                  <span><i class="fa-solid fa-robot"></i> {{ record.aiContributions?.length || 0 }}</span>
-                  <span><i class="fa-solid fa-user"></i> {{ record.humanContributions?.length || 0 }}</span>
-                </div>
-              </div>
-              <div class="record-status" :class="{ done: record.endTime }">
-                {{ record.endTime ? '已完成' : '进行中' }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 书签面板 -->
-        <div class="panel bookmarks-panel" v-if="activePanel === 'bookmarks'">
-          <div class="panel-header">
-            <h2><i class="fa-solid fa-bookmark"></i> 知识书签</h2>
-            <button class="panel-close" @click="activePanel = null">
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-          <div v-if="bookmarks.length === 0" class="empty-hint">
-            <i class="fa-solid fa-bookmark"></i>
-            <p>还没有收藏任何内容</p>
-            <p class="empty-sub">在AI回复中点击书签图标即可收藏</p>
-          </div>
-          <div class="bookmarks-list" v-else>
-            <div v-for="bm in bookmarks" :key="bm.id" class="bookmark-card">
-              <div class="bm-skill-tag">{{ bm.skillName }}</div>
-              <div class="bm-preview">{{ bm.content }}</div>
-              <div class="bm-meta">
-                <span class="bm-time">{{ formatTime(bm.createdAt) }}</span>
-                <div class="bm-actions">
-                  <button class="bm-action-btn" @click="insertBookmarkToChat(bm)" title="继续讨论">
-                    <i class="fa-solid fa-comments"></i>
-                  </button>
-                  <button class="bm-action-btn delete" @click="deleteBookmark(bm.id)" title="删除">
-                    <i class="fa-solid fa-trash"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <main class="main-panel" :class="{ expanded: activePanel && activePanel !== 'skills' && activePanel !== 'growth' && activePanel !== 'records' && activePanel !== 'bookmarks' }">
       </main>
     </div>
 
@@ -369,9 +116,18 @@
         <div class="chat-header">
           <div class="chat-skill-select">
             <select v-model="currentSkill">
-              <option :value="null">选择教育技能</option>
+              <option :value="null">选择研伴技能</option>
               <option v-for="skill in skills" :key="skill.id" :value="skill.id">{{ skill.name }}</option>
             </select>
+          </div>
+          <!-- 阶段进度条 -->
+          <div class="stage-progress" v-if="currentSkill && skillStagesList.length">
+            <div class="sp-track"><div class="sp-fill" :style="{ width: ((currentStage + 1) / skillStagesList.length * 100) + '%' }"></div></div>
+            <div class="sp-steps">
+              <span v-for="(s, i) in skillStagesList" :key="s.id" class="sp-step" :class="{ active: i === currentStage, done: i < currentStage }" @click="setStage(i)" title="点击跳转到此阶段">
+                <i :class="s.icon"></i><em>{{ s.name }}</em>
+              </span>
+            </div>
           </div>
           <div class="chat-tools">
             <button class="tool-btn" :class="{ active: autoSpeakEnabled }" @click="toggleAutoSpeak" title="自动播报">
@@ -397,6 +153,12 @@
             </div>
             <h3>开始智能对话</h3>
             <p>选择一个教育技能，提出你的问题</p>
+            <!-- 上下文恢复横幅 -->
+            <div class="context-banner" v-if="hasSavedContext" @click="continueSkillContext(currentSkill)">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+              <span>上次讨论：<strong>{{ savedContextPreview }}</strong></span>
+              <em>点击继续</em>
+            </div>
             <div class="quick-questions" v-if="currentSkill">
               <button
                 v-for="q in quickQuestions"
@@ -429,15 +191,25 @@
                 <div class="msg-header">
                   <span class="msg-author">{{ msg.role === 'user' ? '我' : '研友' }}</span>
                   <span class="msg-time" v-if="msg.timestamp">{{ formatTime(msg.timestamp) }}</span>
-                  <button
-                    v-if="msg.role === 'assistant' && msg.content"
-                    class="bookmark-btn"
-                    :class="{ bookmarked: isBookmarked(msg) }"
-                    @click="toggleBookmark(msg)"
-                    title="收藏此回复"
-                  >
-                    <i :class="isBookmarked(msg) ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'"></i>
-                  </button>
+                  <!-- 操作按钮 -->
+                  <div class="msg-actions">
+                    <button
+                      class="msg-action-btn"
+                      @click="deleteMessage(index)"
+                      title="删除此消息"
+                    >
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                    <button
+                      v-if="msg.role === 'assistant' && msg.content"
+                      class="msg-action-btn bookmark-btn"
+                      :class="{ bookmarked: isBookmarked(msg) }"
+                      @click="toggleBookmark(msg)"
+                      title="收藏此回复"
+                    >
+                      <i :class="isBookmarked(msg) ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'"></i>
+                    </button>
+                  </div>
                 </div>
                 <!-- 思考过程 -->
                 <div v-if="msg.role === 'assistant' && msg.reasoning" class="msg-reasoning">
@@ -478,6 +250,13 @@
           <div v-if="isRecording" class="recording-indicator">
             <span class="rec-dot"></span>
             正在录音...
+          </div>
+
+          <!-- 技能专属工具栏 -->
+          <div class="skill-toolbar" v-if="currentSkill && skillToolbar.length">
+            <button v-for="act in skillToolbar" :key="act.label" class="toolbar-btn" @click="chatInput = act.prompt">
+              <i :class="act.icon"></i> {{ act.label }}
+            </button>
           </div>
 
           <!-- 输入框 -->
@@ -536,6 +315,385 @@
     </div>
 
     <!-- ==================== 模态框 ==================== -->
+
+    <!-- 技能选择 - 全屏模态弹窗 -->
+    <transition name="skills-modal">
+      <div v-if="activePanel === 'skills'" class="skills-overlay" @click.self="activePanel = null">
+        <!-- 浮动粒子装饰 -->
+        <div class="skills-particles">
+          <span v-for="n in 6" :key="n" class="particle" :style="{ animationDelay: n * 0.8 + 's', left: (10 + n * 15) + '%', top: (5 + n * 12) + '%' }"></span>
+        </div>
+
+        <div class="skills-modal">
+          <!-- 标题区 -->
+          <div class="skills-modal-head">
+            <div class="smh-left">
+              <div class="smh-icon">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </div>
+              <div>
+                <h2>选择研伴技能</h2>
+                <p>选择一个技能，开启你的研究协作之旅</p>
+              </div>
+            </div>
+            <button class="smh-close" @click="activePanel = null">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <!-- 技能网格 -->
+          <div class="skills-grid">
+            <div
+              v-for="(skill, idx) in skills"
+              :key="skill.id"
+              class="skill-card"
+              :class="{ active: currentSkill === skill.id, expanded: currentSkill === skill.id }"
+              :style="{ '--card-delay': idx * 0.07 + 's', '--skill-color': getSkillColor(skill.id) }"
+              @click="selectSkill(skill.id)"
+            >
+              <!-- 光晕装饰 -->
+              <div class="sc-glow"></div>
+              <div class="sc-orbit">
+                <span class="orbit-dot"></span>
+              </div>
+
+              <!-- 卡片头部 -->
+              <div class="sc-header">
+                <div class="sc-icon">
+                  <i :class="skill.icon"></i>
+                </div>
+                <div class="sc-meta">
+                  <h3>{{ skill.name }}</h3>
+                  <p>{{ skill.description }}</p>
+                </div>
+                <div class="sc-usage" v-if="skillUsage[skill.id]">
+                  <span class="sc-usage-count">{{ skillUsage[skill.id] }}</span>
+                  <span class="sc-usage-label">次</span>
+                </div>
+              </div>
+
+              <!-- 展开详情区 -->
+              <transition name="skill-expand">
+                <div v-if="currentSkill === skill.id && currentSkillDetail" class="sc-detail">
+                  <div class="scd-divider"></div>
+                  <div class="scd-features">
+                    <div class="scd-feature" v-for="(feature, fi) in currentSkillDetail.features" :key="fi">
+                      <i class="fa-solid fa-check-circle"></i>
+                      <span>{{ feature }}</span>
+                    </div>
+                  </div>
+                  <div class="scd-actions">
+                    <button class="scd-start" @click.stop="startConversation">
+                      <i class="fa-solid fa-play"></i>
+                      <span>开始对话</span>
+                    </button>
+                    <button class="scd-cancel" @click.stop="currentSkill = null">
+                      <i class="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                </div>
+              </transition>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 成长系统 - 全屏模态弹窗 -->
+    <transition name="growth-modal">
+      <div v-if="activePanel === 'growth'" class="growth-overlay" @click.self="activePanel = null">
+        <!-- 浮动粒子 -->
+        <div class="growth-particles">
+          <span v-for="n in 5" :key="n" class="g-particle" :style="{ animationDelay: n * 1.2 + 's', left: (8 + n * 18) + '%', top: (10 + n * 14) + '%' }"></span>
+        </div>
+
+        <div class="growth-modal">
+          <!-- 标题栏 -->
+          <div class="growth-modal-head">
+            <div class="gmh-left">
+              <div class="gmh-icon">
+                <i class="fa-solid fa-chart-line"></i>
+              </div>
+              <div>
+                <h2>成长系统</h2>
+                <p>追踪你的研究学习进度</p>
+              </div>
+            </div>
+            <button class="gmh-close" @click="activePanel = null">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <!-- 等级英雄区 -->
+          <div class="gm-hero">
+            <div class="gm-hero-glow"></div>
+            <div class="gm-level-block">
+              <div class="gm-ring">
+                <svg viewBox="0 0 140 140">
+                  <defs>
+                    <linearGradient id="levelGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" style="stop-color:#10b981"/>
+                      <stop offset="100%" style="stop-color:#0ea5e9"/>
+                    </linearGradient>
+                  </defs>
+                  <circle class="ring-bg" cx="70" cy="70" r="60"/>
+                  <circle class="ring-progress" cx="70" cy="70" r="60"
+                    :style="{ strokeDashoffset: 377 - (377 * expPercentage / 100) }"/>
+                </svg>
+                <div class="gm-ring-value">
+                  <span class="gm-level-num">{{ growth.level }}</span>
+                  <span class="gm-level-tag">LEVEL</span>
+                </div>
+              </div>
+              <div class="gm-level-info">
+                <h3>{{ levelTitle }}</h3>
+                <div class="gm-exp-bar">
+                  <div class="gm-exp-fill" :style="{ width: expPercentage + '%' }"></div>
+                </div>
+                <div class="gm-exp-text">
+                  <span>{{ growth.exp }} / {{ expForNextLevel }} EXP</span>
+                  <span class="gm-total-exp">总经验 {{ growth.totalExp }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 统计卡片 -->
+          <div class="gm-stats">
+            <div
+              v-for="(stat, si) in statCards"
+              :key="stat.key"
+              class="gm-stat-card"
+              :style="{ '--stat-delay': si * 0.08 + 's' }"
+            >
+              <div class="gms-icon">
+                <i :class="stat.icon"></i>
+              </div>
+              <div class="gms-value">{{ growth.stats[stat.key] || 0 }}</div>
+              <div class="gms-label">{{ stat.label }}</div>
+            </div>
+          </div>
+
+          <!-- 图表 + 成就 双列 -->
+          <div class="gm-lower">
+            <!-- 图表区 -->
+            <div class="gm-charts">
+              <div class="gm-chart-card">
+                <h4><i class="fa-solid fa-chart-pie"></i> 技能使用分布</h4>
+                <div class="gm-chart-wrap">
+                  <canvas id="skill-usage-chart"></canvas>
+                </div>
+              </div>
+              <div class="gm-chart-card">
+                <h4><i class="fa-solid fa-chart-bar"></i> 学习活动统计</h4>
+                <div class="gm-chart-wrap">
+                  <canvas id="activity-chart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- 成就墙 -->
+            <div class="gm-achievements">
+              <h4><i class="fa-solid fa-trophy"></i> 成就徽章</h4>
+              <div class="gm-ach-grid">
+                <div
+                  v-for="achievement in achievements"
+                  :key="achievement.id"
+                  class="gm-ach-item"
+                  :class="{ unlocked: achievement.unlocked }"
+                >
+                  <div class="gma-icon">
+                    <i :class="achievement.icon"></i>
+                  </div>
+                  <div class="gma-name">{{ achievement.name }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 协作记录 - 全屏模态弹窗 -->
+    <transition name="records-modal">
+      <div v-if="activePanel === 'records'" class="records-overlay" @click.self="activePanel = null">
+        <div class="records-modal">
+          <!-- 标题栏 -->
+          <div class="records-modal-head">
+            <div class="rmh-left">
+              <div class="rmh-icon">
+                <i class="fa-solid fa-history"></i>
+              </div>
+              <div>
+                <h2>协作记录</h2>
+                <p>回顾你与研友的每一次协作</p>
+              </div>
+            </div>
+            <div class="rmh-actions">
+              <button class="rmh-action-btn" @click="openReportModal" title="学习报告">
+                <i class="fa-solid fa-chart-pie"></i>
+              </button>
+              <button class="rmh-action-btn" @click="refreshCollaboration" title="刷新">
+                <i class="fa-solid fa-refresh"></i>
+              </button>
+              <button class="rmh-close" @click="activePanel = null">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 统计英雄区 -->
+          <div class="rm-hero">
+            <div class="rm-stats-row">
+              <div class="rm-stat-card">
+                <div class="rms-icon blue"><i class="fa-solid fa-comments"></i></div>
+                <div class="rms-body">
+                  <span class="rms-value">{{ collabStats.totalSessions || 0 }}</span>
+                  <span class="rms-label">协作会话</span>
+                </div>
+              </div>
+              <div class="rm-stat-card">
+                <div class="rms-icon green"><i class="fa-solid fa-robot"></i></div>
+                <div class="rms-body">
+                  <span class="rms-value">{{ collabStats.totalAIContributions || 0 }}</span>
+                  <span class="rms-label">AI 贡献</span>
+                </div>
+              </div>
+              <div class="rm-stat-card">
+                <div class="rms-icon orange"><i class="fa-solid fa-user"></i></div>
+                <div class="rms-body">
+                  <span class="rms-value">{{ collabStats.totalHumanContributions || 0 }}</span>
+                  <span class="rms-label">用户贡献</span>
+                </div>
+              </div>
+            </div>
+            <!-- 比例可视化 -->
+            <div class="rm-ratio" v-if="collabStats.totalSessions > 0">
+              <div class="rm-ratio-bar">
+                <div class="rm-bar-ai" :style="{ width: collabStats.collaborationRatio?.ai + '%' }"></div>
+                <div class="rm-bar-human" :style="{ width: collabStats.collaborationRatio?.human + '%' }"></div>
+              </div>
+              <div class="rm-ratio-labels">
+                <span><i class="fa-solid fa-robot"></i> AI {{ collabStats.collaborationRatio?.ai || 0 }}%</span>
+                <span><i class="fa-solid fa-user"></i> 用户 {{ collabStats.collaborationRatio?.human || 0 }}%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 筛选标签 -->
+          <div class="rm-filters">
+            <button
+              v-for="ft in collabFilters"
+              :key="ft.key"
+              class="rm-filter-btn"
+              :class="{ active: collabFilter === ft.key }"
+              @click="collabFilter = ft.key"
+            >{{ ft.label }}</button>
+          </div>
+
+          <!-- 记录列表 -->
+          <div class="rm-list">
+            <div v-if="filteredRecords.length === 0" class="rm-empty">
+              <i class="fa-solid fa-folder-open"></i>
+              <p>暂无协作记录</p>
+              <span>开始一次对话，你的协作记录将在这里展示</span>
+            </div>
+            <div
+              v-for="(record, ri) in filteredRecords"
+              :key="record.id"
+              class="rm-record"
+              :style="{ '--rec-delay': ri * 0.04 + 's' }"
+              @click="showRecordDetail(record)"
+            >
+              <div class="rmr-type" :class="record.type">
+                <i :class="getTypeIcon(record.type)"></i>
+              </div>
+              <div class="rmr-body">
+                <h4>{{ record.title || getTypeName(record.type) + '协作' }}</h4>
+                <p>{{ record.summary || formatDate(record.startTime) }}</p>
+                <div class="rmr-meta">
+                  <span><i class="fa-solid fa-robot"></i> {{ record.aiContributions?.length || 0 }}</span>
+                  <span><i class="fa-solid fa-user"></i> {{ record.humanContributions?.length || 0 }}</span>
+                </div>
+              </div>
+              <div class="rmr-status" :class="{ done: record.endTime }">
+                {{ record.endTime ? '已完成' : '进行中' }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 知识书签弹窗 -->
+    <transition name="bookmarks-modal">
+      <div v-if="activePanel === 'bookmarks'" class="bm-overlay" @click.self="activePanel = null">
+        <div class="bm-modal">
+
+          <!-- 标题栏 -->
+          <div class="bm-head">
+            <div class="bmh-left">
+              <div class="bmh-icon"><i class="fa-solid fa-bookmark"></i></div>
+              <div>
+                <h2>知识书签</h2>
+                <span class="bmh-count">{{ bookmarks.length }} 条收藏</span>
+              </div>
+            </div>
+            <button class="bmh-close" @click="activePanel = null"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <!-- 搜索 & 筛选 -->
+          <div class="bm-toolbar">
+            <div class="bm-search-wrap">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input v-model="bookmarkSearch" type="text" class="bm-search" placeholder="搜索收藏内容..." />
+              <button v-if="bookmarkSearch" class="bm-search-clear" @click="bookmarkSearch = ''"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="bm-filters">
+              <button class="bm-filter" :class="{ active: bookmarkSkillFilter === '' }" @click="bookmarkSkillFilter = ''">全部</button>
+              <button v-for="sk in uniqueBookmarkSkills" :key="sk.id" class="bm-filter" :class="{ active: bookmarkSkillFilter === sk.id }" @click="bookmarkSkillFilter = bookmarkSkillFilter === sk.id ? '' : sk.id">{{ sk.name }}</button>
+            </div>
+          </div>
+
+          <!-- 空状态 -->
+          <div v-if="bookmarks.length === 0" class="bm-empty">
+            <div class="bm-empty-icon"><i class="fa-solid fa-bookmark"></i></div>
+            <h3>还没有收藏任何内容</h3>
+            <p>在 AI 回复中点击 <i class="fa-solid fa-bookmark"></i> 书签图标即可收藏精彩内容</p>
+          </div>
+
+          <!-- 搜索无结果 -->
+          <div v-else-if="filteredBookmarks.length === 0" class="bm-empty bm-empty-small">
+            <div class="bm-empty-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+            <h3>未找到匹配的书签</h3>
+            <p>试试调整搜索关键词或筛选条件</p>
+          </div>
+
+          <!-- 书签列表 -->
+          <div v-else class="bm-list">
+            <div v-for="(bm, idx) in filteredBookmarks" :key="bm.id" class="bm-card" :style="{ '--skill-color': getSkillColor(bm.skill), '--card-delay': idx * 0.06 + 's' }">
+              <div class="bmc-accent"></div>
+              <div class="bmc-body">
+                <div class="bmc-top">
+                  <span class="bmc-tag" :style="{ background: getSkillColor(bm.skill) + '18', color: getSkillColor(bm.skill) }">{{ bm.skillName }}</span>
+                  <span class="bmc-time">{{ formatTime(bm.createdAt) }}</span>
+                </div>
+                <div class="bmc-content">{{ bm.content }}</div>
+                <div class="bmc-actions">
+                  <button class="bmc-btn bmc-btn-chat" @click="insertBookmarkToChat(bm)">
+                    <i class="fa-solid fa-comments"></i> 继续讨论
+                  </button>
+                  <button class="bmc-btn bmc-btn-del" @click="deleteBookmark(bm.id)">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </transition>
 
     <!-- 协作详情 -->
     <div v-if="selectedRecord" class="modal-overlay" @click.self="selectedRecord = null">
@@ -626,80 +784,211 @@
       </div>
     </div>
 
-    <!-- 设置 -->
-    <div v-if="showSettingsModal" class="modal-overlay" @click.self="showSettingsModal = false">
-      <div class="modal-card settings-modal">
-        <div class="modal-head">
-          <h3><i class="fa-solid fa-gear"></i> 模型配置</h3>
-          <button class="modal-x" @click="showSettingsModal = false"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="modal-body">
-          <div class="setting-status" :class="{ configured: apiSettings.api_key_configured }">
-            <i :class="apiSettings.api_key_configured ? 'fa-solid fa-check-circle' : 'fa-solid fa-exclamation-triangle'"></i>
-            {{ apiSettings.api_key_configured ? '模型服务已配置' : '模型服务未配置' }}
+    <!-- 设置弹窗 -->
+    <transition name="settings-modal">
+      <div v-if="showSettingsModal" class="stg-overlay" @click.self="showSettingsModal = false">
+        <div class="stg-modal">
+
+          <!-- 标题栏 -->
+          <div class="stg-head">
+            <div class="stgh-left">
+              <div class="stgh-icon"><i class="fa-solid fa-gear"></i></div>
+              <div>
+                <h2>设置中心</h2>
+                <span class="stgh-sub">自定义你的研伴体验</span>
+              </div>
+            </div>
+            <button class="stgh-close" @click="showSettingsModal = false"><i class="fa-solid fa-xmark"></i></button>
           </div>
 
-          <div class="setting-info">
-            <p>研伴使用主页面配置的模型服务。如需修改，请前往主页面设置。</p>
+          <!-- 主体：侧栏 + 内容 -->
+          <div class="stg-body">
+
+            <!-- 侧栏导航 -->
+            <nav class="stg-nav">
+              <div class="stg-nav-indicator" :style="settingsTabIndicator"></div>
+              <button v-for="tab in settingTabs" :key="tab.id" :data-tab="tab.id" class="stg-nav-item" :class="{ active: settingsTab === tab.id }" @click="settingsTab = tab.id">
+                <i :class="tab.icon"></i>
+                <span>{{ tab.label }}</span>
+              </button>
+            </nav>
+
+            <!-- 内容区 -->
+            <div class="stg-content">
+              <div :key="settingsTab" :class="['stg-section', 'stg-slide-' + settingsTabDirection]">
+
+                <div v-if="settingsTab === 'model'">
+                  <div class="stg-status-badge" :class="{ ok: apiSettings.api_key_configured }">
+                    <i :class="apiSettings.api_key_configured ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation'"></i>
+                    {{ apiSettings.api_key_configured ? '模型服务已连接' : '模型服务未配置' }}
+                  </div>
+
+                  <div class="stg-card">
+                    <div class="stgc-title"><i class="fa-solid fa-server"></i> 当前配置</div>
+                    <div class="stgc-grid">
+                      <div class="stgc-field">
+                        <span class="stgc-label">API 状态</span>
+                        <span class="stgc-value" :class="apiSettings.api_key_configured ? 'ok' : 'err'">{{ apiSettings.api_key_configured ? '已配置' : '未配置' }}</span>
+                      </div>
+                      <div class="stgc-field" v-if="apiSettings.providerInfo">
+                        <span class="stgc-label">模型服务</span>
+                        <span class="stgc-value">{{ apiSettings.providerInfo.name }}</span>
+                      </div>
+                      <div class="stgc-field" v-if="apiSettings.model">
+                        <span class="stgc-label">模型</span>
+                        <span class="stgc-value mono">{{ apiSettings.raw_model || apiSettings.model }}</span>
+                      </div>
+                      <div class="stgc-field">
+                        <span class="stgc-label">温度</span>
+                        <span class="stgc-value">{{ apiSettings.temperature }}</span>
+                      </div>
+                    </div>
+                    <p class="stgc-hint">研伴使用主页面配置的模型服务。如需修改，请前往主页面设置。</p>
+                  </div>
+
+                  <div class="stg-card">
+                    <div class="stgc-title"><i class="fa-solid fa-brain"></i> 模型选项</div>
+                    <div class="stgc-row">
+                      <div>
+                        <span class="stgc-row-label">启用深度思考</span>
+                        <span class="stgc-row-desc">让模型进行更深入的分析推理</span>
+                      </div>
+                      <label class="toggle"><input type="checkbox" v-model="modelOptions.enableThinking"><span class="toggle-slider"></span></label>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else-if="settingsTab === 'formula'">
+                  <div class="stg-card">
+                    <div class="stgc-title"><i class="fa-solid fa-square-root-variable"></i> 公式识别服务</div>
+                    <div class="stgc-row">
+                      <div>
+                        <span class="stgc-row-label">启用公式识别</span>
+                        <span class="stgc-row-desc">在对话中自动识别并渲染数学公式</span>
+                      </div>
+                      <label class="toggle"><input type="checkbox" v-model="formulaOcrSettings.enabled"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div v-if="formulaOcrSettings.enabled" class="stgc-expand">
+                      <div class="stgc-field-group">
+                        <label class="stgc-label">SimpleTex 用户授权令牌</label>
+                        <input type="password" v-model="formulaOcrSettings.api_key" placeholder="请输入令牌..." class="stgc-input">
+                      </div>
+                      <div class="stgc-field-group">
+                        <label class="stgc-label">识别模式</label>
+                        <div class="stgc-radio-group">
+                          <label class="stgc-radio" :class="{ active: formulaOcrSettings.model === 'standard' }">
+                            <input type="radio" v-model="formulaOcrSettings.model" value="standard"> 标准
+                          </label>
+                          <label class="stgc-radio" :class="{ active: formulaOcrSettings.model === 'advanced' }">
+                            <input type="radio" v-model="formulaOcrSettings.model" value="advanced"> 高精度
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else-if="settingsTab === 'appearance'">
+                  <div class="stg-card">
+                    <div class="stgc-title"><i class="fa-solid fa-palette"></i> 主题</div>
+                    <div class="stgc-row">
+                      <div>
+                        <span class="stgc-row-label">深色模式</span>
+                        <span class="stgc-row-desc">{{ currentTheme === 'dark' ? '当前为深色主题' : '当前为浅色主题' }}</span>
+                      </div>
+                      <label class="toggle"><input type="checkbox" :checked="currentTheme === 'dark'" @change="toggleTheme"><span class="toggle-slider"></span></label>
+                    </div>
+                  </div>
+
+                  <div class="stg-card">
+                    <div class="stgc-title"><i class="fa-solid fa-text-height"></i> 字体大小</div>
+                    <div class="stgc-slider-row">
+                      <span class="stgc-slider-label">小</span>
+                      <input type="range" min="12" max="18" step="1" v-model.number="displaySettings.fontSize" class="stgc-slider">
+                      <span class="stgc-slider-label">大</span>
+                      <span class="stgc-slider-val">{{ displaySettings.fontSize }}px</span>
+                    </div>
+                  </div>
+
+                  <div class="stg-card">
+                    <div class="stgc-title"><i class="fa-solid fa-comment-dots"></i> 对话气泡样式</div>
+                    <div class="stgc-radio-group stgc-style-group">
+                      <label class="stgc-style-opt" :class="{ active: displaySettings.bubbleStyle === 'rounded' }" @click="displaySettings.bubbleStyle = 'rounded'">
+                        <div class="stgc-style-preview rounded-preview"></div>
+                        <span>圆角</span>
+                      </label>
+                      <label class="stgc-style-opt" :class="{ active: displaySettings.bubbleStyle === 'sharp' }" @click="displaySettings.bubbleStyle = 'sharp'">
+                        <div class="stgc-style-preview sharp-preview"></div>
+                        <span>方正</span>
+                      </label>
+                      <label class="stgc-style-opt" :class="{ active: displaySettings.bubbleStyle === 'pill' }" @click="displaySettings.bubbleStyle = 'pill'">
+                        <div class="stgc-style-preview pill-preview"></div>
+                        <span>胶囊</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else-if="settingsTab === 'voice'">
+                  <div class="stg-card">
+                    <div class="stgc-title"><i class="fa-solid fa-volume-high"></i> 语音播报</div>
+                    <div class="stgc-row">
+                      <div>
+                        <span class="stgc-row-label">自动播报 AI 回复</span>
+                        <span class="stgc-row-desc">数字人连接状态下自动朗读 AI 回复内容</span>
+                      </div>
+                      <label class="toggle"><input type="checkbox" v-model="autoSpeakEnabled"><span class="toggle-slider"></span></label>
+                    </div>
+                  </div>
+
+                  <div class="stg-card">
+                    <div class="stgc-title"><i class="fa-solid fa-gauge-high"></i> 语音参数</div>
+                    <div class="stgc-slider-row">
+                      <span class="stgc-slider-label">语速</span>
+                      <input type="range" min="0.5" max="2.0" step="0.1" v-model.number="voiceSettings.speed" class="stgc-slider">
+                      <span class="stgc-slider-val">{{ voiceSettings.speed.toFixed(1) }}x</span>
+                    </div>
+                    <div class="stgc-slider-row">
+                      <span class="stgc-slider-label">音量</span>
+                      <input type="range" min="0" max="100" step="5" v-model.number="voiceSettings.volume" class="stgc-slider">
+                      <span class="stgc-slider-val">{{ voiceSettings.volume }}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else-if="settingsTab === 'about'">
+                  <div class="stg-card stg-about-hero">
+                    <div class="stg-about-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                    <h3>研伴 — 教育数字人</h3>
+                    <p class="stg-about-ver">v1.0.0</p>
+                    <p class="stg-about-desc">基于 Super Agent Party 构建的智能科研协作平台，集成 VRM 3D 数字人、知识库检索、多模态交互等功能。</p>
+                  </div>
+                  <div class="stg-card">
+                    <div class="stgc-title"><i class="fa-solid fa-list-check"></i> 功能特性</div>
+                    <div class="stgc-feature-grid">
+                      <div class="stgc-feature"><i class="fa-solid fa-robot"></i> VRM 3D 数字人</div>
+                      <div class="stgc-feature"><i class="fa-solid fa-book-open"></i> 知识库检索</div>
+                      <div class="stgc-feature"><i class="fa-solid fa-microphone"></i> 语音交互</div>
+                      <div class="stgc-feature"><i class="fa-solid fa-square-root-variable"></i> 公式识别</div>
+                      <div class="stgc-feature"><i class="fa-solid fa-chart-line"></i> 学习追踪</div>
+                      <div class="stgc-feature"><i class="fa-solid fa-users"></i> 人机协作</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
           </div>
 
-          <div class="setting-group">
-            <h4>当前配置</h4>
-            <div class="setting-row">
-              <span>API状态</span>
-              <span :class="apiSettings.api_key_configured ? 'success' : 'error'">
-                {{ apiSettings.api_key_configured ? '已配置' : '未配置' }}
-              </span>
-            </div>
-            <div class="setting-row" v-if="apiSettings.providerInfo">
-              <span>模型服务</span>
-              <span>{{ apiSettings.providerInfo.name }}</span>
-            </div>
-            <div class="setting-row" v-if="apiSettings.model">
-              <span>模型</span>
-              <span>{{ apiSettings.raw_model || apiSettings.model }}</span>
-            </div>
-            <div class="setting-row">
-              <span>温度</span>
-              <span>{{ apiSettings.temperature }}</span>
-            </div>
+          <!-- 底部 -->
+          <div class="stg-foot">
+            <button class="stg-btn-cancel" @click="showSettingsModal = false">取消</button>
+            <button class="stg-btn-save" @click="saveAllSettings"><i class="fa-solid fa-check"></i> 保存设置</button>
           </div>
 
-          <div class="setting-group">
-            <h4>模型选项</h4>
-            <div class="setting-toggle">
-              <span>启用深度思考</span>
-              <label class="toggle">
-                <input type="checkbox" v-model="modelOptions.enableThinking">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-group">
-            <h4>公式识别</h4>
-            <div class="setting-toggle">
-              <span>启用公式识别</span>
-              <label class="toggle">
-                <input type="checkbox" v-model="formulaOcrSettings.enabled">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <input
-              v-if="formulaOcrSettings.enabled"
-              type="password"
-              v-model="formulaOcrSettings.api_key"
-              placeholder="SimpleTex 用户授权令牌"
-              class="setting-input"
-            >
-          </div>
-        </div>
-        <div class="modal-foot">
-          <button class="btn-cancel" @click="showSettingsModal = false">关闭</button>
-          <button class="btn-save" @click="saveAllSettings">保存设置</button>
         </div>
       </div>
-    </div>
+    </transition>
 
     <!-- 历史记录 -->
     <div v-if="showHistoryModal" class="modal-overlay" @click.self="showHistoryModal = false">
