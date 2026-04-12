@@ -1,5 +1,8 @@
 const remoteMain = require('@electron/remote/main')
 const { app, BrowserWindow, ipcMain, screen, shell, dialog, Tray, Menu, session,globalShortcut} = require('electron')
+
+// 忽略自签名证书错误（本地开发用 HTTPS）
+app.commandLine.appendSwitch('ignore-certificate-errors')
 const { clipboard, nativeImage,desktopCapturer  } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
@@ -548,13 +551,30 @@ async function waitForBackend() {
   const RETRY_INTERVAL = 500;
   let retries = 0;
 
-  console.log(`⏳ 正在等待 http://127.0.0.1:${PORT}/health 响应...`);
+  const https = require('https');
+
+  console.log(`⏳ 正在等待 https://127.0.0.1:${PORT}/health 响应...`);
   console.log(`⏳ 更新后的首次启动时会花费更久的时间，请耐心等待...`);
   console.log(`⏳ The first launch after an update may take longer, please be patient...`);
   while (retries < MAX_RETRIES) {
     try {
-      const response = await fetch(`http://127.0.0.1:${PORT}/health`);
-      if (response.ok) {
+      const responseOk = await new Promise((resolve, reject) => {
+        const req = https.request(`https://127.0.0.1:${PORT}/health`, {
+          method: 'GET',
+          rejectUnauthorized: false // 忽略自签名证书
+        }, (res) => {
+          resolve(res.statusCode === 200);
+        });
+        req.on('error', (err) => {
+          resolve(false);
+        });
+        req.setTimeout(2000, () => {
+          req.destroy();
+          resolve(false);
+        });
+        req.end();
+      });
+      if (responseOk) {
         console.log('✨ 后端健康检查通过！');
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('backend-ready', { port: PORT });
@@ -562,9 +582,10 @@ async function waitForBackend() {
         return;
       }
     } catch (err) {
-      retries++;
-      await new Promise(resolve => setTimeout(resolve, RETRY_INTERVAL));
+      // ignore
     }
+    retries++;
+    await new Promise(resolve => setTimeout(resolve, RETRY_INTERVAL));
   }
   throw new Error('后端已启动但健康检查响应超时');
 }
@@ -826,7 +847,7 @@ app.whenReady().then(async () => {
     await waitForBackend()
     
     // 后端服务准备就绪后，加载完整内容
-    console.log(`Backend server is running at http://${HOST}:${PORT}`)
+    console.log(`Backend server is running at https://${HOST}:${PORT}`)
 
     if (IS_INTERNAL_MODE_ACTIVE) {
         try {
@@ -1035,7 +1056,7 @@ ipcMain.handle('upload-to-workspace', async (event, { targetDirPath, sourceFileP
       });
 
       // 加载页面
-      await vrmWindow.loadURL(`http://${HOST}:${PORT}/vrm.html`);
+      await vrmWindow.loadURL(`https://${HOST}:${PORT}/vrm.html`);
       // 默认设置（不穿透，可以交互）
       vrmWindow.setIgnoreMouseEvents(false);
       vrmWindow.setAlwaysOnTop(true);
@@ -1192,7 +1213,7 @@ ipcMain.handle('upload-to-workspace', async (event, { targetDirPath, sourceFileP
     });
             
     // 加载主页面
-    await mainWindow.loadURL(`http://${HOST}:${PORT}`)
+    await mainWindow.loadURL(`https://${HOST}:${PORT}`)
     ipcMain.on('set-language', (_, lang) => {
       if (lang === 'auto') {
         // 获取系统设置，默认是'en-US'，如果系统语言是中文，则设置为'zh-CN'
