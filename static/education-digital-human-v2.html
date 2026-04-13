@@ -457,6 +457,16 @@
                   >
                     <i :class="isRecording ? 'fa-solid fa-stop' : 'fa-solid fa-microphone'"></i>
                   </button>
+                  <!-- 停止播报按钮 -->
+                  <button
+                    v-if="xingyunSession.isConnected && xingyunSession.voiceState === 'speaking'"
+                    class="btn btn-icon"
+                    style="background: linear-gradient(135deg, var(--danger-500), var(--danger-600)); color: white;"
+                    @click="stopSpeaking"
+                    title="停止播报"
+                  >
+                    <i class="fa-solid fa-volume-xmark"></i>
+                  </button>
                   <!-- 发送按钮 -->
                   <button class="btn btn-primary" @click="sendMessage" :disabled="!chatInput.trim() || isTyping">
                     <i class="fa-solid fa-paper-plane"></i> 发送
