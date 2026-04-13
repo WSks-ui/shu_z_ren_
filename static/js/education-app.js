@@ -20,6 +20,8 @@ createApp({
     const chatMessages = ref(null);
     const sessionId = ref('session_' + Date.now());
     const achievementNotification = ref(null);  // 成就通知
+    const isUserScrolling = ref(false);  // 用户是否正在手动滚动
+    const isNearBottom = ref(true);  // 是否接近底部（用于判断是否自动滚动）
 
     // ==================== 标签页配置 ====================
     const tabs = [
@@ -207,12 +209,20 @@ createApp({
     };
 
     // 手动设置阶段进度（用户点击或AI调用）
-    const setStage = (stageIndex) => {
+    const setStage = async (stageIndex) => {
       if (!skillStagesList.value.length) return;
       if (stageIndex < 0 || stageIndex >= skillStagesList.value.length) return;
+
+      const prevStage = currentStage.value;
       currentStage.value = stageIndex;
       const stageName = skillStagesList.value[stageIndex]?.name || '';
       console.log(`[阶段切换] 跳转到: ${stageName}`);
+
+      // 只有向前推进阶段才记录奖励
+      if (stageIndex > prevStage) {
+        await recordStageComplete(stageName);
+      }
+
       saveSkillContext();
     };
 
@@ -242,9 +252,32 @@ createApp({
         conversations: 0,
         papersRead: 0,
         experimentsDesigned: 0,
-        papersWritten: 0
-      }
+        papersWritten: 0,
+        skillUses: 0,           // 技能使用次数
+        bookmarksSaved: 0,      // 收藏书签数
+        formulasRecognized: 0,  // 公式识别次数
+        voiceChats: 0,          // 语音对话次数
+        stagesCompleted: 0,     // 完成阶段数
+        dailyLogins: 0,         // 每日登录天数
+        continuousDays: 0       // 连续使用天数
+      },
+      lastLoginDate: null,      // 上次登录日期
+      todayExpGained: 0         // 今日获得经验（用于限制每日上限）
     });
+
+    // 经验获取配置
+    const expRewards = {
+      chat: 10,              // 普通对话
+      voiceChat: 15,         // 语音对话（额外奖励）
+      skillUse: 8,           // 使用技能
+      stageComplete: 25,     // 完成一个阶段
+      bookmarkSave: 5,       // 保存书签
+      formulaRecognize: 12,  // 公式识别
+      dailyLogin: 20,        // 每日登录
+      continuousDay: 10,     // 连续使用（每天额外）
+      achievementUnlock: 50, // 解锁成就
+      firstSkillUse: 30      // 首次使用某技能
+    };
 
     const achievements = ref([
       { id: 'first_chat', name: '初次对话', description: '完成第一次对话', icon: 'fa-solid fa-comments', unlocked: false },
@@ -263,10 +296,103 @@ createApp({
 
     const statCards = [
       { key: 'conversations', label: '对话次数', icon: 'fa-solid fa-comments' },
-      { key: 'papersRead', label: '阅读文献', icon: 'fa-solid fa-book' },
-      { key: 'experimentsDesigned', label: '设计实验', icon: 'fa-solid fa-flask' },
-      { key: 'papersWritten', label: '撰写论文', icon: 'fa-solid fa-pen' }
+      { key: 'skillUses', label: '技能使用', icon: 'fa-solid fa-wand-magic-sparkles' },
+      { key: 'bookmarksSaved', label: '知识书签', icon: 'fa-solid fa-bookmark' },
+      { key: 'formulasRecognized', label: '公式识别', icon: 'fa-solid fa-square-root-variable' }
     ];
+
+    // ==================== 经验获取方法 ====================
+    const addExp = async (amount, reason = '') => {
+      const actualAmount = Math.min(amount, 100); // 单次最大100经验
+      growth.value.exp += actualAmount;
+      growth.value.totalExp += actualAmount;
+      growth.value.todayExpGained += actualAmount;
+
+      // 检查升级
+      while (growth.value.exp >= expForNextLevel.value) {
+        growth.value.exp -= expForNextLevel.value;
+        growth.value.level++;
+        // 升级奖励
+        showAchievementNotification({
+          name: `升级！Lv.${growth.value.level}`,
+          description: `恭喜达到 ${growth.value.level} 级！`,
+          icon: 'fa-solid fa-star'
+        });
+      }
+
+      console.log(`[经验] +${actualAmount} (${reason})，当前: ${growth.value.exp}/${expForNextLevel.value}`);
+      await checkAchievements();
+    };
+
+    // 检查每日登录奖励
+    const checkDailyLogin = async () => {
+      const today = new Date().toDateString();
+      const lastLogin = growth.value.lastLoginDate;
+
+      if (lastLogin !== today) {
+        // 计算连续天数
+        if (lastLogin) {
+          const lastDate = new Date(lastLogin);
+          const todayDate = new Date(today);
+          const diffDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+          if (diffDays === 1) {
+            growth.value.stats.continuousDays++;
+          } else {
+            growth.value.stats.continuousDays = 1;
+          }
+        } else {
+          growth.value.stats.continuousDays = 1;
+        }
+
+        growth.value.stats.dailyLogins++;
+        growth.value.lastLoginDate = today;
+        growth.value.todayExpGained = 0;
+
+        // 每日登录奖励
+        const loginBonus = expRewards.dailyLogin + (growth.value.stats.continuousDays - 1) * expRewards.continuousDay;
+        await addExp(Math.min(loginBonus, 50), '每日登录');
+
+        // 保存到本地
+        localStorage.setItem('edu-growth', JSON.stringify(growth.value));
+      }
+    };
+
+    // 技能使用奖励
+    const recordSkillUse = async (skillId) => {
+      const isFirstUse = !skillUsage.value[skillId];
+      skillUsage.value[skillId] = (skillUsage.value[skillId] || 0) + 1;
+      growth.value.stats.skillUses++;
+
+      if (isFirstUse) {
+        await addExp(expRewards.firstSkillUse, `首次使用技能`);
+      } else {
+        await addExp(expRewards.skillUse, `使用技能`);
+      }
+    };
+
+    // 书签保存奖励
+    const recordBookmarkSave = async () => {
+      growth.value.stats.bookmarksSaved++;
+      await addExp(expRewards.bookmarkSave, '保存书签');
+    };
+
+    // 公式识别奖励
+    const recordFormulaRecognize = async () => {
+      growth.value.stats.formulasRecognized++;
+      await addExp(expRewards.formulaRecognize, '公式识别');
+    };
+
+    // 语音对话奖励
+    const recordVoiceChat = async () => {
+      growth.value.stats.voiceChats++;
+      await addExp(expRewards.voiceChat, '语音对话');
+    };
+
+    // 阶段完成奖励
+    const recordStageComplete = async (stageName) => {
+      growth.value.stats.stagesCompleted++;
+      await addExp(expRewards.stageComplete, `完成阶段: ${stageName}`);
+    };
 
     // ==================== 协作记录 ====================
     const collaborationRecords = ref([]);
@@ -413,6 +539,7 @@ createApp({
     // ==================== 语音录制 ====================
     const isRecording = ref(false);
     const speechRecognition = ref(null);
+    const continuousVoiceMode = ref(false);  // 连续语音模式：自动重新启动识别
     let chatGeneration = 0; // 请求代际计数器，防止旧请求干扰新请求
 
     const initSpeechRecognition = () => {
@@ -422,7 +549,7 @@ createApp({
         return null;
       }
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      recognition.continuous = true;  // 开启持续模式，支持连续对话
       recognition.interimResults = true;  // 开启实时结果，加快响应
       recognition.lang = 'zh-CN';
       return recognition;
@@ -772,9 +899,37 @@ createApp({
     let speakBuffer = '';           // 累积文本缓冲
     let speakQueue = [];            // 播报队列
     let isProcessingQueue = false;  // 是否正在处理队列
+    let totalSpokenChars = 0;       // 已播报的总字符数
+    let shouldStopSpeaking = false; // 是否应该停止播报（达到长度限制）
+    const MAX_SPEAK_CHARS = 220;    // 最大播报字符数
+
+    /**
+     * 清理文本，移除 LaTeX 公式和 Markdown 标记
+     */
+    const cleanTextForSpeak = (text) => {
+      let cleaned = text;
+
+      // 1. 移除块级 LaTeX 公式: $$...$$ 和 \[...\]
+      cleaned = cleaned.replace(/\$\$[\s\S]*?\$\$/g, '');
+      cleaned = cleaned.replace(/\\[[\s\S]*?\\]/g, '');
+
+      // 2. 移除行内 LaTeX 公式: $...$ 和 \(...\)
+      // 注意：要避免误删美元符号，只匹配 $...$ 格式
+      cleaned = cleaned.replace(/\$[^\$\n]+?\$/g, '');
+      cleaned = cleaned.replace(/\\\([^)]+?\\\)/g, '');
+
+      // 3. 移除 Markdown 标记
+      cleaned = cleaned.replace(/[#*_`~>\[\]()!|\\]/g, '');
+
+      // 4. 移除多余的空白字符
+      cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+      return cleaned;
+    };
 
     const streamSpeak = (text) => {
       if (!xingyunSession.value.isConnected || !xingyunSession.value.sdk) return;
+      if (shouldStopSpeaking) return;  // 已达到限制，不再处理新文本
 
       // 累积文本
       speakBuffer += text;
@@ -794,14 +949,27 @@ createApp({
       }
 
       // 将完整句子加入队列
-      sentences.forEach(s => {
-        // 清理 Markdown 标记
-        const cleanText = s.replace(/[#*_`~>\[\]()!|\\]/g, '').trim();
+      for (const s of sentences) {
+        // 清理 LaTeX 公式和 Markdown 标记
+        const cleanText = cleanTextForSpeak(s);
         if (cleanText.length > 1) {
+          // 检查是否超过长度限制
+          if (totalSpokenChars + cleanText.length > MAX_SPEAK_CHARS) {
+            // 达到限制，标记停止并添加提示
+            shouldStopSpeaking = true;
+            // 如果队列中已有内容，在最后添加提示
+            if (speakQueue.length > 0 || totalSpokenChars > 0) {
+              speakQueue.push('详细信息请看聊天栏输出。');
+            }
+            console.log('[流式播报] 达到长度限制，停止添加新句子');
+            break;
+          }
+
           speakQueue.push(cleanText);
-          console.log('[流式播报] 加入队列:', cleanText);
+          totalSpokenChars += cleanText.length;
+          console.log('[流式播报] 加入队列:', cleanText, '累计:', totalSpokenChars);
         }
-      });
+      }
 
       // 处理队列
       processSpeakQueue();
@@ -816,14 +984,45 @@ createApp({
         const text = speakQueue.shift();
         console.log('[流式播报] 播报:', text);
 
-        // 调用魔珐SDK播报，第二个参数false表示不打断当前播报
-        xingyunSession.value.sdk.speak(text, false, true);
+        // 调用魔珐SDK播报，第二个参数true表示打断当前播报（支持实时响应）
+        xingyunSession.value.sdk.speak(text, true, true);
 
         // 等待播报完成（检测voiceState变化）
         await waitForSpeakEnd();
       }
 
       isProcessingQueue = false;
+    };
+
+    // ==================== 停止播报 ====================
+    const stopSpeaking = () => {
+      // 清空队列
+      speakQueue = [];
+      speakBuffer = '';
+      isProcessingQueue = false;
+
+      // 停止魔珐SDK播报
+      if (xingyunSession.value.sdk && xingyunSession.value.isConnected) {
+        try {
+          // 调用SDK的停止方法
+          if (xingyunSession.value.sdk.stop) {
+            xingyunSession.value.sdk.stop();
+          }
+          // 恢复到idle状态
+          if (xingyunSession.value.sdk.interactiveidle) {
+            xingyunSession.value.sdk.interactiveidle();
+          }
+        } catch (e) {
+          console.error('[停止播报] SDK调用失败:', e);
+        }
+      }
+
+      // 停止Web Speech API (备用)
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+
+      console.log('[停止播报] 已停止所有播报');
     };
 
     const waitForSpeakEnd = () => {
@@ -854,6 +1053,8 @@ createApp({
       speakBuffer = '';
       speakQueue = [];
       isProcessingQueue = false;
+      totalSpokenChars = 0;
+      shouldStopSpeaking = false;
     };
 
     // ==================== 数字人布局校正 ====================
@@ -925,7 +1126,7 @@ createApp({
     };
 
     // ==================== 书签方法 ====================
-    const toggleBookmark = (msg) => {
+    const toggleBookmark = async (msg) => {
       if (msg.role !== 'assistant') return;
       const existingIdx = bookmarks.value.findIndex(
         b => b.content === msg.content.substring(0, 100) && b.timestamp === msg.timestamp
@@ -942,6 +1143,8 @@ createApp({
           timestamp: msg.timestamp || new Date().toISOString(),
           createdAt: new Date().toISOString()
         });
+        // 新增书签时获得经验奖励
+        await recordBookmarkSave();
       }
       localStorage.setItem('edu-bookmarks', JSON.stringify(bookmarks.value));
     };
@@ -1026,12 +1229,17 @@ createApp({
       }
     };
 
-    const startConversation = () => {
+    const startConversation = async () => {
       chatExpanded.value = true;
       activePanel.value = null;
       messages.value = [];
       sessionId.value = 'session_' + Date.now();
       currentStage.value = 0;  // 重置阶段进度
+
+      // 记录技能使用
+      if (currentSkill.value) {
+        await recordSkillUse(currentSkill.value);
+      }
 
       const greetings = {
         'research-assistant': `你好！我是**研友**的科研助手模式。\n\n我可以帮助你：\n- 设计实验方案\n- 构建研究假设\n- 选择合适的研究方法\n- 分析实验数据\n\n请告诉我你正在研究的课题，我们一起探讨！`,
@@ -1062,6 +1270,11 @@ createApp({
 
       // 重置流式播报缓冲区
       resetSpeakBuffer();
+
+      // 记录语音对话奖励
+      if (voiceMode) {
+        await recordVoiceChat();
+      }
 
       const userMessage = chatInput.value.trim();
 
@@ -1100,9 +1313,10 @@ createApp({
       uploadedFiles.value = [];
 
       isTyping.value = true;
+      isNearBottom.value = true;  // 发送新消息时重置滚动状态，确保自动滚动到底部
 
       await nextTick();
-      scrollToBottom();
+      scrollToBottom(true);  // 强制滚动到底部
 
       try {
         const history = messages.value.slice(-20).map(m => ({
@@ -1302,10 +1516,25 @@ createApp({
       }
     };
 
-    const scrollToBottom = () => {
-      if (chatMessages.value) {
-        chatMessages.value.scrollTop = chatMessages.value.scrollHeight;
+    const scrollToBottom = (force = false) => {
+      if (!chatMessages.value) return;
+
+      // 如果不是强制滚动，检查用户是否在底部
+      if (!force && !isNearBottom.value) {
+        return;  // 用户正在查看历史消息，不自动滚动
       }
+
+      chatMessages.value.scrollTop = chatMessages.value.scrollHeight;
+    };
+
+    // 检测滚动位置，判断用户是否在底部
+    const handleChatScroll = () => {
+      if (!chatMessages.value) return;
+
+      const { scrollTop, scrollHeight, clientHeight } = chatMessages.value;
+      // 距离底部 100px 以内视为"在底部"
+      const threshold = 100;
+      isNearBottom.value = scrollHeight - scrollTop - clientHeight < threshold;
     };
 
     // ==================== 格式化方法 ====================
@@ -1946,6 +2175,8 @@ createApp({
 
         if (data.success && data.latex) {
           handwriteResult.value = data.latex;
+          // 记录公式识别奖励
+          await recordFormulaRecognize();
           if (window.MathJax) {
             handwriteLatexPreview.value = `\\[${data.latex}\\]`;
             nextTick(() => {
@@ -2175,6 +2406,21 @@ createApp({
       speechRecognition.value.onend = () => {
         console.log('Web Speech API: 识别结束');
         isRecording.value = false;
+
+        // 连续语音模式：AI未在回复时自动重启识别
+        if (continuousVoiceMode.value && !isTyping.value) {
+          console.log('[连续语音] 自动重启识别...');
+          setTimeout(() => {
+            if (continuousVoiceMode.value && !isTyping.value && speechRecognition.value) {
+              try {
+                speechRecognition.value.start();
+                console.log('[连续语音] 识别已重启');
+              } catch (e) {
+                console.error('[连续语音] 重启失败:', e);
+              }
+            }
+          }, 500); // 短暂延迟，让AI有机会回复
+        }
       };
 
       try {
@@ -2186,6 +2432,8 @@ createApp({
     };
 
     const stopRecording = () => {
+      // 关闭连续模式
+      continuousVoiceMode.value = false;
       if (speechRecognition.value && isRecording.value) {
         speechRecognition.value.stop();
       }
@@ -2196,6 +2444,8 @@ createApp({
       if (isRecording.value) {
         stopRecording();
       } else {
+        // 开启连续语音模式
+        continuousVoiceMode.value = true;
         await startRecording();
       }
     };
@@ -2210,7 +2460,12 @@ createApp({
         'level_5': growth.value.level >= 5,
         'level_10': growth.value.level >= 10,
         'collaboration_master': collabStats.value.totalSessions >= 20,
-        'knowledge_seeker': Object.keys(skillUsage.value).length >= 4
+        'knowledge_seeker': Object.keys(skillUsage.value).length >= 4,
+        // 新增成就条件
+        'formula_master': growth.value.stats.formulasRecognized >= 10,
+        'bookworm': growth.value.stats.bookmarksSaved >= 20,
+        'night_owl': new Date().getHours() >= 23 || new Date().getHours() < 5,
+        'polyglot': Object.values(skillUsage.value).filter(count => count >= 3).length >= 5
       };
 
       for (const [achievementId, condition] of Object.entries(conditions)) {
@@ -2328,6 +2583,7 @@ createApp({
     // ==================== 生命周期 ====================
     onMounted(async () => {
       applyTheme();
+      await checkDailyLogin();  // 检查每日登录奖励
       await loadData();
       await loadApiSettings();
       setTimeout(() => {
@@ -2348,6 +2604,13 @@ createApp({
       if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', handleResize);
       }
+
+      // 监听聊天框滚动，检测用户是否在底部
+      nextTick(() => {
+        if (chatMessages.value) {
+          chatMessages.value.addEventListener('scroll', handleChatScroll);
+        }
+      });
     });
 
     // ==================== 返回 ====================
@@ -2525,7 +2788,9 @@ createApp({
 
       // 语音
       isRecording,
-      toggleVoiceRecording
+      continuousVoiceMode,
+      toggleVoiceRecording,
+      stopSpeaking
     };
   }
 }).mount('#app');
