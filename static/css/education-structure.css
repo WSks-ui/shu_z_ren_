@@ -2936,6 +2936,10 @@ body {
   border-radius: var(--radius-md);
   font-size: 13px;
   line-height: 1.6;
+  max-width: 100%;
+  width: fit-content;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .msg.user .msg-content {
