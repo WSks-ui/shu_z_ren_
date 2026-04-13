@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
   <title>研伴 - 智能科研助手</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
 
   <!-- 样式表 -->
   <link href="libs/element-plus.css" rel="stylesheet">
@@ -25,13 +26,36 @@
 
   <!-- 主应用 - 全新沉浸式布局 -->
   <div class="app" id="app">
+    <!-- 灵动岛 - 学习进度 -->
+    <transition name="dynamic-island">
+      <div class="dynamic-island" v-if="currentSkill && skillStagesList.length">
+        <div class="di-track">
+          <div class="di-fill" :style="{ width: ((currentStage + 1) / skillStagesList.length * 100) + '%' }"></div>
+        </div>
+        <div class="di-stages">
+          <div
+            v-for="(s, i) in skillStagesList"
+            :key="s.id"
+            class="di-stage"
+            :class="{ active: i === currentStage, done: i < currentStage }"
+            @click="setStage(i)"
+          >
+            <div class="di-stage-icon">
+              <i :class="s.icon"></i>
+            </div>
+            <span class="di-stage-name">{{ s.name }}</span>
+          </div>
+        </div>
+      </div>
+    </transition>
+
     <!-- 背景层 - 数字人全屏展示 -->
     <div class="avatar-layer">
       <div id="xingyun-sdk-container"></div>
       <div class="avatar-overlay"></div>
 
-      <!-- 状态浮标 -->
-      <div class="status-pill" :class="{ connected: xingyunSession.isConnected }">
+      <!-- 状态浮标 - 仅在侧边栏模式隐藏 -->
+      <div class="status-pill" :class="{ connected: xingyunSession.isConnected, 'sidebar-active': chatExpanded && chatMode === 'sidebar' }">
         <span class="status-pulse"></span>
         <span class="status-label">{{ statusText }}</span>
       </div>
@@ -69,6 +93,12 @@
           <span>书签</span>
         </button>
         <div class="quick-divider"></div>
+        <!-- 番茄钟按钮 -->
+        <button class="quick-btn pomodoro-btn" :class="{ active: showPomodoro, running: pomodoroState.isRunning }" @click="showPomodoro = !showPomodoro" title="番茄钟">
+          <i class="fa-solid fa-clock"></i>
+          <span v-if="pomodoroState.isRunning">{{ pomodoroDisplay }}</span>
+          <span v-else>番茄</span>
+        </button>
         <button class="quick-btn" @click="toggleTheme" title="切换主题">
           <i :class="currentTheme === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon'"></i>
           <span>{{ currentTheme === 'dark' ? '亮色' : '暗色' }}</span>
@@ -79,13 +109,87 @@
         </button>
       </aside>
 
+      <!-- 番茄钟悬浮面板 -->
+      <transition name="pomodoro-panel">
+        <div v-if="showPomodoro" class="pomodoro-panel">
+          <div class="pp-header">
+            <h3><i class="fa-solid fa-clock"></i> 番茄钟</h3>
+            <button class="pp-close" @click="showPomodoro = false"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <!-- 计时器显示 -->
+          <div class="pp-timer" :class="pomodoroState.phase">
+            <div class="ppt-circle">
+              <svg viewBox="0 0 100 100">
+                <circle class="ppt-bg" cx="50" cy="50" r="45"></circle>
+                <circle class="ppt-progress" cx="50" cy="50" r="45" :style="{ strokeDashoffset: pomodoroProgress }"></circle>
+              </svg>
+              <div class="ppt-time">{{ pomodoroDisplay }}</div>
+            </div>
+            <div class="ppt-phase">{{ pomodoroPhaseText }}</div>
+          </div>
+
+          <!-- 番茄计数 -->
+          <div class="pp-count">
+            <span v-for="n in 4" :key="n" class="ppc-dot" :class="{ filled: n <= pomodoroState.completedPomodoros }">
+              <i class="fa-solid fa-apple-whole"></i>
+            </span>
+            <span class="ppc-total">今日 {{ pomodoroState.todayPomodoros }} 个</span>
+          </div>
+
+          <!-- 控制按钮 -->
+          <div class="pp-controls">
+            <button class="ppc-btn ppc-start" v-if="!pomodoroState.isRunning" @click="startPomodoro">
+              <i class="fa-solid fa-play"></i>
+            </button>
+            <button class="ppc-btn ppc-pause" v-else @click="pausePomodoro">
+              <i class="fa-solid fa-pause"></i>
+            </button>
+            <button class="ppc-btn ppc-reset" @click="resetPomodoro" title="重置">
+              <i class="fa-solid fa-rotate-right"></i>
+            </button>
+            <button class="ppc-btn ppc-skip" @click="skipPomodoro" title="跳过">
+              <i class="fa-solid fa-forward"></i>
+            </button>
+          </div>
+
+          <!-- 设置 -->
+          <div class="pp-settings">
+            <div class="pps-row">
+              <label>工作时长</label>
+              <div class="pps-input-group">
+                <button @click="pomodoroSettings.workDuration = Math.max(5, pomodoroSettings.workDuration - 5)">-</button>
+                <span>{{ pomodoroSettings.workDuration }}分钟</span>
+                <button @click="pomodoroSettings.workDuration = Math.min(60, pomodoroSettings.workDuration + 5)">+</button>
+              </div>
+            </div>
+            <div class="pps-row">
+              <label>短休息</label>
+              <div class="pps-input-group">
+                <button @click="pomodoroSettings.shortBreak = Math.max(1, pomodoroSettings.shortBreak - 1)">-</button>
+                <span>{{ pomodoroSettings.shortBreak }}分钟</span>
+                <button @click="pomodoroSettings.shortBreak = Math.min(15, pomodoroSettings.shortBreak + 1)">+</button>
+              </div>
+            </div>
+            <div class="pps-row">
+              <label>长休息</label>
+              <div class="pps-input-group">
+                <button @click="pomodoroSettings.longBreak = Math.max(5, pomodoroSettings.longBreak - 5)">-</button>
+                <span>{{ pomodoroSettings.longBreak }}分钟</span>
+                <button @click="pomodoroSettings.longBreak = Math.min(30, pomodoroSettings.longBreak + 5)">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+
       <!-- 主面板区域 -->
       <main class="main-panel" :class="{ expanded: activePanel && activePanel !== 'skills' && activePanel !== 'growth' && activePanel !== 'records' && activePanel !== 'bookmarks' }">
       </main>
     </div>
 
     <!-- 底部对话栏 -->
-    <div class="chat-bar" :class="{ expanded: chatExpanded }">
+    <div class="chat-bar" :class="{ expanded: chatExpanded, 'sidebar-mode': chatMode === 'sidebar' }" :style="chatExpanded && chatMode === 'bottom' ? { '--chat-height': chatHeight + 'px' } : {}">
       <!-- 折叠状态 - 快捷入口 -->
       <div class="chat-collapsed" v-if="!chatExpanded" @click="chatExpanded = true">
         <div class="chat-trigger">
@@ -112,6 +216,10 @@
 
       <!-- 展开状态 - 完整对话界面 -->
       <div class="chat-expanded" v-else>
+        <!-- 高度拖拽手柄 (仅底部模式) -->
+        <div class="chat-resize-handle" @mousedown="startResize" v-if="chatMode === 'bottom'">
+          <div class="resize-bar"></div>
+        </div>
         <!-- 对话头部 -->
         <div class="chat-header">
           <div class="chat-skill-select">
@@ -120,16 +228,10 @@
               <option v-for="skill in skills" :key="skill.id" :value="skill.id">{{ skill.name }}</option>
             </select>
           </div>
-          <!-- 阶段进度条 -->
-          <div class="stage-progress" v-if="currentSkill && skillStagesList.length">
-            <div class="sp-track"><div class="sp-fill" :style="{ width: ((currentStage + 1) / skillStagesList.length * 100) + '%' }"></div></div>
-            <div class="sp-steps">
-              <span v-for="(s, i) in skillStagesList" :key="s.id" class="sp-step" :class="{ active: i === currentStage, done: i < currentStage }" @click="setStage(i)" title="点击跳转到此阶段">
-                <i :class="s.icon"></i><em>{{ s.name }}</em>
-              </span>
-            </div>
-          </div>
           <div class="chat-tools">
+            <button class="tool-btn mode-btn" @click="toggleChatMode" :title="chatMode === 'bottom' ? '切换为侧边栏' : '切换为底部栏'">
+              <i :class="chatMode === 'bottom' ? 'fa-solid fa-table-columns' : 'fa-solid fa-window-maximize'"></i>
+            </button>
             <button class="tool-btn" :class="{ active: autoSpeakEnabled }" @click="toggleAutoSpeak" title="自动播报">
               <i class="fa-solid fa-volume-high"></i>
             </button>
@@ -287,15 +389,8 @@
       </div>
     </div>
 
-    <!-- 数字人控制浮窗 -->
-    <div class="avatar-control-float">
-      <input
-        type="text"
-        v-model="quickText"
-        placeholder="输入文字让数字人播报..."
-        @keyup.enter="sendQuickText"
-        :disabled="!xingyunSession.isConnected"
-      >
+    <!-- 数字人连接控制 -->
+    <div class="avatar-connect-control">
       <button
         v-if="!xingyunSession.isConnected"
         class="connect-btn"
@@ -303,14 +398,15 @@
         :disabled="xingyunSession.status === 'connecting'"
       >
         <i class="fa-solid fa-plug"></i>
-        <span>{{ xingyunSession.status === 'connecting' ? '连接中' : '连接' }}</span>
+        <span>{{ xingyunSession.status === 'connecting' ? '连接中' : '连接数字人' }}</span>
       </button>
-      <button v-else class="disconnect-btn" @click="closeXingYunSession">
+      <button
+        v-else
+        class="disconnect-btn"
+        @click="closeXingYunSession"
+      >
         <i class="fa-solid fa-plug-circle-xmark"></i>
-        <span>断开</span>
-      </button>
-      <button class="speak-btn" @click="sendQuickText" :disabled="!xingyunSession.isConnected">
-        <i class="fa-solid fa-volume-high"></i>
+        <span>断开数字人</span>
       </button>
     </div>
 
@@ -580,19 +676,29 @@
             </div>
           </div>
 
-          <!-- 筛选标签 -->
-          <div class="rm-filters">
-            <button
-              v-for="ft in collabFilters"
-              :key="ft.key"
-              class="rm-filter-btn"
-              :class="{ active: collabFilter === ft.key }"
-              @click="collabFilter = ft.key"
-            >{{ ft.label }}</button>
+          <!-- 筛选标签 & 视图切换 -->
+          <div class="rm-toolbar">
+            <div class="rm-filters">
+              <button
+                v-for="ft in collabFilters"
+                :key="ft.key"
+                class="rm-filter-btn"
+                :class="{ active: collabFilter === ft.key }"
+                @click="collabFilter = ft.key"
+              >{{ ft.label }}</button>
+            </div>
+            <div class="rm-view-toggle">
+              <button class="rm-view-btn" :class="{ active: collabViewMode === 'list' }" @click="collabViewMode = 'list'" title="列表视图">
+                <i class="fa-solid fa-list"></i>
+              </button>
+              <button class="rm-view-btn" :class="{ active: collabViewMode === 'timeline' }" @click="collabViewMode = 'timeline'" title="时间线视图">
+                <i class="fa-solid fa-timeline"></i>
+              </button>
+            </div>
           </div>
 
-          <!-- 记录列表 -->
-          <div class="rm-list">
+          <!-- 列表视图 -->
+          <div class="rm-list" v-if="collabViewMode === 'list'">
             <div v-if="filteredRecords.length === 0" class="rm-empty">
               <i class="fa-solid fa-folder-open"></i>
               <p>暂无协作记录</p>
@@ -620,6 +726,53 @@
                 {{ record.endTime ? '已完成' : '进行中' }}
               </div>
             </div>
+          </div>
+
+          <!-- 时间线视图 -->
+          <div class="rm-timeline" v-else>
+            <div v-if="filteredRecords.length === 0" class="rm-empty">
+              <i class="fa-solid fa-folder-open"></i>
+              <p>暂无协作记录</p>
+              <span>开始一次对话，你的协作记录将在这里展示</span>
+            </div>
+            <template v-else>
+              <div v-for="(group, gi) in groupedRecords" :key="group.date" class="rm-timeline-group">
+                <!-- 日期标签 -->
+                <div class="rmt-date">
+                  <div class="rmtd-label">{{ group.label }}</div>
+                  <div class="rmtd-count">{{ group.records.length }} 条记录</div>
+                </div>
+                <!-- 时间线内容 -->
+                <div class="rmt-items">
+                  <div
+                    v-for="(record, ri) in group.records"
+                    :key="record.id"
+                    class="rmt-item"
+                    :style="{ '--item-delay': (gi * 0.1 + ri * 0.05) + 's' }"
+                    @click="showRecordDetail(record)"
+                  >
+                    <div class="rmti-dot" :class="record.type">
+                      <i :class="getTypeIcon(record.type)"></i>
+                    </div>
+                    <div class="rmti-line"></div>
+                    <div class="rmti-card">
+                      <div class="rmtic-header">
+                        <span class="rmtic-time">{{ formatTime(record.startTime) }}</span>
+                        <span class="rmtic-status" :class="{ done: record.endTime }">
+                          {{ record.endTime ? '已完成' : '进行中' }}
+                        </span>
+                      </div>
+                      <h4 class="rmtic-title">{{ record.title || getTypeName(record.type) + '协作' }}</h4>
+                      <p class="rmtic-summary" v-if="record.summary">{{ record.summary }}</p>
+                      <div class="rmtic-stats">
+                        <span><i class="fa-solid fa-robot"></i> {{ record.aiContributions?.length || 0 }}</span>
+                        <span><i class="fa-solid fa-user"></i> {{ record.humanContributions?.length || 0 }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
       </div>
@@ -843,7 +996,7 @@
                         <span class="stgc-value">{{ apiSettings.temperature }}</span>
                       </div>
                     </div>
-                    <p class="stgc-hint">研伴使用主页面配置的模型服务。如需修改，请前往主页面设置。</p>
+                    <p class="stgc-hint">研伴使用服务器配置的模型服务。如需修改，请联系后端管理员。</p>
                   </div>
 
                   <div class="stg-card">

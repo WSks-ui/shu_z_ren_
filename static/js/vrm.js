@@ -1,3 +1,4 @@
+
 const urlParams = new URLSearchParams(window.location.search);
 const isRenderMode = urlParams.get('mode') === 'render'; // 是否是渲染模式（OBS采集用）
 // --- 全景渲染专用变量 ---
@@ -1875,29 +1876,32 @@ function initSubtitleElement() {
     subtitleElement.id = 'subtitle-container';
     subtitleElement.style.cssText = `
         position: fixed;
-        top: 50%;  
+        bottom: 15%;
         left: 50%;
-        width: auto;
-        max-width: 80%;
+        max-width: 70%;
         transform: translateX(-50%);
         padding: 12px 24px;
-        background: rgba(0, 0, 0, 0.8);
+        background: rgba(0, 0, 0, 0.75);
         color: white;
-        border-radius: 8px;
-        font-family: 'Arial', sans-serif;
-        font-size: 1.2em;
+        border-radius: 12px;
+        font-family: 'Arial', 'PingFang SC', sans-serif;
+        font-size: 1.1em;
         text-align: center;
         backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         opacity: 0;
-        transition: opacity 0.3s ease, transform 0.3s ease;
+        transition: opacity 0.3s ease;
         z-index: 9998;
         white-space: pre-wrap;
-        line-height: 1.5;
+        line-height: 1.6;
         cursor: move;
         user-select: none;
-        min-width: 100px;
-        max-width: 80%;
-        width: max-content;
+        min-width: 80px;
+        max-height: 30vh;
+        overflow-y: auto;
+        word-wrap: break-word;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
     `;
 
     // 添加拖拽事件监听
@@ -1968,10 +1972,11 @@ function toggleSubtitle(enable) {
  */
 function adjustSubtitleSize() {
     if (!subtitleElement) return;
-    const maxWidth = window.innerWidth * 0.8;
-    subtitleElement.style.width = 'max-content';
-    subtitleElement.style.minWidth = '100px';
-    
+    const maxWidth = window.innerWidth * 0.7;
+
+    // 重置宽度以测量内容
+    subtitleElement.style.width = 'auto';
+
     const rect = subtitleElement.getBoundingClientRect();
     if (rect.width > maxWidth) {
         subtitleElement.style.width = `${maxWidth}px`;

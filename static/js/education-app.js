@@ -12,6 +12,11 @@ createApp({
     const activeTab = ref('skills');
     const activePanel = ref(null);  // 新布局：当前激活的面板
     const chatExpanded = ref(false);  // 新布局：对话栏是否展开
+    const chatMode = ref(localStorage.getItem('edu-chat-mode') || 'bottom');  // 'bottom' | 'sidebar'
+    const chatHeight = ref(parseInt(localStorage.getItem('edu-chat-height')) || 450);  // 底部模式高度
+    const isResizing = ref(false);  // 拖拽调整中
+    let dragStartY = 0;  // 拖拽起始Y坐标
+    let dragStartHeight = 0;  // 拖拽起始高度
     const currentSkill = ref(null);
     const quickText = ref('');
     const chatInput = ref('');
@@ -205,7 +210,7 @@ createApp({
       const ctx = skillContextMap.value[skillId];
       if (!ctx) return;
       currentStage.value = ctx.stage || 0;
-      chatInput = `让我们继续上次关于「${ctx.lastTopic}」的讨论，请接着上次的内容继续。`;
+      chatInput.value = `让我们继续上次关于「${ctx.lastTopic}」的讨论，请接着上次的内容继续。`;
     };
 
     // 手动设置阶段进度（用户点击或AI调用）
@@ -241,6 +246,170 @@ createApp({
         }
       }
       return false;
+    };
+
+    // ==================== 番茄钟 ====================
+    const showPomodoro = ref(false);
+    const pomodoroSettings = ref({
+      workDuration: 25,    // 工作时长（分钟）
+      shortBreak: 5,       // 短休息（分钟）
+      longBreak: 15        // 长休息（分钟）
+    });
+    const pomodoroState = ref({
+      phase: 'work',       // 'work' | 'shortBreak' | 'longBreak'
+      timeLeft: 25 * 60,   // 剩余时间（秒）
+      isRunning: false,
+      completedPomodoros: 0,  // 当前周期完成的番茄数
+      todayPomodoros: 0       // 今日完成的番茄数
+    });
+    let pomodoroTimer = null;
+
+    // 番茄钟显示文本
+    const pomodoroDisplay = computed(() => {
+      const minutes = Math.floor(pomodoroState.value.timeLeft / 60);
+      const seconds = pomodoroState.value.timeLeft % 60;
+      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    });
+
+    // 番茄钟阶段文本
+    const pomodoroPhaseText = computed(() => {
+      const texts = {
+        work: '专注时间',
+        shortBreak: '短休息',
+        longBreak: '长休息'
+      };
+      return texts[pomodoroState.value.phase] || '';
+    });
+
+    // 番茄钟进度（SVG圆环）
+    const pomodoroProgress = computed(() => {
+      const totalTime = pomodoroState.value.phase === 'work'
+        ? pomodoroSettings.value.workDuration * 60
+        : pomodoroState.value.phase === 'shortBreak'
+          ? pomodoroSettings.value.shortBreak * 60
+          : pomodoroSettings.value.longBreak * 60;
+      const progress = pomodoroState.value.timeLeft / totalTime;
+      // 圆周长 = 2 * π * 45 ≈ 283
+      return 283 * (1 - progress);
+    });
+
+    // 开始番茄钟
+    const startPomodoro = () => {
+      pomodoroState.value.isRunning = true;
+      pomodoroTimer = setInterval(() => {
+        if (pomodoroState.value.timeLeft > 0) {
+          pomodoroState.value.timeLeft--;
+        } else {
+          completePomodoroPhase();
+        }
+      }, 1000);
+    };
+
+    // 暂停番茄钟
+    const pausePomodoro = () => {
+      pomodoroState.value.isRunning = false;
+      if (pomodoroTimer) {
+        clearInterval(pomodoroTimer);
+        pomodoroTimer = null;
+      }
+    };
+
+    // 重置番茄钟
+    const resetPomodoro = () => {
+      pausePomodoro();
+      pomodoroState.value.phase = 'work';
+      pomodoroState.value.timeLeft = pomodoroSettings.value.workDuration * 60;
+    };
+
+    // 跳过当前阶段
+    const skipPomodoro = () => {
+      completePomodoroPhase();
+    };
+
+    // 完成当前阶段
+    const completePomodoroPhase = () => {
+      pausePomodoro();
+
+      // 播放提示音
+      try {
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQMCZ6/c5JlhAxKC0eW2eQsMU4vT5ahdAxmTx9LkmFkDGpHH0eWYVwMZkcbQ5ZhWAw==');
+        audio.play().catch(() => {});
+      } catch (e) {}
+
+      if (pomodoroState.value.phase === 'work') {
+        // 完成一个番茄
+        pomodoroState.value.completedPomodoros++;
+        pomodoroState.value.todayPomodoros++;
+
+        // 判断是长休息还是短休息
+        if (pomodoroState.value.completedPomodoros % 4 === 0) {
+          pomodoroState.value.phase = 'longBreak';
+          pomodoroState.value.timeLeft = pomodoroSettings.value.longBreak * 60;
+        } else {
+          pomodoroState.value.phase = 'shortBreak';
+          pomodoroState.value.timeLeft = pomodoroSettings.value.shortBreak * 60;
+        }
+
+        // 记录成长
+        recordPomodoroComplete();
+      } else {
+        // 休息结束，开始新的工作周期
+        pomodoroState.value.phase = 'work';
+        pomodoroState.value.timeLeft = pomodoroSettings.value.workDuration * 60;
+      }
+
+      // 保存状态
+      savePomodoroState();
+    };
+
+    // 记录番茄完成
+    const recordPomodoroComplete = async () => {
+      // 增加经验
+      growth.value.exp += 15;
+      growth.value.totalExp += 15;
+
+      // 更新统计
+      if (!growth.value.stats.pomodoros) {
+        growth.value.stats.pomodoros = 0;
+      }
+      growth.value.stats.pomodoros++;
+
+      // 检查成就
+      await checkAchievements();
+    };
+
+    // 保存番茄钟状态
+    const savePomodoroState = () => {
+      localStorage.setItem('edu-pomodoro', JSON.stringify({
+        settings: pomodoroSettings.value,
+        completedPomodoros: pomodoroState.value.completedPomodoros,
+        todayPomodoros: pomodoroState.value.todayPomodoros,
+        lastDate: new Date().toDateString()
+      }));
+    };
+
+    // 加载番茄钟状态
+    const loadPomodoroState = () => {
+      try {
+        const saved = localStorage.getItem('edu-pomodoro');
+        if (saved) {
+          const data = JSON.parse(saved);
+          pomodoroSettings.value = { ...pomodoroSettings.value, ...data.settings };
+
+          // 检查是否是同一天
+          if (data.lastDate === new Date().toDateString()) {
+            pomodoroState.value.completedPomodoros = data.completedPomodoros || 0;
+            pomodoroState.value.todayPomodoros = data.todayPomodoros || 0;
+          } else {
+            // 新的一天，重置计数
+            pomodoroState.value.completedPomodoros = 0;
+            pomodoroState.value.todayPomodoros = 0;
+          }
+        }
+      } catch (e) {}
+
+      // 初始化时间
+      pomodoroState.value.timeLeft = pomodoroSettings.value.workDuration * 60;
     };
 
     // ==================== 成长系统 ====================
@@ -399,6 +568,7 @@ createApp({
     const collabStats = ref({});
     const selectedRecord = ref(null);
     const collabFilter = ref('all');
+    const collabViewMode = ref('list');  // 'list' | 'timeline'
 
     const collabFilters = [
       { key: 'all', label: '全部' },
@@ -408,6 +578,48 @@ createApp({
       { key: 'tutoring', label: '学习辅导' },
       { key: 'math', label: '数学助手' }
     ];
+
+    // 时间线分组：按日期分组记录
+    const groupedRecords = computed(() => {
+      const records = filteredRecords.value;
+      const groups = [];
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      // 按日期分组
+      const dateMap = new Map();
+      records.forEach(record => {
+        const date = new Date(record.startTime);
+        const dateKey = date.toISOString().split('T')[0];
+        if (!dateMap.has(dateKey)) {
+          dateMap.set(dateKey, []);
+        }
+        dateMap.get(dateKey).push(record);
+      });
+
+      // 转换为数组并添加标签
+      const sortedDates = Array.from(dateMap.keys()).sort((a, b) => new Date(b) - new Date(a));
+      sortedDates.forEach(dateKey => {
+        const date = new Date(dateKey);
+        let label;
+        if (dateKey === today.toISOString().split('T')[0]) {
+          label = '今天';
+        } else if (dateKey === yesterday.toISOString().split('T')[0]) {
+          label = '昨天';
+        } else {
+          // 格式化为 "X月X日"
+          label = `${date.getMonth() + 1}月${date.getDate()}日`;
+        }
+        groups.push({
+          date: dateKey,
+          label,
+          records: dateMap.get(dateKey).sort((a, b) => new Date(b.startTime) - new Date(a.startTime))
+        });
+      });
+
+      return groups;
+    });
 
     // ==================== 魔珐星云数字人 ====================
     const xingyunSession = ref({
@@ -805,6 +1017,22 @@ createApp({
             console.log('魔珐SDK消息:', message);
             if (message.code && message.code !== 0) {
               console.error('SDK错误:', message);
+
+              // 40006: 超时错误 - 给用户友好提示
+              if (message.code === 40006) {
+                console.warn('[魔珐SDK] 网络超时，可能是网络不稳定或服务繁忙');
+                // 可选：显示提示给用户
+                if (xingyunSession.value.isConnected) {
+                  // 尝试恢复到idle状态
+                  setTimeout(() => {
+                    if (xingyunSession.value.sdk && xingyunSession.value.isConnected) {
+                      try {
+                        xingyunSession.value.sdk.interactiveidle();
+                      } catch (e) {}
+                    }
+                  }, 500);
+                }
+              }
             }
           },
           onStateChange(state) {
@@ -837,6 +1065,72 @@ createApp({
               xingyunSession.value.voiceState = 'idle';
               if (xingyunSession.value.sdk) {
                 xingyunSession.value.sdk.interactiveidle();
+              }
+            }
+          },
+          // 代理字幕事件，覆盖SDK默认的字幕显示行为
+          proxyWidget: {
+            "subtitle_on": (data) => {
+              console.log('字幕显示:', data);
+              // 使用自定义字幕容器，不使用SDK默认的
+              const container = document.querySelector('#xingyun-sdk-container');
+              if (!container) return;
+
+              // 查找或创建字幕元素
+              let subtitleEl = container.querySelector('.edu-custom-subtitle');
+              if (!subtitleEl) {
+                subtitleEl = document.createElement('div');
+                subtitleEl.className = 'edu-custom-subtitle';
+                // 样式由CSS控制，这里只设置基本定位
+                subtitleEl.style.cssText = `
+                  position: absolute;
+                  bottom: 12%;
+                  left: 50%;
+                  transform: translateX(-50%);
+                  max-width: 65%;
+                  max-height: 25vh;
+                  min-width: 120px;
+                  padding: 16px 28px;
+                  border-radius: 24px;
+                  font-family: var(--font-sans);
+                  font-size: 15px;
+                  font-weight: 400;
+                  letter-spacing: 0.02em;
+                  line-height: 1.7;
+                  text-align: center;
+                  white-space: pre-wrap;
+                  word-wrap: break-word;
+                  overflow-y: auto;
+                  z-index: 100;
+                  opacity: 0;
+                  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                `;
+                container.appendChild(subtitleEl);
+              }
+
+              // 设置字幕内容
+              if (data && data.text) {
+                subtitleEl.textContent = data.text;
+              }
+              // 显示动画
+              requestAnimationFrame(() => {
+                subtitleEl.style.opacity = '1';
+              });
+            },
+            "subtitle_off": () => {
+              console.log('字幕隐藏');
+              const container = document.querySelector('#xingyun-sdk-container');
+              if (!container) return;
+
+              const subtitleEl = container.querySelector('.edu-custom-subtitle');
+              if (subtitleEl) {
+                subtitleEl.style.opacity = '0';
+                // 延迟移除，让淡出动画生效
+                setTimeout(() => {
+                  if (subtitleEl.parentNode) {
+                    subtitleEl.parentNode.removeChild(subtitleEl);
+                  }
+                }, 300);
               }
             }
           },
@@ -897,10 +1191,9 @@ createApp({
 
     // ==================== 流式播报 ====================
     let speakBuffer = '';           // 累积文本缓冲
-    let speakQueue = [];            // 播报队列
-    let isProcessingQueue = false;  // 是否正在处理队列
     let totalSpokenChars = 0;       // 已播报的总字符数
     let shouldStopSpeaking = false; // 是否应该停止播报（达到长度限制）
+    let isStreamStarted = false;     // 流式播报是否已开始
     const MAX_SPEAK_CHARS = 220;    // 最大播报字符数
 
     /**
@@ -914,7 +1207,6 @@ createApp({
       cleaned = cleaned.replace(/\\[[\s\S]*?\\]/g, '');
 
       // 2. 移除行内 LaTeX 公式: $...$ 和 \(...\)
-      // 注意：要避免误删美元符号，只匹配 $...$ 格式
       cleaned = cleaned.replace(/\$[^\$\n]+?\$/g, '');
       cleaned = cleaned.replace(/\\\([^)]+?\\\)/g, '');
 
@@ -937,61 +1229,69 @@ createApp({
       // 检测句子结束符（中文和英文）
       const sentenceEnders = /[。！？!?.]/g;
       let match;
-      const sentences = [];
 
       while ((match = sentenceEnders.exec(speakBuffer)) !== null) {
         const idx = match.index + 1;
         const sentence = speakBuffer.substring(0, idx).trim();
-        if (sentence) {
-          sentences.push(sentence);
-        }
         speakBuffer = speakBuffer.substring(idx);
-      }
 
-      // 将完整句子加入队列
-      for (const s of sentences) {
-        // 清理 LaTeX 公式和 Markdown 标记
-        const cleanText = cleanTextForSpeak(s);
-        if (cleanText.length > 1) {
-          // 检查是否超过长度限制
-          if (totalSpokenChars + cleanText.length > MAX_SPEAK_CHARS) {
-            // 达到限制，标记停止并添加提示
-            shouldStopSpeaking = true;
-            // 如果队列中已有内容，在最后添加提示
-            if (speakQueue.length > 0 || totalSpokenChars > 0) {
-              speakQueue.push('详细信息请看聊天栏输出。');
-            }
-            console.log('[流式播报] 达到长度限制，停止添加新句子');
-            break;
+        if (sentence.length < 2) continue;
+
+        // 清理文本
+        const cleanText = cleanTextForSpeak(sentence);
+        if (cleanText.length < 2) continue;
+
+        // 检查是否超过长度限制
+        if (totalSpokenChars + cleanText.length > MAX_SPEAK_CHARS) {
+          shouldStopSpeaking = true;
+          console.log('[流式播报] 达到长度限制，停止添加新句子');
+          // 发送结束标记
+          if (isStreamStarted) {
+            xingyunSession.value.sdk.speak('详细信息请看聊天栏输出。', false, true);
+            isStreamStarted = false;
           }
-
-          speakQueue.push(cleanText);
-          totalSpokenChars += cleanText.length;
-          console.log('[流式播报] 加入队列:', cleanText, '累计:', totalSpokenChars);
+          continue;
         }
-      }
 
-      // 处理队列
-      processSpeakQueue();
+        totalSpokenChars += cleanText.length;
+
+        // 流式播报：第一句 is_start=true，后续 is_start=false，暂时不设置 is_end
+        const isFirst = !isStreamStarted;
+        isStreamStarted = true;
+
+        console.log('[流式播报] 发送:', cleanText, 'isFirst:', isFirst);
+
+        // 发送句子，is_end=false 表示还有后续
+        xingyunSession.value.sdk.speak(cleanText, isFirst, false);
+      }
     };
 
-    const processSpeakQueue = async () => {
-      if (isProcessingQueue || speakQueue.length === 0) return;
+    // 流式播报结束，发送结束标记
+    const endStreamSpeak = () => {
+      if (!xingyunSession.value.isConnected || !xingyunSession.value.sdk) return;
 
-      isProcessingQueue = true;
-
-      while (speakQueue.length > 0) {
-        const text = speakQueue.shift();
-        console.log('[流式播报] 播报:', text);
-
-        // 调用魔珐SDK播报，第二个参数true表示打断当前播报（支持实时响应）
-        xingyunSession.value.sdk.speak(text, true, true);
-
-        // 等待播报完成（检测voiceState变化）
-        await waitForSpeakEnd();
+      // 处理缓冲区中剩余的文本
+      if (speakBuffer.trim()) {
+        const cleanText = cleanTextForSpeak(speakBuffer);
+        if (cleanText.length > 1 && !shouldStopSpeaking) {
+          totalSpokenChars += cleanText.length;
+          console.log('[流式播报] 发送剩余:', cleanText);
+          xingyunSession.value.sdk.speak(cleanText, !isStreamStarted, true);
+          isStreamStarted = false;
+          speakBuffer = '';
+          return;
+        }
       }
 
-      isProcessingQueue = false;
+      // 如果流式播报已开始，发送结束标记
+      if (isStreamStarted) {
+        console.log('[流式播报] 发送结束标记');
+        // 发送空字符串作为结束标记
+        xingyunSession.value.sdk.speak('', false, true);
+        isStreamStarted = false;
+      }
+
+      speakBuffer = '';
     };
 
     // ==================== 停止播报 ====================
@@ -1055,6 +1355,7 @@ createApp({
       isProcessingQueue = false;
       totalSpokenChars = 0;
       shouldStopSpeaking = false;
+      isStreamStarted = false;  // 重置流式播报状态
     };
 
     // ==================== 数字人布局校正 ====================
@@ -1125,12 +1426,76 @@ createApp({
       localStorage.setItem('edu-auto-speak', autoSpeakEnabled.value.toString());
     };
 
+    // ==================== 对话栏模式方法 ====================
+    const toggleChatMode = () => {
+      const oldMode = chatMode.value;
+      const newMode = oldMode === 'bottom' ? 'sidebar' : 'bottom';
+      chatMode.value = newMode;
+      localStorage.setItem('edu-chat-mode', newMode);
+
+      // 添加动画class
+      const chatBar = document.querySelector('.chat-bar');
+      if (chatBar) {
+        // 移除旧的动画class
+        chatBar.classList.remove('from-sidebar');
+        // 如果从侧边栏切换到底部模式，添加动画class
+        if (oldMode === 'sidebar' && newMode === 'bottom') {
+          chatBar.classList.add('from-sidebar');
+          // 动画结束后移除class
+          setTimeout(() => {
+            chatBar.classList.remove('from-sidebar');
+          }, 400);
+        }
+      }
+    };
+
+    const startResize = (e) => {
+      if (chatMode.value !== 'bottom') return;
+      isResizing.value = true;
+      dragStartY = e.clientY;
+      dragStartHeight = chatHeight.value;
+      document.addEventListener('mousemove', onResize);
+      document.addEventListener('mouseup', stopResize);
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+    };
+
+    const onResize = (e) => {
+      if (!isResizing.value) return;
+      const delta = dragStartY - e.clientY;
+      const newHeight = Math.max(300, Math.min(600, dragStartHeight + delta));
+      chatHeight.value = newHeight;
+      // 更新CSS变量
+      document.documentElement.style.setProperty('--chat-height', newHeight + 'px');
+    };
+
+    const stopResize = () => {
+      isResizing.value = false;
+      document.removeEventListener('mousemove', onResize);
+      document.removeEventListener('mouseup', stopResize);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      // 保存高度到localStorage
+      localStorage.setItem('edu-chat-height', chatHeight.value.toString());
+    };
+
+    // 初始化CSS变量
+    if (typeof window !== 'undefined') {
+      document.documentElement.style.setProperty('--chat-height', chatHeight.value + 'px');
+    }
+
     // ==================== 书签方法 ====================
     const toggleBookmark = async (msg) => {
       if (msg.role !== 'assistant') return;
-      const existingIdx = bookmarks.value.findIndex(
-        b => b.content === msg.content.substring(0, 100) && b.timestamp === msg.timestamp
-      );
+
+      // 使用消息的唯一标识进行匹配
+      const msgId = msg.timestamp || msg.content.substring(0, 50);
+      const existingIdx = bookmarks.value.findIndex(b => {
+        // 匹配：时间戳相同，或者内容前50字符相同
+        return (b.timestamp && b.timestamp === msg.timestamp) ||
+               (b.content && msg.content && b.content.substring(0, 50) === msg.content.substring(0, 50));
+      });
+
       if (existingIdx > -1) {
         bookmarks.value.splice(existingIdx, 1);
       } else {
@@ -1156,9 +1521,11 @@ createApp({
 
     const isBookmarked = (msg) => {
       if (msg.role !== 'assistant') return false;
-      return bookmarks.value.some(
-        b => b.content === msg.content.substring(0, 100) && b.timestamp === msg.timestamp
-      );
+      return bookmarks.value.some(b => {
+        // 匹配：时间戳相同，或者内容前50字符相同
+        return (b.timestamp && b.timestamp === msg.timestamp) ||
+               (b.content && msg.content && b.content.substring(0, 50) === msg.content.substring(0, 50));
+      });
     };
 
     // 删除单条消息
@@ -1359,6 +1726,7 @@ createApp({
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullContent = '';
+        let fullReasoning = '';
         let expGained = 10;
 
         while (true) {
@@ -1385,6 +1753,7 @@ createApp({
 
                 if (data.reasoning_content) {
                   if (myGeneration !== chatGeneration) break;
+                  fullReasoning += data.reasoning_content;
                   messages.value[assistantIndex].reasoning += data.reasoning_content;
                 }
 
@@ -1410,7 +1779,9 @@ createApp({
 
         // 代际检查：只有当前请求才写入最终结果
         if (myGeneration === chatGeneration) {
-          messages.value[assistantIndex].content = fullContent || '（无回复）';
+          // 如果只有思考内容没有正式回复，显示思考内容
+          const finalContent = fullContent || fullReasoning || '（无回复）';
+          messages.value[assistantIndex].content = finalContent;
           messages.value[assistantIndex].isTyping = false;
           renderKatex();
         } else {
@@ -1431,13 +1802,9 @@ createApp({
           saveSkillContext();
         }
 
-        // 处理剩余未播报的文本（语音模式下流式播报的剩余部分）
-        if (voiceMode && autoSpeakEnabled.value && xingyunSession.value.isConnected && speakBuffer.trim()) {
-          const cleanText = speakBuffer.replace(/[#*_`~>\[\]()!|\\]/g, '').trim();
-          if (cleanText.length > 1) {
-            speakQueue.push(cleanText);
-            processSpeakQueue();
-          }
+        // 流式播报结束：发送结束标记
+        if (voiceMode && autoSpeakEnabled.value && xingyunSession.value.isConnected) {
+          endStreamSpeak();
         }
 
         // 非语音模式的播报逻辑
@@ -2586,6 +2953,7 @@ createApp({
       await checkDailyLogin();  // 检查每日登录奖励
       await loadData();
       await loadApiSettings();
+      loadPomodoroState();  // 加载番茄钟状态
       setTimeout(() => {
         document.getElementById('loadingOverlay').classList.add('hidden');
       }, 500);
@@ -2636,6 +3004,13 @@ createApp({
       autoSpeakEnabled,
       toggleAutoSpeak,
 
+      // 对话栏模式
+      chatMode,
+      chatHeight,
+      isResizing,
+      toggleChatMode,
+      startResize,
+
       // 书签
       bookmarks,
       bookmarkSearch,
@@ -2685,13 +3060,27 @@ createApp({
       selectedRecord,
       collabFilter,
       collabFilters,
+      collabViewMode,
       filteredRecords,
+      groupedRecords,
       showRecordDetail,
       getMergedContributions,
       refreshCollaboration,
       getTypeIcon,
       getTypeName,
       formatDate,
+
+      // 番茄钟
+      showPomodoro,
+      pomodoroSettings,
+      pomodoroState,
+      pomodoroDisplay,
+      pomodoroPhaseText,
+      pomodoroProgress,
+      startPomodoro,
+      pausePomodoro,
+      resetPomodoro,
+      skipPomodoro,
 
       // 数字人
       xingyunSession,
