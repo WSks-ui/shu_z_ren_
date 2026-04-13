@@ -305,6 +305,18 @@ def _wrap_pcm_to_wav(pcm_data):
     except Exception:
         return pcm_data
 
+# ----------------- 知识库默认配置 -----------------
+DEFAULT_KB_CONFIG = {
+    "chunk_size": 500,           # 文档分块大小
+    "chunk_overlap": 50,         # 分块重叠字符数
+    "retrieval_k": 5,            # 检索返回的文档数
+    "score_threshold": 0.7,      # 相似度阈值
+    "batch_size": 20,            # 向量化批次大小
+    "enable_bm25": True,         # 是否启用 BM25 混合检索
+    "embedding_cache": True,     # 是否缓存嵌入结果
+    "embedding_cache_size": 1000 # 嵌入缓存大小
+}
+
 # ----------------- 7. 配置读写 -----------------
 
 async def load_settings():

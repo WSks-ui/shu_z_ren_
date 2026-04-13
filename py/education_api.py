@@ -55,7 +55,16 @@ CHAT_HISTORY_FILE = EDUCATION_DATA_DIR / "chat_history.json"
 from py.edu_storage import get_cache, close_cache
 
 # 教育知识库服务
-from py.edu_knowledge_base import get_education_kb, search_education_knowledge, get_education_context, EDUCATION_KB_DIR, preload_education_kb
+from py.edu_knowledge_base import (
+    get_education_kb,
+    search_education_knowledge,
+    get_education_context,
+    EDUCATION_KB_DIR,
+    EDUCATION_VECTOR_DIR,
+    preload_education_kb,
+    get_education_kb_stats,
+    incremental_update_education_kb
+)
 
 # 存储层初始化标记
 _storage_initialized = False
@@ -1462,7 +1471,6 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
         rag_sources = []
         try:
             # 检查向量库是否存在，避免每次请求都尝试构建
-            from py.edu_knowledge_base import EDUCATION_VECTOR_DIR
             index_path = EDUCATION_VECTOR_DIR / "index"
 
             if index_path.with_suffix(".faiss").exists():
@@ -3210,6 +3218,45 @@ async def get_knowledge_stats():
         return {"status": "error", "message": str(e)}
 
 
+@router.get("/knowledge/status")
+async def get_knowledge_status():
+    """
+    获取知识库详细状态
+    包括向量库、嵌入模型、BM25 等信息
+    """
+    try:
+        kb = await get_education_kb()
+        stats = await kb.get_stats()
+
+        # 检测文件变更
+        changes = await kb.detect_changes()
+
+        return {
+            "status": "success",
+            "vector_store": {
+                "type": "FAISS",
+                "document_count": stats["document_count"],
+                "index_size_mb": stats["index_size_mb"],
+                "initialized": stats["initialized"],
+                "last_updated": stats["last_init_time"]
+            },
+            "embedding": stats.get("embedding", {}),
+            "config": stats.get("config", {}),
+            "directories": {
+                "kb_directory": stats.get("kb_directory"),
+                "vector_directory": stats.get("vector_directory")
+            },
+            "pending_changes": {
+                "added": len(changes["added"]),
+                "removed": len(changes["removed"]),
+                "modified": len(changes["modified"]),
+                "has_changes": any(changes.values())
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.post("/knowledge/preload")
 async def preload_knowledge():
     """
@@ -3267,6 +3314,54 @@ async def rebuild_knowledge_base():
             "status": "success",
             "message": "知识库向量索引重建完成",
             "stats": stats
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/knowledge/incremental_update")
+async def incremental_update_knowledge():
+    """
+    增量更新知识库
+    只处理新增、删除、修改的文件，比完整重建更高效
+    """
+    try:
+        kb = await get_education_kb()
+        update_stats = await kb.incremental_update()
+        stats = await kb.get_stats()
+        return {
+            "status": "success",
+            "message": "知识库增量更新完成",
+            "update_stats": update_stats,
+            "current_stats": stats
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/knowledge/changes")
+async def detect_knowledge_changes():
+    """
+    检测知识库文件变更
+    返回新增、删除、修改的文件列表
+    """
+    try:
+        kb = await get_education_kb()
+        changes = await kb.detect_changes()
+
+        return {
+            "status": "success",
+            "changes": {
+                "added": [{"path": str(p), "name": p.name} for p in changes["added"]],
+                "removed": [{"path": str(p), "name": p.name} for p in changes["removed"]],
+                "modified": [{"path": str(p), "name": p.name} for p in changes["modified"]]
+            },
+            "summary": {
+                "added_count": len(changes["added"]),
+                "removed_count": len(changes["removed"]),
+                "modified_count": len(changes["modified"]),
+                "total_changes": sum(len(v) for v in changes.values())
+            }
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
