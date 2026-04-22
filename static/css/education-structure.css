@@ -567,265 +567,588 @@ body {
   margin: var(--space-2) 0;
 }
 
-/* ==================== 番茄钟面板 ==================== */
+/* ==================== 番茄钟面板 - 全新设计 ==================== */
 .pomodoro-panel {
   position: fixed;
   left: 80px;
   bottom: 24px;
-  width: 280px;
+  width: 320px;
   background: var(--glass-bg-heavy);
   backdrop-filter: var(--glass-blur-heavy);
-  border-radius: var(--radius-xl);
+  border-radius: 24px;
   border: 1px solid var(--glass-border-light);
   pointer-events: auto;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
-  padding: var(--space-4);
+  box-shadow:
+    0 25px 50px rgba(0, 0, 0, 0.4),
+    0 0 100px rgba(16, 185, 129, 0.1);
+  padding: var(--space-5);
   z-index: 100;
+  overflow: hidden;
 }
 
+/* 阶段主题色 */
+.pomodoro-panel.work { --phase-color: var(--primary-500); --phase-glow: rgba(16, 185, 129, 0.15); }
+.pomodoro-panel.shortBreak { --phase-color: var(--success-400); --phase-glow: rgba(34, 197, 94, 0.15); }
+.pomodoro-panel.longBreak { --phase-color: var(--accent-500); --phase-glow: rgba(6, 182, 212, 0.15); }
+
+/* 顶部光晕 */
+.pp-glow {
+  position: absolute;
+  top: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, var(--phase-glow), transparent 70%);
+  pointer-events: none;
+}
+
+/* 头部 */
 .pp-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-4);
+  position: relative;
+}
+
+.pph-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pph-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--phase-color), color-mix(in srgb, var(--phase-color) 70%, white));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 16px;
+  box-shadow: 0 4px 12px var(--phase-glow);
 }
 
 .pp-header h3 {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  margin: 0;
 }
 
-.pp-header h3 i {
-  color: var(--primary-400);
+.pph-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .pp-close {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: var(--glass-bg);
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   color: var(--text-tertiary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .pp-close:hover {
-  background: var(--glass-bg-light);
-  color: var(--text-primary);
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
 }
 
-/* 计时器 */
-.pp-timer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+/* 任务输入 */
+.pp-task {
+  position: relative;
   margin-bottom: var(--space-4);
 }
 
-.ppt-circle {
-  position: relative;
-  width: 140px;
-  height: 140px;
+.pp-task-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.2s;
 }
 
-.ppt-circle svg {
+.pp-task-input:focus {
+  outline: none;
+  border-color: var(--phase-color);
+  box-shadow: 0 0 0 3px var(--phase-glow);
+}
+
+.pp-task-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.pp-task-hint {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+/* 计时器核心 */
+.pp-timer-core {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+
+.ppt-ring {
+  position: relative;
+  width: 180px;
+  height: 180px;
+}
+
+.ppt-decor, .ppt-progress-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+}
+
+.ppt-decor-ring {
+  fill: none;
+  stroke: var(--glass-border);
+  stroke-width: 1;
+}
+
+.ppt-tick {
+  stroke: var(--glass-border);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.ppt-progress-svg {
   transform: rotate(-90deg);
 }
 
-.ppt-bg {
+.ppt-bg-circle {
   fill: none;
   stroke: var(--glass-border);
-  stroke-width: 6;
+  stroke-width: 8;
 }
 
-.ppt-progress {
+.ppt-progress-circle {
   fill: none;
-  stroke: var(--primary-500);
-  stroke-width: 6;
+  stroke: var(--phase-color);
+  stroke-width: 8;
   stroke-linecap: round;
-  stroke-dasharray: 283;
+  stroke-dasharray: 534;
   transition: stroke-dashoffset 1s linear;
+  filter: drop-shadow(0 0 8px var(--phase-glow));
 }
 
-.pp-timer.work .ppt-progress { stroke: var(--primary-500); }
-.pp-timer.shortBreak .ppt-progress { stroke: var(--success-400); }
-.pp-timer.longBreak .ppt-progress { stroke: var(--accent-500); }
+.ppt-progress-circle.animated {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
 
-.ppt-time {
+@keyframes pulseGlow {
+  0%, 100% { filter: drop-shadow(0 0 8px var(--phase-glow)); }
+  50% { filter: drop-shadow(0 0 16px var(--phase-glow)); }
+}
+
+.ppt-center {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 32px;
+  text-align: center;
+}
+
+.ppt-time {
+  font-size: 42px;
   font-weight: 700;
   font-family: var(--font-mono);
   color: var(--text-primary);
+  line-height: 1;
+  letter-spacing: -2px;
 }
 
-.ppt-phase {
-  margin-top: var(--space-2);
-  font-size: 13px;
-  color: var(--text-secondary);
+.ppt-percent {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
 }
 
-/* 番茄计数 */
-.pp-count {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
+/* 进度条 */
+.pp-progress-bar {
   margin-bottom: var(--space-4);
 }
 
-.ppc-dot {
-  width: 24px;
-  height: 24px;
+.pppb-track {
+  height: 4px;
+  background: var(--glass-border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+}
+
+.pppb-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--phase-color), color-mix(in srgb, var(--phase-color) 70%, white));
+  border-radius: 2px;
+  transition: width 0.5s var(--ease-out);
+}
+
+.pppb-dots {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.pppb-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  border: 2px solid var(--glass-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-tertiary);
-  opacity: 0.3;
   transition: all 0.3s;
 }
 
-.ppc-dot.filled {
-  color: #ef4444;
-  opacity: 1;
+.pppb-dot.completed {
+  background: var(--phase-color);
+  border-color: var(--phase-color);
+  color: white;
 }
 
-.ppc-total {
-  margin-left: var(--space-3);
+.pppb-dot.current {
+  border-color: var(--phase-color);
+  color: var(--phase-color);
+  animation: dotPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--phase-glow); }
+  50% { box-shadow: 0 0 0 6px var(--phase-glow); }
+}
+
+.pppb-label {
+  display: flex;
+  justify-content: space-between;
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.pppb-total {
+  font-weight: 500;
+  color: var(--phase-color);
 }
 
 /* 控制按钮 */
 .pp-controls {
   display: flex;
   justify-content: center;
-  gap: var(--space-3);
+  align-items: center;
+  gap: var(--space-4);
   margin-bottom: var(--space-4);
 }
 
 .ppc-btn {
-  width: 44px;
-  height: 44px;
   border: none;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  transition: all 0.2s;
+  transition: all 0.25s var(--ease-out);
 }
 
-.ppc-start {
-  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+.ppc-btn.ppc-primary {
+  width: 64px;
+  height: 64px;
+  font-size: 20px;
+  background: linear-gradient(135deg, var(--phase-color), color-mix(in srgb, var(--phase-color) 70%, white));
   color: white;
-  width: 56px;
-  height: 56px;
-  font-size: 18px;
+  box-shadow: 0 8px 24px var(--phase-glow);
 }
 
-.ppc-start:hover {
-  transform: scale(1.08);
-  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+.ppc-btn.ppc-primary:hover {
+  transform: scale(1.1);
+  box-shadow: 0 12px 32px var(--phase-glow);
 }
 
-.ppc-pause {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: white;
-  width: 56px;
-  height: 56px;
-  font-size: 18px;
-}
-
-.ppc-pause:hover {
-  transform: scale(1.08);
-  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.4);
-}
-
-.ppc-reset, .ppc-skip {
+.ppc-btn.ppc-secondary {
+  width: 44px;
+  height: 44px;
+  font-size: 14px;
   background: var(--glass-bg);
   color: var(--text-secondary);
   border: 1px solid var(--glass-border);
 }
 
-.ppc-reset:hover, .ppc-skip:hover {
+.ppc-btn.ppc-secondary:hover {
   background: var(--glass-bg-light);
   color: var(--text-primary);
+  transform: scale(1.05);
 }
 
-/* 设置 */
+/* 音乐控制 */
+.pp-music {
+  background: var(--glass-bg);
+  border-radius: 12px;
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.ppm-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.ppm-header i:first-child {
+  color: var(--phase-color);
+}
+
+.ppm-header span {
+  flex: 1;
+}
+
+.ppm-toggle {
+  width: 32px;
+  height: 24px;
+  border: none;
+  background: var(--glass-border);
+  border-radius: 12px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ppm-toggle.active {
+  background: var(--phase-color);
+  color: white;
+}
+
+.ppm-tracks {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+}
+
+.ppm-track {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-2);
+  background: var(--glass-bg-light);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ppm-track:hover {
+  background: var(--glass-bg);
+}
+
+.ppm-track.active {
+  border-color: var(--phase-color);
+  background: var(--phase-glow);
+}
+
+.ppmt-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ppm-track.active .ppmt-icon {
+  background: var(--phase-color);
+  color: white;
+}
+
+.ppmt-name {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.ppm-volume {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.ppm-volume i {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.ppm-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  background: var(--glass-border);
+  border-radius: 2px;
+  outline: none;
+}
+
+.ppm-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--phase-color);
+  cursor: pointer;
+  box-shadow: 0 2px 6px var(--phase-glow);
+}
+
+/* 设置折叠 */
+.pp-settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pp-settings-toggle:hover {
+  color: var(--text-secondary);
+}
+
 .pp-settings {
   border-top: 1px solid var(--glass-border);
   padding-top: var(--space-3);
 }
 
-.pps-row {
+.pps-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: var(--space-2) 0;
 }
 
-.pps-row label {
-  font-size: 12px;
+.ppsi-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
-.pps-input-group {
+.ppsi-label i {
+  width: 20px;
+  text-align: center;
+  color: var(--phase-color);
+}
+
+.ppsi-control {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
-.pps-input-group button {
-  width: 24px;
-  height: 24px;
+.ppsi-control button {
+  width: 28px;
+  height: 28px;
   border: none;
   background: var(--glass-bg);
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 600;
   transition: all 0.2s;
 }
 
-.pps-input-group button:hover {
-  background: var(--primary-500);
+.ppsi-control button:hover {
+  background: var(--phase-color);
   color: white;
 }
 
-.pps-input-group span {
-  font-size: 12px;
-  font-weight: 500;
-  min-width: 50px;
+.ppsi-value {
+  font-size: 15px;
+  font-weight: 600;
+  min-width: 32px;
   text-align: center;
   color: var(--text-primary);
 }
 
+.ppsi-unit {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* 设置折叠动画 */
+.pp-settings-enter-active,
+.pp-settings-leave-active {
+  transition: all 0.3s var(--ease-out);
+  overflow: hidden;
+}
+
+.pp-settings-enter-from,
+.pp-settings-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+}
+
+.pp-settings-enter-to,
+.pp-settings-leave-from {
+  opacity: 1;
+  max-height: 200px;
+}
+
+/* 任务提示动画 */
+.pp-task-hint-enter-active,
+.pp-task-hint-leave-active {
+  transition: opacity 0.2s;
+}
+
+.pp-task-hint-enter-from,
+.pp-task-hint-leave-to {
+  opacity: 0;
+}
+
 /* 番茄钟面板动画 */
 .pomodoro-panel-enter-active {
-  animation: pomodoroPanelIn 0.3s var(--ease-out);
+  animation: pomodoroPanelIn 0.35s var(--ease-out);
 }
 
 .pomodoro-panel-leave-active {
-  animation: pomodoroPanelOut 0.2s ease-in;
+  animation: pomodoroPanelOut 0.25s ease-in;
 }
 
 @keyframes pomodoroPanelIn {
   from {
     opacity: 0;
-    transform: translateY(20px) scale(0.95);
+    transform: translateY(30px) scale(0.9);
   }
   to {
     opacity: 1;
@@ -840,7 +1163,7 @@ body {
   }
   to {
     opacity: 0;
-    transform: translateY(10px) scale(0.95);
+    transform: translateY(20px) scale(0.9);
   }
 }
 
@@ -3033,10 +3356,6 @@ body {
 .rmti-dot.review { background: linear-gradient(135deg, var(--accent-500), #0284c7); }
 .rmti-dot.tutoring { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
 .rmti-dot.math { background: linear-gradient(135deg, #ec4899, #db2777); }
-
-.rmti-line {
-  display: none;
-}
 
 .rmti-card {
   flex: 1;

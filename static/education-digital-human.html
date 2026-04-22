@@ -109,77 +109,176 @@
         </button>
       </aside>
 
-      <!-- 番茄钟悬浮面板 -->
+      <!-- 番茄钟悬浮面板 - 全新设计 -->
       <transition name="pomodoro-panel">
-        <div v-if="showPomodoro" class="pomodoro-panel">
+        <div v-if="showPomodoro" class="pomodoro-panel" :class="pomodoroState.phase">
+          <!-- 顶部装饰光晕 -->
+          <div class="pp-glow"></div>
+
           <div class="pp-header">
-            <h3><i class="fa-solid fa-clock"></i> 番茄钟</h3>
+            <div class="pph-title">
+              <div class="pph-icon">
+                <i class="fa-solid fa-clock"></i>
+              </div>
+              <div>
+                <h3>番茄时钟</h3>
+                <span class="pph-subtitle">{{ pomodoroPhaseText }}</span>
+              </div>
+            </div>
             <button class="pp-close" @click="showPomodoro = false"><i class="fa-solid fa-xmark"></i></button>
           </div>
 
-          <!-- 计时器显示 -->
-          <div class="pp-timer" :class="pomodoroState.phase">
-            <div class="ppt-circle">
-              <svg viewBox="0 0 100 100">
-                <circle class="ppt-bg" cx="50" cy="50" r="45"></circle>
-                <circle class="ppt-progress" cx="50" cy="50" r="45" :style="{ strokeDashoffset: pomodoroProgress }"></circle>
+          <!-- 当前任务 -->
+          <div class="pp-task">
+            <input
+              v-model="pomodoroTask"
+              type="text"
+              placeholder="正在专注做什么？"
+              class="pp-task-input"
+              @focus="pomodoroTaskFocused = true"
+              @blur="pomodoroTaskFocused = false"
+            />
+            <transition name="pp-task-hint">
+              <span v-if="!pomodoroTask && !pomodoroTaskFocused" class="pp-task-hint">
+                <i class="fa-solid fa-lightbulb"></i> 设定目标，效率更高
+              </span>
+            </transition>
+          </div>
+
+          <!-- 计时器核心 -->
+          <div class="pp-timer-core">
+            <div class="ppt-ring">
+              <!-- 外圈装饰 -->
+              <svg class="ppt-decor" viewBox="0 0 200 200">
+                <circle cx="100" cy="100" r="95" class="ppt-decor-ring" />
+                <!-- 刻度标记 -->
+                <g class="ppt-ticks">
+                  <line v-for="i in 12" :key="i"
+                    x1="100" y1="10" x2="100" y2="18"
+                    :transform="`rotate(${i * 30} 100 100)`"
+                    class="ppt-tick"
+                  />
+                </g>
               </svg>
-              <div class="ppt-time">{{ pomodoroDisplay }}</div>
+              <!-- 进度环 -->
+              <svg class="ppt-progress-svg" viewBox="0 0 200 200">
+                <circle cx="100" cy="100" r="85" class="ppt-bg-circle" />
+                <circle cx="100" cy="100" r="85" class="ppt-progress-circle"
+                  :style="{ strokeDashoffset: pomodoroProgress }"
+                  :class="{ animated: pomodoroState.isRunning }"
+                />
+              </svg>
+              <!-- 中心内容 -->
+              <div class="ppt-center">
+                <div class="ppt-time">{{ pomodoroDisplay }}</div>
+                <div class="ppt-percent">{{ pomodoroPercent }}%</div>
+              </div>
             </div>
-            <div class="ppt-phase">{{ pomodoroPhaseText }}</div>
           </div>
 
-          <!-- 番茄计数 -->
-          <div class="pp-count">
-            <span v-for="n in 4" :key="n" class="ppc-dot" :class="{ filled: n <= pomodoroState.completedPomodoros }">
-              <i class="fa-solid fa-apple-whole"></i>
-            </span>
-            <span class="ppc-total">今日 {{ pomodoroState.todayPomodoros }} 个</span>
+          <!-- 番茄进度指示器 -->
+          <div class="pp-progress-bar">
+            <div class="pppb-track">
+              <div class="pppb-fill" :style="{ width: (pomodoroState.completedPomodoros / 4 * 100) + '%' }"></div>
+            </div>
+            <div class="pppb-dots">
+              <div v-for="n in 4" :key="n" class="pppb-dot" :class="{ completed: n <= pomodoroState.completedPomodoros, current: n === pomodoroState.completedPomodoros + 1 }">
+                <i v-if="n <= pomodoroState.completedPomodoros" class="fa-solid fa-check"></i>
+                <span v-else>{{ n }}</span>
+              </div>
+            </div>
+            <div class="pppb-label">
+              <span>第 {{ Math.min(pomodoroState.completedPomodoros + 1, 4) }} / 4 个番茄</span>
+              <span class="pppb-total">今日 {{ pomodoroState.todayPomodoros }} 个</span>
+            </div>
           </div>
 
-          <!-- 控制按钮 -->
+          <!-- 控制区 -->
           <div class="pp-controls">
-            <button class="ppc-btn ppc-start" v-if="!pomodoroState.isRunning" @click="startPomodoro">
-              <i class="fa-solid fa-play"></i>
+            <button class="ppc-btn ppc-secondary" @click="resetPomodoro" title="重置">
+              <i class="fa-solid fa-rotate-left"></i>
             </button>
-            <button class="ppc-btn ppc-pause" v-else @click="pausePomodoro">
-              <i class="fa-solid fa-pause"></i>
+            <button class="ppc-btn ppc-primary" @click="pomodoroState.isRunning ? pausePomodoro() : startPomodoro()">
+              <i :class="pomodoroState.isRunning ? 'fa-solid fa-pause' : 'fa-solid fa-play'"></i>
             </button>
-            <button class="ppc-btn ppc-reset" @click="resetPomodoro" title="重置">
-              <i class="fa-solid fa-rotate-right"></i>
-            </button>
-            <button class="ppc-btn ppc-skip" @click="skipPomodoro" title="跳过">
-              <i class="fa-solid fa-forward"></i>
+            <button class="ppc-btn ppc-secondary" @click="skipPomodoro" title="跳过">
+              <i class="fa-solid fa-forward-step"></i>
             </button>
           </div>
 
-          <!-- 设置 -->
-          <div class="pp-settings">
-            <div class="pps-row">
-              <label>工作时长</label>
-              <div class="pps-input-group">
-                <button @click="pomodoroSettings.workDuration = Math.max(5, pomodoroSettings.workDuration - 5)">-</button>
-                <span>{{ pomodoroSettings.workDuration }}分钟</span>
-                <button @click="pomodoroSettings.workDuration = Math.min(60, pomodoroSettings.workDuration + 5)">+</button>
-              </div>
+          <!-- 音乐控制 -->
+          <div class="pp-music">
+            <div class="ppm-header">
+              <i class="fa-solid fa-music"></i>
+              <span>专注音乐</span>
+              <button class="ppm-toggle" :class="{ active: pomodoroMusicEnabled }" @click="togglePomodoroMusic">
+                <i :class="pomodoroMusicEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark'"></i>
+              </button>
             </div>
-            <div class="pps-row">
-              <label>短休息</label>
-              <div class="pps-input-group">
-                <button @click="pomodoroSettings.shortBreak = Math.max(1, pomodoroSettings.shortBreak - 1)">-</button>
-                <span>{{ pomodoroSettings.shortBreak }}分钟</span>
-                <button @click="pomodoroSettings.shortBreak = Math.min(15, pomodoroSettings.shortBreak + 1)">+</button>
-              </div>
+            <div class="ppm-tracks" v-if="pomodoroMusicEnabled">
+              <button
+                v-for="track in pomodoroTracks"
+                :key="track.id"
+                class="ppm-track"
+                :class="{ active: pomodoroCurrentTrack?.id === track.id }"
+                @click="selectPomodoroTrack(track)"
+              >
+                <div class="ppmt-icon"><i :class="track.icon"></i></div>
+                <span class="ppmt-name">{{ track.name }}</span>
+              </button>
             </div>
-            <div class="pps-row">
-              <label>长休息</label>
-              <div class="pps-input-group">
-                <button @click="pomodoroSettings.longBreak = Math.max(5, pomodoroSettings.longBreak - 5)">-</button>
-                <span>{{ pomodoroSettings.longBreak }}分钟</span>
-                <button @click="pomodoroSettings.longBreak = Math.min(30, pomodoroSettings.longBreak + 5)">+</button>
-              </div>
+            <div class="ppm-volume" v-if="pomodoroMusicEnabled">
+              <i class="fa-solid fa-volume-low"></i>
+              <input type="range" v-model="pomodoroVolume" min="0" max="100" class="ppm-slider" />
+              <i class="fa-solid fa-volume-high"></i>
             </div>
           </div>
+
+          <!-- 设置折叠区 -->
+          <div class="pp-settings-toggle" @click="pomodoroSettingsExpanded = !pomodoroSettingsExpanded">
+            <i :class="pomodoroSettingsExpanded ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"></i>
+            <span>时间设置</span>
+          </div>
+          <transition name="pp-settings">
+            <div v-if="pomodoroSettingsExpanded" class="pp-settings">
+              <div class="pps-item">
+                <div class="ppsi-label">
+                  <i class="fa-solid fa-briefcase"></i>
+                  <span>专注</span>
+                </div>
+                <div class="ppsi-control">
+                  <button @click="updatePomodoroSetting('workDuration', -5)">-</button>
+                  <span class="ppsi-value">{{ pomodoroSettings.workDuration }}</span>
+                  <button @click="updatePomodoroSetting('workDuration', 5)">+</button>
+                  <span class="ppsi-unit">分钟</span>
+                </div>
+              </div>
+              <div class="pps-item">
+                <div class="ppsi-label">
+                  <i class="fa-solid fa-mug-hot"></i>
+                  <span>短休</span>
+                </div>
+                <div class="ppsi-control">
+                  <button @click="updatePomodoroSetting('shortBreak', -1)">-</button>
+                  <span class="ppsi-value">{{ pomodoroSettings.shortBreak }}</span>
+                  <button @click="updatePomodoroSetting('shortBreak', 1)">+</button>
+                  <span class="ppsi-unit">分钟</span>
+                </div>
+              </div>
+              <div class="pps-item">
+                <div class="ppsi-label">
+                  <i class="fa-solid fa-couch"></i>
+                  <span>长休</span>
+                </div>
+                <div class="ppsi-control">
+                  <button @click="updatePomodoroSetting('longBreak', -5)">-</button>
+                  <span class="ppsi-value">{{ pomodoroSettings.longBreak }}</span>
+                  <button @click="updatePomodoroSetting('longBreak', 5)">+</button>
+                  <span class="ppsi-unit">分钟</span>
+                </div>
+              </div>
+            </div>
+          </transition>
         </div>
       </transition>
 
@@ -754,7 +853,6 @@
                     <div class="rmti-dot" :class="record.type">
                       <i :class="getTypeIcon(record.type)"></i>
                     </div>
-                    <div class="rmti-line"></div>
                     <div class="rmti-card">
                       <div class="rmtic-header">
                         <span class="rmtic-time">{{ formatTime(record.startTime) }}</span>

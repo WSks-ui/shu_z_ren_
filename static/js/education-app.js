@@ -250,19 +250,36 @@ createApp({
 
     // ==================== 番茄钟 ====================
     const showPomodoro = ref(false);
+    const POMODORO_CIRCLE_LENGTH = 534;  // SVG圆周长 = 2 * π * 85
     const pomodoroSettings = ref({
-      workDuration: 25,    // 工作时长（分钟）
-      shortBreak: 5,       // 短休息（分钟）
-      longBreak: 15        // 长休息（分钟）
+      workDuration: 25,
+      shortBreak: 5,
+      longBreak: 15
     });
     const pomodoroState = ref({
-      phase: 'work',       // 'work' | 'shortBreak' | 'longBreak'
-      timeLeft: 25 * 60,   // 剩余时间（秒）
+      phase: 'work',
+      timeLeft: 25 * 60,
       isRunning: false,
-      completedPomodoros: 0,  // 当前周期完成的番茄数
-      todayPomodoros: 0       // 今日完成的番茄数
+      completedPomodoros: 0,
+      todayPomodoros: 0
     });
+    const pomodoroTask = ref('');
+    const pomodoroTaskFocused = ref(false);
+    const pomodoroSettingsExpanded = ref(false);
+    const pomodoroMusicEnabled = ref(false);
+    const pomodoroVolume = ref(50);
+    const pomodoroCurrentTrack = ref(null);
     let pomodoroTimer = null;
+    let pomodoroAudio = null;
+
+    // 音乐曲目列表
+    const pomodoroTracks = [
+      { id: 'rain', name: '雨声', icon: 'fa-solid fa-cloud-rain', url: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_c8c8a73467.mp3' },
+      { id: 'forest', name: '森林', icon: 'fa-solid fa-tree', url: 'https://cdn.pixabay.com/download/audio/2022/02/07/audio_5f1f804c45.mp3' },
+      { id: 'ocean', name: '海浪', icon: 'fa-solid fa-water', url: 'https://cdn.pixabay.com/download/audio/2022/03/19/audio_58b31b83c1.mp3' },
+      { id: 'fire', name: '篝火', icon: 'fa-solid fa-fire', url: 'https://cdn.pixabay.com/download/audio/2021/08/09/audio_dc39a0f9a0.mp3' },
+      { id: 'cafe', name: '咖啡厅', icon: 'fa-solid fa-mug-saucer', url: 'https://cdn.pixabay.com/download/audio/2022/10/25/audio_7c5e3d9a47.mp3' }
+    ];
 
     // 番茄钟显示文本
     const pomodoroDisplay = computed(() => {
@@ -281,21 +298,96 @@ createApp({
       return texts[pomodoroState.value.phase] || '';
     });
 
+    // 番茄钟进度百分比
+    const pomodoroPercent = computed(() => {
+      const phaseDurations = {
+        work: pomodoroSettings.value.workDuration * 60,
+        shortBreak: pomodoroSettings.value.shortBreak * 60,
+        longBreak: pomodoroSettings.value.longBreak * 60
+      };
+      const totalTime = phaseDurations[pomodoroState.value.phase];
+      const elapsed = totalTime - pomodoroState.value.timeLeft;
+      return Math.round((elapsed / totalTime) * 100);
+    });
+
     // 番茄钟进度（SVG圆环）
     const pomodoroProgress = computed(() => {
-      const totalTime = pomodoroState.value.phase === 'work'
-        ? pomodoroSettings.value.workDuration * 60
-        : pomodoroState.value.phase === 'shortBreak'
-          ? pomodoroSettings.value.shortBreak * 60
-          : pomodoroSettings.value.longBreak * 60;
+      const phaseDurations = {
+        work: pomodoroSettings.value.workDuration * 60,
+        shortBreak: pomodoroSettings.value.shortBreak * 60,
+        longBreak: pomodoroSettings.value.longBreak * 60
+      };
+      const totalTime = phaseDurations[pomodoroState.value.phase];
       const progress = pomodoroState.value.timeLeft / totalTime;
-      // 圆周长 = 2 * π * 45 ≈ 283
-      return 283 * (1 - progress);
+      return POMODORO_CIRCLE_LENGTH * (1 - progress);
+    });
+
+    // 更新设置
+    const updatePomodoroSetting = (key, delta) => {
+      const limits = {
+        workDuration: { min: 5, max: 60 },
+        shortBreak: { min: 1, max: 15 },
+        longBreak: { min: 5, max: 30 }
+      };
+      const newVal = pomodoroSettings.value[key] + delta;
+      pomodoroSettings.value[key] = Math.max(limits[key].min, Math.min(limits[key].max, newVal));
+
+      // 如果是当前阶段，更新剩余时间
+      if (pomodoroState.value.phase === 'work' && key === 'workDuration' && !pomodoroState.value.isRunning) {
+        pomodoroState.value.timeLeft = newVal * 60;
+      }
+      savePomodoroState();
+    };
+
+    // 切换音乐
+    const togglePomodoroMusic = () => {
+      pomodoroMusicEnabled.value = !pomodoroMusicEnabled.value;
+      if (pomodoroMusicEnabled.value && !pomodoroCurrentTrack.value) {
+        pomodoroCurrentTrack.value = pomodoroTracks[0];
+      }
+      if (!pomodoroMusicEnabled.value && pomodoroAudio) {
+        pomodoroAudio.pause();
+        pomodoroAudio = null;
+      } else if (pomodoroMusicEnabled.value && pomodoroCurrentTrack.value) {
+        playPomodoroMusic();
+      }
+    };
+
+    // 选择曲目
+    const selectPomodoroTrack = (track) => {
+      pomodoroCurrentTrack.value = track;
+      if (pomodoroMusicEnabled.value) {
+        playPomodoroMusic();
+      }
+    };
+
+    // 播放音乐
+    const playPomodoroMusic = () => {
+      if (!pomodoroCurrentTrack.value) return;
+
+      if (pomodoroAudio) {
+        pomodoroAudio.pause();
+      }
+
+      pomodoroAudio = new Audio(pomodoroCurrentTrack.value.url);
+      pomodoroAudio.loop = true;
+      pomodoroAudio.volume = pomodoroVolume.value / 100;
+      pomodoroAudio.play().catch(e => console.log('音乐播放失败:', e));
+    };
+
+    // 监听音量变化
+    watch(pomodoroVolume, (newVol) => {
+      if (pomodoroAudio) {
+        pomodoroAudio.volume = newVol / 100;
+      }
     });
 
     // 开始番茄钟
     const startPomodoro = () => {
       pomodoroState.value.isRunning = true;
+      if (pomodoroMusicEnabled.value && pomodoroCurrentTrack.value) {
+        playPomodoroMusic();
+      }
       pomodoroTimer = setInterval(() => {
         if (pomodoroState.value.timeLeft > 0) {
           pomodoroState.value.timeLeft--;
@@ -311,6 +403,9 @@ createApp({
       if (pomodoroTimer) {
         clearInterval(pomodoroTimer);
         pomodoroTimer = null;
+      }
+      if (pomodoroAudio) {
+        pomodoroAudio.pause();
       }
     };
 
@@ -331,17 +426,12 @@ createApp({
       pausePomodoro();
 
       // 播放提示音
-      try {
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQMCZ6/c5JlhAxKC0eW2eQsMU4vT5ahdAxmTx9LkmFkDGpHH0eWYVwMZkcbQ5ZhWAw==');
-        audio.play().catch(() => {});
-      } catch (e) {}
+      playNotificationSound();
 
       if (pomodoroState.value.phase === 'work') {
-        // 完成一个番茄
         pomodoroState.value.completedPomodoros++;
         pomodoroState.value.todayPomodoros++;
 
-        // 判断是长休息还是短休息
         if (pomodoroState.value.completedPomodoros % 4 === 0) {
           pomodoroState.value.phase = 'longBreak';
           pomodoroState.value.timeLeft = pomodoroSettings.value.longBreak * 60;
@@ -350,31 +440,29 @@ createApp({
           pomodoroState.value.timeLeft = pomodoroSettings.value.shortBreak * 60;
         }
 
-        // 记录成长
         recordPomodoroComplete();
       } else {
-        // 休息结束，开始新的工作周期
         pomodoroState.value.phase = 'work';
         pomodoroState.value.timeLeft = pomodoroSettings.value.workDuration * 60;
       }
 
-      // 保存状态
       savePomodoroState();
+    };
+
+    // 播放提示音
+    const playNotificationSound = () => {
+      const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQMCZ6/c5JlhAxKC0eW2eQsMU4vT5ahdAxmTx9LkmFkDGpHH0eWYVwMZkcbQ5ZhWAw==');
+      audio.play().catch(() => {});
     };
 
     // 记录番茄完成
     const recordPomodoroComplete = async () => {
-      // 增加经验
       growth.value.exp += 15;
       growth.value.totalExp += 15;
-
-      // 更新统计
       if (!growth.value.stats.pomodoros) {
         growth.value.stats.pomodoros = 0;
       }
       growth.value.stats.pomodoros++;
-
-      // 检查成就
       await checkAchievements();
     };
 
@@ -384,6 +472,10 @@ createApp({
         settings: pomodoroSettings.value,
         completedPomodoros: pomodoroState.value.completedPomodoros,
         todayPomodoros: pomodoroState.value.todayPomodoros,
+        task: pomodoroTask.value,
+        musicEnabled: pomodoroMusicEnabled.value,
+        volume: pomodoroVolume.value,
+        currentTrackId: pomodoroCurrentTrack.value?.id,
         lastDate: new Date().toDateString()
       }));
     };
@@ -395,20 +487,23 @@ createApp({
         if (saved) {
           const data = JSON.parse(saved);
           pomodoroSettings.value = { ...pomodoroSettings.value, ...data.settings };
+          pomodoroTask.value = data.task || '';
+          pomodoroMusicEnabled.value = data.musicEnabled || false;
+          pomodoroVolume.value = data.volume || 50;
+          if (data.currentTrackId) {
+            pomodoroCurrentTrack.value = pomodoroTracks.find(t => t.id === data.currentTrackId) || null;
+          }
 
-          // 检查是否是同一天
           if (data.lastDate === new Date().toDateString()) {
             pomodoroState.value.completedPomodoros = data.completedPomodoros || 0;
             pomodoroState.value.todayPomodoros = data.todayPomodoros || 0;
           } else {
-            // 新的一天，重置计数
             pomodoroState.value.completedPomodoros = 0;
             pomodoroState.value.todayPomodoros = 0;
           }
         }
       } catch (e) {}
 
-      // 初始化时间
       pomodoroState.value.timeLeft = pomodoroSettings.value.workDuration * 60;
     };
 
@@ -582,16 +677,18 @@ createApp({
     // 时间线分组：按日期分组记录
     const groupedRecords = computed(() => {
       const records = filteredRecords.value;
-      const groups = [];
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
+      if (records.length === 0) return [];
+
+      // 预计算今天和昨天的日期字符串
+      const todayStr = new Date().toISOString().split('T')[0];
+      const yesterdayDate = new Date();
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+      const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
 
       // 按日期分组
       const dateMap = new Map();
       records.forEach(record => {
-        const date = new Date(record.startTime);
-        const dateKey = date.toISOString().split('T')[0];
+        const dateKey = record.startTime?.split('T')[0] || 'unknown';
         if (!dateMap.has(dateKey)) {
           dateMap.set(dateKey, []);
         }
@@ -599,22 +696,26 @@ createApp({
       });
 
       // 转换为数组并添加标签
-      const sortedDates = Array.from(dateMap.keys()).sort((a, b) => new Date(b) - new Date(a));
+      const groups = [];
+      const sortedDates = Array.from(dateMap.keys()).sort((a, b) => b.localeCompare(a));
+
       sortedDates.forEach(dateKey => {
-        const date = new Date(dateKey);
         let label;
-        if (dateKey === today.toISOString().split('T')[0]) {
+        if (dateKey === todayStr) {
           label = '今天';
-        } else if (dateKey === yesterday.toISOString().split('T')[0]) {
+        } else if (dateKey === yesterdayStr) {
           label = '昨天';
         } else {
           // 格式化为 "X月X日"
-          label = `${date.getMonth() + 1}月${date.getDate()}日`;
+          const [year, month, day] = dateKey.split('-');
+          label = `${parseInt(month)}月${parseInt(day)}日`;
         }
         groups.push({
           date: dateKey,
           label,
-          records: dateMap.get(dateKey).sort((a, b) => new Date(b.startTime) - new Date(a.startTime))
+          records: dateMap.get(dateKey).sort((a, b) =>
+            new Date(b.startTime) - new Date(a.startTime)
+          )
         });
       });
 
@@ -1488,8 +1589,6 @@ createApp({
     const toggleBookmark = async (msg) => {
       if (msg.role !== 'assistant') return;
 
-      // 使用消息的唯一标识进行匹配
-      const msgId = msg.timestamp || msg.content.substring(0, 50);
       const existingIdx = bookmarks.value.findIndex(b => {
         // 匹配：时间戳相同，或者内容前50字符相同
         return (b.timestamp && b.timestamp === msg.timestamp) ||
@@ -3074,13 +3173,24 @@ createApp({
       showPomodoro,
       pomodoroSettings,
       pomodoroState,
+      pomodoroTask,
+      pomodoroTaskFocused,
+      pomodoroSettingsExpanded,
+      pomodoroMusicEnabled,
+      pomodoroVolume,
+      pomodoroTracks,
+      pomodoroCurrentTrack,
       pomodoroDisplay,
       pomodoroPhaseText,
       pomodoroProgress,
+      pomodoroPercent,
       startPomodoro,
       pausePomodoro,
       resetPomodoro,
       skipPomodoro,
+      updatePomodoroSetting,
+      togglePomodoroMusic,
+      selectPomodoroTrack,
 
       // 数字人
       xingyunSession,
