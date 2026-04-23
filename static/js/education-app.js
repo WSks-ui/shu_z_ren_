@@ -177,18 +177,26 @@ createApp({
       return hasSavedContext.value ? savedSkillContext.value.lastTopic : '';
     });
 
+    // 已处理的阶段跳转记录（防止重复触发）
+    const processedStageCommands = ref(new Set());
+
+    // 检测AI回复中的阶段标记【阶段名】
     const detectStageFromResponse = (content) => {
-      if (!currentSkill.value || !skillStages[currentSkill.value]) return;
+      if (!currentSkill.value || !skillStages[currentSkill.value]) return false;
       const stages = skillStages[currentSkill.value];
       for (let i = 0; i < stages.length; i++) {
         const regex = new RegExp('【' + stages[i].name + '】');
         if (regex.test(content)) {
-          if (i > currentStage.value) {
+          // 允许任意跳转（向前或向后）
+          if (i !== currentStage.value) {
             currentStage.value = i;
+            console.log(`[阶段检测] 从【${stages[i]?.name}】标记检测到阶段: ${i}`);
+            return true;
           }
-          return;
+          return false;
         }
       }
+      return false;
     };
 
     const saveSkillContext = () => {
@@ -213,18 +221,31 @@ createApp({
       chatInput.value = `让我们继续上次关于「${ctx.lastTopic}」的讨论，请接着上次的内容继续。`;
     };
 
-    // 手动设置阶段进度（用户点击或AI调用）
-    const setStage = async (stageIndex) => {
+    // 用户手动设置阶段（点击阶段按钮）- 不触发奖励
+    const setUserStage = (stageIndex) => {
       if (!skillStagesList.value.length) return;
       if (stageIndex < 0 || stageIndex >= skillStagesList.value.length) return;
 
       const prevStage = currentStage.value;
       currentStage.value = stageIndex;
       const stageName = skillStagesList.value[stageIndex]?.name || '';
-      console.log(`[阶段切换] 跳转到: ${stageName}`);
+      console.log(`[阶段切换] 用户手动跳转到: ${stageName}`);
 
-      // 只有向前推进阶段才记录奖励
-      if (stageIndex > prevStage) {
+      saveSkillContext();
+    };
+
+    // AI触发的阶段跳转 - 向前推进时触发奖励
+    const setStage = async (stageIndex, fromAI = false) => {
+      if (!skillStagesList.value.length) return;
+      if (stageIndex < 0 || stageIndex >= skillStagesList.value.length) return;
+
+      const prevStage = currentStage.value;
+      currentStage.value = stageIndex;
+      const stageName = skillStagesList.value[stageIndex]?.name || '';
+      console.log(`[阶段切换] 跳转到: ${stageName} (fromAI: ${fromAI})`);
+
+      // 只有AI触发的向前推进才记录奖励
+      if (fromAI && stageIndex > prevStage) {
         await recordStageComplete(stageName);
       }
 
@@ -238,10 +259,34 @@ createApp({
       if (match) {
         const targetName = match[1].trim();
         const stages = skillStagesList.value;
+
+        // 先尝试精确匹配
         for (let i = 0; i < stages.length; i++) {
           if (stages[i].name === targetName || stages[i].id === targetName) {
-            setStage(i);
-            return true;
+            // 检查是否已处理过（防止重复）
+            const commandKey = `${currentSkill.value}-${i}-${Date.now().toString().slice(0, -5)}`;
+            if (!processedStageCommands.value.has(commandKey)) {
+              processedStageCommands.value.add(commandKey);
+              // 清理过期的记录（保留最近10条）
+              if (processedStageCommands.value.size > 10) {
+                const arr = Array.from(processedStageCommands.value);
+                processedStageCommands.value = new Set(arr.slice(-10));
+              }
+              setStage(i, true);  // AI触发的跳转
+              return true;
+            }
+          }
+        }
+
+        // 模糊匹配：包含关键词即可
+        for (let i = 0; i < stages.length; i++) {
+          if (stages[i].name.includes(targetName) || targetName.includes(stages[i].name)) {
+            const commandKey = `${currentSkill.value}-${i}-${Date.now().toString().slice(0, -5)}`;
+            if (!processedStageCommands.value.has(commandKey)) {
+              processedStageCommands.value.add(commandKey);
+              setStage(i, true);
+              return true;
+            }
           }
         }
       }
@@ -877,23 +922,14 @@ createApp({
       }
     };
 
-    // 技能使用奖励
+    // 技能使用奖励 - 仅用于首次使用检测和经验奖励，统计由后端统一处理
     const recordSkillUse = async (skillId) => {
       const isFirstUse = !skillUsage.value[skillId];
       skillUsage.value[skillId] = (skillUsage.value[skillId] || 0) + 1;
-      growth.value.stats.skillUses++;
 
       if (isFirstUse) {
         await addExp(expRewards.firstSkillUse, `首次使用技能`);
-      } else {
-        await addExp(expRewards.skillUse, `使用技能`);
       }
-    };
-
-    // 书签保存奖励
-    const recordBookmarkSave = async () => {
-      growth.value.stats.bookmarksSaved++;
-      await addExp(expRewards.bookmarkSave, '保存书签');
     };
 
     // 公式识别奖励
@@ -908,10 +944,14 @@ createApp({
       await addExp(expRewards.voiceChat, '语音对话');
     };
 
-    // 阶段完成奖励
+    // 阶段完成奖励（同步到后端）
     const recordStageComplete = async (stageName) => {
       growth.value.stats.stagesCompleted++;
-      await addExp(expRewards.stageComplete, `完成阶段: ${stageName}`);
+      growth.value.exp += 25;
+      growth.value.totalExp += 25;
+      // 同步到后端
+      fetch(`/api/education/stages/record_complete?stage_name=${encodeURIComponent(stageName)}`, { method: 'POST' }).catch(() => {});
+      console.log(`[阶段完成] ${stageName}，经验+25`);
     };
 
     // ==================== 协作记录 ====================
@@ -1875,22 +1915,31 @@ createApp({
       document.documentElement.style.setProperty('--chat-height', chatHeight.value + 'px');
     }
 
+    // ==================== 书签统计同步 ====================
+    const syncBookmarkSave = () => {
+      growth.value.stats.bookmarksSaved = (growth.value.stats.bookmarksSaved || 0) + 1;
+      growth.value.exp += 5;
+      growth.value.totalExp += 5;
+      fetch('/api/education/bookmarks/record_save', { method: 'POST' }).catch(() => {});
+    };
+
+    const syncBookmarkDelete = () => {
+      growth.value.stats.bookmarksSaved = Math.max(0, (growth.value.stats.bookmarksSaved || 0) - 1);
+      fetch('/api/education/bookmarks/record_delete', { method: 'POST' }).catch(() => {});
+    };
+
     // ==================== 书签方法 ====================
     const toggleBookmark = async (msg) => {
       if (msg.role !== 'assistant') return;
 
       const existingIdx = bookmarks.value.findIndex(b => {
-        // 匹配：时间戳相同，或者内容前50字符相同
         return (b.timestamp && b.timestamp === msg.timestamp) ||
                (b.content && msg.content && b.content.substring(0, 50) === msg.content.substring(0, 50));
       });
 
       if (existingIdx > -1) {
         bookmarks.value.splice(existingIdx, 1);
-        // 删除书签时更新统计
-        growth.value.stats.bookmarksSaved = Math.max(0, (growth.value.stats.bookmarksSaved || 0) - 1);
-        // 同步到后端
-        fetch('/api/education/bookmarks/record_delete', { method: 'POST' }).catch(() => {});
+        syncBookmarkDelete();
       } else {
         bookmarks.value.push({
           id: Date.now(),
@@ -1901,12 +1950,7 @@ createApp({
           timestamp: msg.timestamp || new Date().toISOString(),
           createdAt: new Date().toISOString()
         });
-        // 新增书签时更新本地统计
-        growth.value.stats.bookmarksSaved = (growth.value.stats.bookmarksSaved || 0) + 1;
-        growth.value.exp += 5;
-        growth.value.totalExp += 5;
-        // 同步到后端
-        fetch('/api/education/bookmarks/record_save', { method: 'POST' }).catch(() => {});
+        syncBookmarkSave();
       }
       localStorage.setItem('edu-bookmarks', JSON.stringify(bookmarks.value));
     };
@@ -1914,10 +1958,7 @@ createApp({
     const deleteBookmark = async (bookmarkId) => {
       bookmarks.value = bookmarks.value.filter(b => b.id !== bookmarkId);
       localStorage.setItem('edu-bookmarks', JSON.stringify(bookmarks.value));
-      // 删除书签时更新统计
-      growth.value.stats.bookmarksSaved = Math.max(0, (growth.value.stats.bookmarksSaved || 0) - 1);
-      // 同步到后端
-      fetch('/api/education/bookmarks/record_delete', { method: 'POST' }).catch(() => {});
+      syncBookmarkDelete();
     };
 
     const isBookmarked = (msg) => {
@@ -2005,10 +2046,7 @@ createApp({
       sessionId.value = 'session_' + Date.now();
       currentStage.value = 0;  // 重置阶段进度
 
-      // 记录技能使用
-      if (currentSkill.value) {
-        await recordSkillUse(currentSkill.value);
-      }
+      // 不在此处记录技能使用，由 sendMessage 流程统一处理（避免重复计数）
 
       const greetings = {
         'research-assistant': `你好！我是**研友**的科研助手模式。\n\n我可以帮助你：\n- 设计实验方案\n- 构建研究假设\n- 选择合适的研究方法\n- 分析实验数据\n\n请告诉我你正在研究的课题，我们一起探讨！`,
@@ -2097,7 +2135,10 @@ createApp({
           message: userMessage,
           skill_id: currentSkill.value,
           session_id: sessionId.value,
-          history: history
+          history: history,
+          // 传递当前阶段信息给AI
+          current_stage: currentStage.value,
+          stage_name: skillStagesList.value[currentStage.value]?.name || null
         };
 
         if (filePaths.length > 0) {
@@ -2236,6 +2277,7 @@ createApp({
         }
 
         if (expGained) {
+          // 本地即时显示经验（后端已持久化）
           growth.value.exp += expGained;
           growth.value.totalExp += expGained;
 
@@ -2244,13 +2286,11 @@ createApp({
             growth.value.level++;
           }
 
-          // 本地即时显示统计（后端会持久化）
+          // 本地即时显示统计（后端 update_chat_stats 已持久化）
           if (currentSkill.value) {
-            // 使用技能对话，更新本地技能使用统计
             skillUsage.value[currentSkill.value] = (skillUsage.value[currentSkill.value] || 0) + 1;
             growth.value.stats.skillUses = (growth.value.stats.skillUses || 0) + 1;
           } else {
-            // 普通对话，统计到对话次数
             growth.value.stats.conversations = (growth.value.stats.conversations || 0) + 1;
           }
           await checkAchievements();
@@ -3447,6 +3487,7 @@ createApp({
       skillStagesList,
       skillToolbar,
       setStage,
+      setUserStage,
       hasSavedContext,
       savedContextPreview,
       continueSkillContext,
