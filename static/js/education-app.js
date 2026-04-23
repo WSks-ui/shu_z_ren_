@@ -52,35 +52,35 @@ createApp({
         name: '科研助手',
         icon: 'fa-solid fa-flask',
         description: '苏格拉底式引导实验设计，培养科研思维',
-        gradient: 'linear-gradient(135deg, #10b981, #059669)',
+        gradient: 'linear-gradient(135deg, oklch(0.72 0.15 160), oklch(0.62 0.14 160))',
         features: ['文献检索与综述', '实验设计引导', '研究假设构建', '数据分析方法指导', '批判性思维培养', '学术诚信提醒']
       },
       'literature-review': {
         name: '文献综述',
         icon: 'fa-solid fa-book-open',
         description: 'PRISMA系统综述方法，多数据库协同检索',
-        gradient: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
+        gradient: 'linear-gradient(135deg, oklch(0.72 0.13 230), oklch(0.62 0.12 230))',
         features: ['PICO 框架设计', '检索策略制定', 'PRISMA 流程图', '文献质量评估', '纳入/排除标准', '偏倚风险识别']
       },
       'paper-writing': {
         name: '论文写作',
         icon: 'fa-solid fa-pen-fancy',
         description: '学术论文写作指导，支持多种引用格式',
-        gradient: 'linear-gradient(135deg, #f97316, #ea580c)',
+        gradient: 'linear-gradient(135deg, oklch(0.72 0.17 35), oklch(0.62 0.16 35))',
         features: ['论文结构规划', '学术语言润色', 'APA/MLA/GB/T 7714', '论证逻辑梳理', '学术规范检查', '摘要和关键词优化']
       },
       'academic-tutoring': {
         name: '虚拟导师',
         icon: 'fa-solid fa-graduation-cap',
         description: '个性化学习支持，答疑解惑',
-        gradient: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+        gradient: 'linear-gradient(135deg, oklch(0.72 0.16 290), oklch(0.62 0.18 290))',
         features: ['个性化知识讲解', '学习路径规划', '难点答疑解惑', '学习进度追踪', '因材施教策略', '启发式提问引导']
       },
       'math-assistant': {
         name: '数学助手',
         icon: 'fa-solid fa-square-root-variable',
         description: '手写公式识别，数学推导与解题',
-        gradient: 'linear-gradient(135deg, #ec4899, #db2777)',
+        gradient: 'linear-gradient(135deg, oklch(0.72 0.18 340), oklch(0.62 0.17 340))',
         features: ['手写公式识别与解析', 'LaTeX 公式编辑', '分步解题推导', '数学概念可视化', '多领域数学支持', '错题分析与举一反三']
       }
     };
@@ -263,22 +263,26 @@ createApp({
       completedPomodoros: 0,
       todayPomodoros: 0
     });
-    const pomodoroTask = ref('');
-    const pomodoroTaskFocused = ref(false);
     const pomodoroSettingsExpanded = ref(false);
     const pomodoroMusicEnabled = ref(false);
     const pomodoroVolume = ref(50);
     const pomodoroCurrentTrack = ref(null);
+    const showCompletedPanel = ref(false);
     let pomodoroTimer = null;
     let pomodoroAudio = null;
 
-    // 音乐曲目列表
+    // 音乐曲目列表 - 使用本地mp3文件
     const pomodoroTracks = [
-      { id: 'rain', name: '雨声', icon: 'fa-solid fa-cloud-rain', url: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_c8c8a73467.mp3' },
-      { id: 'forest', name: '森林', icon: 'fa-solid fa-tree', url: 'https://cdn.pixabay.com/download/audio/2022/02/07/audio_5f1f804c45.mp3' },
-      { id: 'ocean', name: '海浪', icon: 'fa-solid fa-water', url: 'https://cdn.pixabay.com/download/audio/2022/03/19/audio_58b31b83c1.mp3' },
-      { id: 'fire', name: '篝火', icon: 'fa-solid fa-fire', url: 'https://cdn.pixabay.com/download/audio/2021/08/09/audio_dc39a0f9a0.mp3' },
-      { id: 'cafe', name: '咖啡厅', icon: 'fa-solid fa-mug-saucer', url: 'https://cdn.pixabay.com/download/audio/2022/10/25/audio_7c5e3d9a47.mp3' }
+      { id: 'nostalgia', name: 'Nostalgia', icon: 'fa-solid fa-moon', file: '01_Nostalgia.mp3' },
+      { id: 'fishstep', name: 'Fish Step', icon: 'fa-solid fa-fish', file: '02_Fish Step.mp3' },
+      { id: 'newings', name: 'NEWings', icon: 'fa-solid fa-dove', file: '03_NEWings.mp3' },
+      { id: 'chilldream', name: 'ChilDream', icon: 'fa-solid fa-cloud', file: '05_ChilDream.mp3' },
+      { id: 'memory', name: 'Memory', icon: 'fa-solid fa-clock-rotate-left', file: '09_Memory.mp3' },
+      { id: 'stillair', name: 'Still Air', icon: 'fa-solid fa-wind', file: '10_Still Air.mp3' },
+      { id: 'petals', name: 'Petals', icon: 'fa-solid fa-seedling', file: '12_Petals.mp3' },
+      { id: 'timeless', name: 'Timeless', icon: 'fa-solid fa-infinity', file: '15_Timeless.mp3' },
+      { id: 'aqua', name: 'Aqua Room', icon: 'fa-solid fa-droplet', file: '16_Aqua Room.mp3' },
+      { id: 'indigo', name: 'Indigo', icon: 'fa-solid fa-palette', file: '14_Indigo.mp3' }
     ];
 
     // 番茄钟显示文本
@@ -369,7 +373,8 @@ createApp({
         pomodoroAudio.pause();
       }
 
-      pomodoroAudio = new Audio(pomodoroCurrentTrack.value.url);
+      // 使用本地mp3文件路径
+      pomodoroAudio = new Audio(`/mp3/${pomodoroCurrentTrack.value.file}`);
       pomodoroAudio.loop = true;
       pomodoroAudio.volume = pomodoroVolume.value / 100;
       pomodoroAudio.play().catch(e => console.log('音乐播放失败:', e));
@@ -457,13 +462,14 @@ createApp({
 
     // 记录番茄完成
     const recordPomodoroComplete = async () => {
-      growth.value.exp += 15;
-      growth.value.totalExp += 15;
+      // 更新番茄钟统计
       if (!growth.value.stats.pomodoros) {
         growth.value.stats.pomodoros = 0;
       }
       growth.value.stats.pomodoros++;
-      await checkAchievements();
+
+      // 增加经验
+      await addExp(expRewards.pomodoroComplete, '完成番茄钟');
     };
 
     // 保存番茄钟状态
@@ -507,23 +513,270 @@ createApp({
       pomodoroState.value.timeLeft = pomodoroSettings.value.workDuration * 60;
     };
 
+    // ==================== 待办事项系统 ====================
+    const showTodoPanel = ref(false);
+    const todoLists = ref([]);
+    const activeTodoList = ref(null);
+    const newTodoText = ref('');
+    const newTodoDueDate = ref('');
+    const todoPanelPos = ref({ x: 80, y: window.innerHeight - 524 });  // 面板位置
+    let todoDragStart = { x: 0, y: 0, posX: 0, posY: 0 };
+    let isDraggingTodo = false;
+
+    // 今日日期字符串
+    const todayDate = computed(() => {
+      const today = new Date();
+      return today.toISOString().split('T')[0];
+    });
+
+    // 当前选中的列表
+    const currentTodoList = computed(() => {
+      return todoLists.value.find(l => l.id === activeTodoList.value) || null;
+    });
+
+    // 当前列表的未完成任务
+    const currentIncompleteTodos = computed(() => {
+      if (!currentTodoList.value) return [];
+      return currentTodoList.value.todos.filter(t => !t.completed);
+    });
+
+    // 当前列表的已完成任务
+    const currentCompletedTodos = computed(() => {
+      if (!currentTodoList.value) return [];
+      return currentTodoList.value.todos.filter(t => t.completed).sort((a, b) =>
+        new Date(b.completedAt) - new Date(a.completedAt)
+      );
+    });
+
+    // 是否有未完成任务
+    const hasIncompleteTodos = computed(() => {
+      return currentIncompleteTodos.value.length > 0;
+    });
+
+    // 获取列表统计
+    const getTodoStats = (listId) => {
+      const list = todoLists.value.find(l => l.id === listId);
+      if (!list) return { total: 0, completed: 0, incomplete: 0 };
+      const completed = list.todos.filter(t => t.completed).length;
+      const total = list.todos.length;
+      return { total, completed, incomplete: total - completed };
+    };
+
+    // 检查是否过期
+    const isOverdue = (todo) => {
+      if (!todo.dueDate || todo.completed) return false;
+      const dueDate = new Date(todo.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return dueDate < today;
+    };
+
+    // 格式化日期（短格式）
+    const formatDateShort = (dateStr) => {
+      if (!dateStr) return '';
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+      if (dateStr === todayStr) {
+        return '今天';
+      } else if (dateStr === tomorrowStr) {
+        return '明天';
+      } else {
+        const date = new Date(dateStr);
+        return `${date.getMonth() + 1}/${date.getDate()}`;
+      }
+    };
+
+    // 添加新列表
+    const addTodoList = () => {
+      const newList = {
+        id: 'list_' + Date.now(),
+        name: '新列表',
+        todos: [],
+        createdAt: new Date().toISOString()
+      };
+      todoLists.value.push(newList);
+      activeTodoList.value = newList.id;
+      saveTodoLists();
+    };
+
+    // 删除列表
+    const deleteTodoList = (listId) => {
+      todoLists.value = todoLists.value.filter(l => l.id !== listId);
+      if (activeTodoList.value === listId) {
+        activeTodoList.value = todoLists.value[0]?.id || null;
+      }
+      saveTodoLists();
+    };
+
+    // 添加任务
+    const addTodo = () => {
+      if (!newTodoText.value.trim() || !currentTodoList.value) return;
+
+      const newTodo = {
+        id: 'todo_' + Date.now(),
+        text: newTodoText.value.trim(),
+        dueDate: newTodoDueDate.value || null,
+        completed: false,
+        createdAt: new Date().toISOString()
+      };
+
+      currentTodoList.value.todos.push(newTodo);
+      newTodoText.value = '';
+      newTodoDueDate.value = '';
+      saveTodoLists();
+    };
+
+    // 完成任务
+    const completeTodo = (todoId) => {
+      if (!currentTodoList.value) return;
+      const todo = currentTodoList.value.todos.find(t => t.id === todoId);
+      if (todo) {
+        todo.completed = true;
+        todo.completedAt = new Date().toISOString();
+        saveTodoLists();
+
+        // 更新待办完成统计
+        if (!growth.value.stats.todosCompleted) {
+          growth.value.stats.todosCompleted = 0;
+        }
+        growth.value.stats.todosCompleted++;
+
+        // 增加经验
+        addExp(expRewards.todoComplete, '完成待办任务');
+      }
+    };
+
+    // 恢复任务
+    const restoreTodo = (todoId) => {
+      if (!currentTodoList.value) return;
+      const todo = currentTodoList.value.todos.find(t => t.id === todoId);
+      if (todo) {
+        todo.completed = false;
+        todo.completedAt = null;
+        saveTodoLists();
+        // 恢复时减少统计（如果之前增加了）
+        if (growth.value.stats.todosCompleted > 0) {
+          growth.value.stats.todosCompleted--;
+        }
+      }
+    };
+
+    // 删除任务
+    const deleteTodo = (todoId) => {
+      if (!currentTodoList.value) return;
+      currentTodoList.value.todos = currentTodoList.value.todos.filter(t => t.id !== todoId);
+      saveTodoLists();
+    };
+
+    // 全部完成
+    const completeAllTodos = () => {
+      if (!currentTodoList.value) return;
+      const incompleteCount = currentIncompleteTodos.value.length;
+      currentTodoList.value.todos.forEach(todo => {
+        if (!todo.completed) {
+          todo.completed = true;
+          todo.completedAt = new Date().toISOString();
+        }
+      });
+      saveTodoLists();
+
+      // 更新待办完成统计
+      if (!growth.value.stats.todosCompleted) {
+        growth.value.stats.todosCompleted = 0;
+      }
+      growth.value.stats.todosCompleted += incompleteCount;
+
+      // 批量增加经验
+      addExp(incompleteCount * expRewards.todoComplete, '批量完成待办任务');
+    };
+
+    // 清空已完成
+    const clearCompletedTodos = () => {
+      if (!currentTodoList.value) return;
+      currentTodoList.value.todos = currentTodoList.value.todos.filter(t => !t.completed);
+      saveTodoLists();
+    };
+
+    // 保存待办列表
+    const saveTodoLists = () => {
+      localStorage.setItem('edu-todo-lists', JSON.stringify(todoLists.value));
+    };
+
+    // 加载待办列表
+    const loadTodoLists = () => {
+      try {
+        const saved = localStorage.getItem('edu-todo-lists');
+        if (saved) {
+          todoLists.value = JSON.parse(saved);
+          if (todoLists.value.length > 0 && !activeTodoList.value) {
+            activeTodoList.value = todoLists.value[0].id;
+          }
+        }
+        // 加载面板位置
+        const posSaved = localStorage.getItem('edu-todo-pos');
+        if (posSaved) {
+          todoPanelPos.value = JSON.parse(posSaved);
+        }
+      } catch (e) {
+        todoLists.value = [];
+      }
+    };
+
+    // 拖拽开始
+    const startTodoDrag = (e) => {
+      e.preventDefault();
+      isDraggingTodo = true;
+      todoDragStart = {
+        x: e.clientX,
+        y: e.clientY,
+        posX: todoPanelPos.value.x,
+        posY: todoPanelPos.value.y
+      };
+      document.addEventListener('mousemove', onTodoDrag);
+      document.addEventListener('mouseup', stopTodoDrag);
+    };
+
+    // 拖拽中
+    const onTodoDrag = (e) => {
+      if (!isDraggingTodo) return;
+      const dx = e.clientX - todoDragStart.x;
+      const dy = e.clientY - todoDragStart.y;
+      // 限制在屏幕范围内
+      const newX = Math.max(0, Math.min(window.innerWidth - 380, todoDragStart.posX + dx));
+      const newY = Math.max(0, Math.min(window.innerHeight - 100, todoDragStart.posY + dy));
+      todoPanelPos.value = { x: newX, y: newY };
+    };
+
+    // 拖拽结束
+    const stopTodoDrag = () => {
+      isDraggingTodo = false;
+      document.removeEventListener('mousemove', onTodoDrag);
+      document.removeEventListener('mouseup', stopTodoDrag);
+      // 保存位置
+      localStorage.setItem('edu-todo-pos', JSON.stringify(todoPanelPos.value));
+    };
+
     // ==================== 成长系统 ====================
     const growth = ref({
       level: 1,
       exp: 0,
       totalExp: 0,
       stats: {
-        conversations: 0,
-        papersRead: 0,
-        experimentsDesigned: 0,
-        papersWritten: 0,
-        skillUses: 0,           // 技能使用次数
-        bookmarksSaved: 0,      // 收藏书签数
-        formulasRecognized: 0,  // 公式识别次数
-        voiceChats: 0,          // 语音对话次数
-        stagesCompleted: 0,     // 完成阶段数
-        dailyLogins: 0,         // 每日登录天数
-        continuousDays: 0       // 连续使用天数
+        conversations: 0,        // 对话次数
+        skillUses: 0,            // 技能使用次数
+        bookmarksSaved: 0,       // 收藏书签数
+        formulasRecognized: 0,   // 公式识别次数
+        voiceChats: 0,           // 语音对话次数
+        stagesCompleted: 0,      // 完成阶段数
+        dailyLogins: 0,          // 每日登录天数
+        continuousDays: 0,       // 连续使用天数
+        pomodoros: 0,            // 番茄钟完成数
+        todosCompleted: 0        // 待办完成数
       },
       lastLoginDate: null,      // 上次登录日期
       todayExpGained: 0         // 今日获得经验（用于限制每日上限）
@@ -540,29 +793,32 @@ createApp({
       dailyLogin: 20,        // 每日登录
       continuousDay: 10,     // 连续使用（每天额外）
       achievementUnlock: 50, // 解锁成就
-      firstSkillUse: 30      // 首次使用某技能
+      firstSkillUse: 30,     // 首次使用某技能
+      pomodoroComplete: 15,  // 完成番茄钟
+      todoComplete: 5        // 完成待办任务
     };
 
     const achievements = ref([
       { id: 'first_chat', name: '初次对话', description: '完成第一次对话', icon: 'fa-solid fa-comments', unlocked: false },
-      { id: 'paper_reader', name: '文献读者', description: '阅读10篇文献', icon: 'fa-solid fa-book', unlocked: false },
-      { id: 'experiment_designer', name: '实验设计师', description: '设计5个实验', icon: 'fa-solid fa-flask', unlocked: false },
-      { id: 'paper_writer', name: '论文写作者', description: '完成论文写作', icon: 'fa-solid fa-pen', unlocked: false },
+      { id: 'skill_explorer', name: '技能探索者', description: '使用所有技能各1次', icon: 'fa-solid fa-wand-magic-sparkles', unlocked: false },
       { id: 'level_5', name: '进阶学者', description: '达到5级', icon: 'fa-solid fa-star', unlocked: false },
       { id: 'level_10', name: '资深学者', description: '达到10级', icon: 'fa-solid fa-crown', unlocked: false },
-      { id: 'collaboration_master', name: '协作大师', description: '完成20次协作', icon: 'fa-solid fa-handshake', unlocked: false },
-      { id: 'knowledge_seeker', name: '知识探索者', description: '使用所有技能', icon: 'fa-solid fa-compass', unlocked: false },
+      { id: 'collaboration_master', name: '协作大师', description: '完成20次协作会话', icon: 'fa-solid fa-handshake', unlocked: false },
       { id: 'formula_master', name: '公式达人', description: '识别10个手写公式', icon: 'fa-solid fa-square-root-variable', unlocked: false },
-      { id: 'bookworm', name: '书虫', description: '收藏20条知识书签', icon: 'fa-solid fa-bookmark', unlocked: false },
+      { id: 'bookworm', name: '知识收藏家', description: '收藏20条知识书签', icon: 'fa-solid fa-bookmark', unlocked: false },
       { id: 'night_owl', name: '夜间学者', description: '在深夜使用研伴', icon: 'fa-solid fa-moon', unlocked: false },
-      { id: 'polyglot', name: '多技能通', description: '每个技能至少使用3次', icon: 'fa-solid fa-layer-group', unlocked: false }
+      { id: 'pomodoro_master', name: '番茄大师', description: '完成10个番茄钟', icon: 'fa-solid fa-clock', unlocked: false },
+      { id: 'todo_expert', name: '任务达人', description: '完成50个待办任务', icon: 'fa-solid fa-list-check', unlocked: false },
+      { id: 'voice_pioneer', name: '语音先锋', description: '进行10次语音对话', icon: 'fa-solid fa-microphone', unlocked: false },
+      { id: 'stage_master', name: '阶段大师', description: '完成20个学习阶段', icon: 'fa-solid fa-flag-checkered', unlocked: false }
     ]);
 
+    // 统计卡片 - 与实际业务数据匹配
     const statCards = [
       { key: 'conversations', label: '对话次数', icon: 'fa-solid fa-comments' },
       { key: 'skillUses', label: '技能使用', icon: 'fa-solid fa-wand-magic-sparkles' },
       { key: 'bookmarksSaved', label: '知识书签', icon: 'fa-solid fa-bookmark' },
-      { key: 'formulasRecognized', label: '公式识别', icon: 'fa-solid fa-square-root-variable' }
+      { key: 'pomodoros', label: '番茄钟', icon: 'fa-solid fa-clock' }
     ];
 
     // ==================== 经验获取方法 ====================
@@ -1019,9 +1275,16 @@ createApp({
         const textTer = cs.getPropertyValue('--text-tertiary').trim() || 'rgba(255,255,255,0.45)';
         const gridColor = currentTheme.value === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
 
+        // 技能使用分布图 - 使用 oklch 颜色
         const skillNames = skills.value.map(s => s.name);
         const skillValues = skills.value.map(s => skillUsage.value[s.id] || 0);
-        const skillColors = ['#10b981', '#0ea5e9', '#f97316', '#8b5cf6', '#ec4899'];
+        const skillColors = [
+          'oklch(0.72 0.15 160)',  // 青绿
+          'oklch(0.72 0.13 230)',  // 天蓝
+          'oklch(0.72 0.17 35)',   // 橙色
+          'oklch(0.72 0.16 290)',  // 紫色
+          'oklch(0.72 0.18 340)'   // 粉红
+        ];
 
         skillChart.value = new Chart(skillCanvas.getContext('2d'), {
           type: 'doughnut',
@@ -1029,7 +1292,7 @@ createApp({
             labels: skillNames,
             datasets: [{
               data: skillValues.every(v => v === 0) ? [1, 1, 1, 1, 1] : skillValues,
-              backgroundColor: skillColors.map(c => c + '33'),
+              backgroundColor: skillColors.map(c => c.replace(')', ' / 0.2)')),
               borderColor: skillColors,
               borderWidth: 2
             }]
@@ -1038,22 +1301,49 @@ createApp({
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-              legend: { position: 'bottom', labels: { color: textSec, font: { size: 11, family: 'Outfit' }, padding: 12 } }
+              legend: { position: 'bottom', labels: { color: textSec, font: { size: 11, family: 'Outfit' }, padding: 12 } },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                    const value = context.raw;
+                    const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                    return `${context.label}: ${value} 次 (${percentage}%)`;
+                  }
+                }
+              }
             },
             cutout: '60%'
           }
         });
 
+        // 学习活动统计图 - 显示实际有业务逻辑的数据
         const stats = growth.value.stats;
+        const activityLabels = ['对话', '技能使用', '书签', '番茄钟', '语音'];
+        const activityData = [
+          stats.conversations || 0,
+          stats.skillUses || 0,
+          stats.bookmarksSaved || 0,
+          stats.pomodoros || 0,
+          stats.voiceChats || 0
+        ];
+        const activityColors = [
+          'oklch(0.72 0.15 160)',
+          'oklch(0.72 0.13 230)',
+          'oklch(0.72 0.17 35)',
+          'oklch(0.72 0.16 290)',
+          'oklch(0.72 0.18 340)'
+        ];
+
         activityChart.value = new Chart(activityCanvas.getContext('2d'), {
           type: 'bar',
           data: {
-            labels: ['对话', '文献', '实验', '论文'],
+            labels: activityLabels,
             datasets: [{
               label: '学习活动',
-              data: [stats.conversations || 0, stats.papersRead || 0, stats.experimentsDesigned || 0, stats.papersWritten || 0],
-              backgroundColor: ['#10b98133', '#0ea5e933', '#f9731633', '#8b5cf633'],
-              borderColor: ['#10b981', '#0ea5e9', '#f97316', '#8b5cf6'],
+              data: activityData,
+              backgroundColor: activityColors.map(c => c.replace(')', ' / 0.2)')),
+              borderColor: activityColors,
               borderWidth: 2,
               borderRadius: 6
             }]
@@ -1062,7 +1352,7 @@ createApp({
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-              y: { beginAtZero: true, ticks: { color: textTer, font: { size: 10 } }, grid: { color: gridColor } },
+              y: { beginAtZero: true, ticks: { color: textTer, font: { size: 10 }, stepSize: 1 }, grid: { color: gridColor } },
               x: { ticks: { color: textTer, font: { size: 10 } }, grid: { display: false } }
             },
             plugins: { legend: { display: false } }
@@ -1597,6 +1887,10 @@ createApp({
 
       if (existingIdx > -1) {
         bookmarks.value.splice(existingIdx, 1);
+        // 删除书签时更新统计
+        growth.value.stats.bookmarksSaved = Math.max(0, (growth.value.stats.bookmarksSaved || 0) - 1);
+        // 同步到后端
+        fetch('/api/education/bookmarks/record_delete', { method: 'POST' }).catch(() => {});
       } else {
         bookmarks.value.push({
           id: Date.now(),
@@ -1607,15 +1901,23 @@ createApp({
           timestamp: msg.timestamp || new Date().toISOString(),
           createdAt: new Date().toISOString()
         });
-        // 新增书签时获得经验奖励
-        await recordBookmarkSave();
+        // 新增书签时更新本地统计
+        growth.value.stats.bookmarksSaved = (growth.value.stats.bookmarksSaved || 0) + 1;
+        growth.value.exp += 5;
+        growth.value.totalExp += 5;
+        // 同步到后端
+        fetch('/api/education/bookmarks/record_save', { method: 'POST' }).catch(() => {});
       }
       localStorage.setItem('edu-bookmarks', JSON.stringify(bookmarks.value));
     };
 
-    const deleteBookmark = (bookmarkId) => {
+    const deleteBookmark = async (bookmarkId) => {
       bookmarks.value = bookmarks.value.filter(b => b.id !== bookmarkId);
       localStorage.setItem('edu-bookmarks', JSON.stringify(bookmarks.value));
+      // 删除书签时更新统计
+      growth.value.stats.bookmarksSaved = Math.max(0, (growth.value.stats.bookmarksSaved || 0) - 1);
+      // 同步到后端
+      fetch('/api/education/bookmarks/record_delete', { method: 'POST' }).catch(() => {});
     };
 
     const isBookmarked = (msg) => {
@@ -1671,16 +1973,17 @@ createApp({
     };
 
     // ==================== 技能方法 ====================
+    // 使用 oklch 格式的技能颜色（感知均匀）
     const skillColors = {
-      'research-assistant': '#10b981',
-      'literature-review': '#0ea5e9',
-      'paper-writing': '#f97316',
-      'academic-tutoring': '#8b5cf6',
-      'math-assistant': '#ec4899'
+      'research-assistant': 'oklch(0.72 0.15 160)',   // 青绿色
+      'literature-review': 'oklch(0.72 0.13 230)',    // 天空蓝
+      'paper-writing': 'oklch(0.72 0.17 35)',         // 橙色
+      'academic-tutoring': 'oklch(0.72 0.16 290)',    // 紫色
+      'math-assistant': 'oklch(0.72 0.18 340)'        // 粉红色
     };
 
     const getSkillColor = (skillId) => {
-      return skillColors[skillId] || '#10b981';
+      return skillColors[skillId] || 'oklch(0.72 0.15 160)';
     };
 
     const selectSkill = (skillId) => {
@@ -1941,7 +2244,15 @@ createApp({
             growth.value.level++;
           }
 
-          growth.value.stats.conversations = (growth.value.stats.conversations || 0) + 1;
+          // 本地即时显示统计（后端会持久化）
+          if (currentSkill.value) {
+            // 使用技能对话，更新本地技能使用统计
+            skillUsage.value[currentSkill.value] = (skillUsage.value[currentSkill.value] || 0) + 1;
+            growth.value.stats.skillUses = (growth.value.stats.skillUses || 0) + 1;
+          } else {
+            // 普通对话，统计到对话次数
+            growth.value.stats.conversations = (growth.value.stats.conversations || 0) + 1;
+          }
           await checkAchievements();
         }
 
@@ -2920,18 +3231,17 @@ createApp({
     const checkAchievements = async () => {
       const conditions = {
         'first_chat': growth.value.stats.conversations >= 1,
-        'paper_reader': growth.value.stats.papersRead >= 10,
-        'experiment_designer': growth.value.stats.experimentsDesigned >= 5,
-        'paper_writer': growth.value.stats.papersWritten >= 1,
+        'skill_explorer': Object.keys(skillUsage.value).length >= 5,
         'level_5': growth.value.level >= 5,
         'level_10': growth.value.level >= 10,
-        'collaboration_master': collabStats.value.totalSessions >= 20,
-        'knowledge_seeker': Object.keys(skillUsage.value).length >= 4,
-        // 新增成就条件
+        'collaboration_master': (growth.value.stats.conversations || 0) >= 20,
         'formula_master': growth.value.stats.formulasRecognized >= 10,
         'bookworm': growth.value.stats.bookmarksSaved >= 20,
         'night_owl': new Date().getHours() >= 23 || new Date().getHours() < 5,
-        'polyglot': Object.values(skillUsage.value).filter(count => count >= 3).length >= 5
+        'pomodoro_master': (growth.value.stats.pomodoros || 0) >= 10,
+        'todo_expert': (growth.value.stats.todosCompleted || 0) >= 50,
+        'voice_pioneer': (growth.value.stats.voiceChats || 0) >= 10,
+        'stage_master': (growth.value.stats.stagesCompleted || 0) >= 20
       };
 
       for (const [achievementId, condition] of Object.entries(conditions)) {
@@ -3053,6 +3363,7 @@ createApp({
       await loadData();
       await loadApiSettings();
       loadPomodoroState();  // 加载番茄钟状态
+      loadTodoLists();      // 加载待办列表
       setTimeout(() => {
         document.getElementById('loadingOverlay').classList.add('hidden');
       }, 500);
@@ -3173,8 +3484,6 @@ createApp({
       showPomodoro,
       pomodoroSettings,
       pomodoroState,
-      pomodoroTask,
-      pomodoroTaskFocused,
       pomodoroSettingsExpanded,
       pomodoroMusicEnabled,
       pomodoroVolume,
@@ -3184,6 +3493,7 @@ createApp({
       pomodoroPhaseText,
       pomodoroProgress,
       pomodoroPercent,
+      showCompletedPanel,
       startPomodoro,
       pausePomodoro,
       resetPomodoro,
@@ -3191,6 +3501,31 @@ createApp({
       updatePomodoroSetting,
       togglePomodoroMusic,
       selectPomodoroTrack,
+
+      // 待办事项
+      showTodoPanel,
+      todoLists,
+      todoPanelPos,
+      activeTodoList,
+      newTodoText,
+      newTodoDueDate,
+      todayDate,
+      currentTodoList,
+      currentIncompleteTodos,
+      currentCompletedTodos,
+      hasIncompleteTodos,
+      getTodoStats,
+      isOverdue,
+      formatDateShort,
+      addTodoList,
+      deleteTodoList,
+      addTodo,
+      completeTodo,
+      restoreTodo,
+      deleteTodo,
+      completeAllTodos,
+      clearCompletedTodos,
+      startTodoDrag,
 
       // 数字人
       xingyunSession,
