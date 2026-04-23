@@ -99,6 +99,11 @@
           <span v-if="pomodoroState.isRunning">{{ pomodoroDisplay }}</span>
           <span v-else>番茄</span>
         </button>
+        <!-- 待办事项按钮 -->
+        <button class="quick-btn" :class="{ active: showTodoPanel }" @click="showTodoPanel = !showTodoPanel" title="待办事项">
+          <i class="fa-solid fa-list-check"></i>
+          <span>待办</span>
+        </button>
         <button class="quick-btn" @click="toggleTheme" title="切换主题">
           <i :class="currentTheme === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon'"></i>
           <span>{{ currentTheme === 'dark' ? '亮色' : '暗色' }}</span>
@@ -109,10 +114,9 @@
         </button>
       </aside>
 
-      <!-- 番茄钟悬浮面板 - 全新设计 -->
+      <!-- 番茄钟悬浮面板 -->
       <transition name="pomodoro-panel">
         <div v-if="showPomodoro" class="pomodoro-panel" :class="pomodoroState.phase">
-          <!-- 顶部装饰光晕 -->
           <div class="pp-glow"></div>
 
           <div class="pp-header">
@@ -126,23 +130,6 @@
               </div>
             </div>
             <button class="pp-close" @click="showPomodoro = false"><i class="fa-solid fa-xmark"></i></button>
-          </div>
-
-          <!-- 当前任务 -->
-          <div class="pp-task">
-            <input
-              v-model="pomodoroTask"
-              type="text"
-              placeholder="正在专注做什么？"
-              class="pp-task-input"
-              @focus="pomodoroTaskFocused = true"
-              @blur="pomodoroTaskFocused = false"
-            />
-            <transition name="pp-task-hint">
-              <span v-if="!pomodoroTask && !pomodoroTaskFocused" class="pp-task-hint">
-                <i class="fa-solid fa-lightbulb"></i> 设定目标，效率更高
-              </span>
-            </transition>
           </div>
 
           <!-- 计时器核心 -->
@@ -277,6 +264,165 @@
                   <span class="ppsi-unit">分钟</span>
                 </div>
               </div>
+            </div>
+          </transition>
+        </div>
+      </transition>
+
+      <!-- 待办事项独立面板 -->
+      <transition name="todo-panel">
+        <div v-if="showTodoPanel" class="todo-panel" :style="{ left: todoPanelPos.x + 'px', top: todoPanelPos.y + 'px' }">
+          <!-- 拖拽手柄 -->
+          <div class="tp-drag-handle" @mousedown="startTodoDrag"></div>
+
+          <div class="tp-header" @mousedown="startTodoDrag">
+            <div class="tph-title">
+              <div class="tph-icon">
+                <i class="fa-solid fa-list-check"></i>
+              </div>
+              <div>
+                <h3>待办事项</h3>
+                <span class="tph-subtitle">管理你的任务</span>
+              </div>
+            </div>
+            <button class="tp-close" @click.stop="showTodoPanel = false"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <!-- 待办列表标签页 -->
+          <div class="tp-tabs">
+            <div class="tpt-scroll">
+              <button
+                v-for="list in todoLists"
+                :key="list.id"
+                class="tpt-tab"
+                :class="{ active: activeTodoList === list.id }"
+                @click="activeTodoList = list.id"
+              >
+                <span class="tptt-name">{{ list.name }}</span>
+                <span class="tptt-count">{{ getTodoStats(list.id).completed }}/{{ getTodoStats(list.id).total }}</span>
+              </button>
+            </div>
+            <button class="tpt-add" @click="addTodoList" title="添加列表">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
+
+          <!-- 当前列表内容 -->
+          <div class="tp-content" v-if="currentTodoList">
+            <!-- 列表头部 -->
+            <div class="tpc-header">
+              <input
+                v-model="currentTodoList.name"
+                class="tpc-title"
+                @blur="saveTodoLists"
+                placeholder="列表名称"
+              />
+              <button class="tpc-menu" @click="deleteTodoList(currentTodoList.id)" title="删除列表">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+
+            <!-- 添加任务 -->
+            <div class="tpc-add">
+              <input
+                v-model="newTodoText"
+                @keyup.enter="addTodo"
+                placeholder="添加新任务（按回车添加）..."
+                class="tpc-add-input"
+              />
+              <input
+                v-model="newTodoDueDate"
+                type="date"
+                class="tpc-add-date"
+                :min="todayDate"
+              />
+            </div>
+
+            <!-- 任务列表 -->
+            <div class="tpc-list">
+              <transition-group name="todo-item">
+                <div
+                  v-for="todo in currentIncompleteTodos"
+                  :key="todo.id"
+                  class="tpc-item"
+                  :class="{ overdue: isOverdue(todo) }"
+                >
+                  <button class="tpci-check" @click="completeTodo(todo.id)">
+                    <i class="fa-regular fa-circle"></i>
+                  </button>
+                  <div class="tpci-body">
+                    <input
+                      v-model="todo.text"
+                      class="tpci-text"
+                      @blur="saveTodoLists"
+                    />
+                    <div class="tpci-meta">
+                      <span v-if="todo.dueDate" class="tpci-due" :class="{ overdue: isOverdue(todo) }">
+                        <i class="fa-regular fa-calendar"></i>
+                        {{ formatDateShort(todo.dueDate) }}
+                      </span>
+                    </div>
+                  </div>
+                  <button class="tpci-delete" @click="deleteTodo(todo.id)">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </transition-group>
+
+              <div v-if="currentIncompleteTodos.length === 0" class="tpc-empty">
+                <i class="fa-solid fa-clipboard-check"></i>
+                <span>暂无待办任务</span>
+              </div>
+            </div>
+
+            <!-- 已完成入口 -->
+            <div class="tpc-completed-toggle" v-if="currentCompletedTodos.length > 0" @click="showCompletedPanel = !showCompletedPanel">
+              <span><i class="fa-solid fa-check-circle"></i> 已完成 {{ currentCompletedTodos.length }} 项</span>
+              <i :class="showCompletedPanel ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"></i>
+            </div>
+          </div>
+
+          <!-- 空状态 -->
+          <div class="tp-empty" v-else>
+            <i class="fa-solid fa-list-check"></i>
+            <p>创建你的第一个待办列表</p>
+            <button class="tp-empty-btn" @click="addTodoList">
+              <i class="fa-solid fa-plus"></i> 新建列表
+            </button>
+          </div>
+
+          <!-- 已完成任务侧边栏 -->
+          <transition name="completed-panel">
+            <div v-if="showCompletedPanel && currentTodoList" class="tp-completed-panel">
+              <div class="tcp-header">
+                <h4><i class="fa-solid fa-check-double"></i> 已完成</h4>
+                <button class="tcp-close" @click="showCompletedPanel = false">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+              <div class="tcp-list">
+                <transition-group name="completed-item">
+                  <div
+                    v-for="todo in currentCompletedTodos"
+                    :key="todo.id"
+                    class="tcp-item"
+                  >
+                    <div class="tcpi-check">
+                      <i class="fa-solid fa-check-circle"></i>
+                    </div>
+                    <div class="tcpi-body">
+                      <span class="tcpi-text">{{ todo.text }}</span>
+                      <span class="tcpi-time">{{ formatTime(todo.completedAt) }}</span>
+                    </div>
+                    <button class="tcpi-restore" @click="restoreTodo(todo.id)" title="恢复">
+                      <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                  </div>
+                </transition-group>
+              </div>
+              <button class="tcp-clear" @click="clearCompletedTodos" v-if="currentCompletedTodos.length > 0">
+                <i class="fa-solid fa-trash"></i> 清空已完成
+              </button>
             </div>
           </transition>
         </div>
@@ -627,8 +773,8 @@
                 <svg viewBox="0 0 140 140">
                   <defs>
                     <linearGradient id="levelGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" style="stop-color:#10b981"/>
-                      <stop offset="100%" style="stop-color:#0ea5e9"/>
+                      <stop offset="0%" style="stop-color:oklch(0.72 0.15 160)"/>
+                      <stop offset="100%" style="stop-color:oklch(0.72 0.13 230)"/>
                     </linearGradient>
                   </defs>
                   <circle class="ring-bg" cx="70" cy="70" r="60"/>
@@ -689,13 +835,14 @@
 
             <!-- 成就墙 -->
             <div class="gm-achievements">
-              <h4><i class="fa-solid fa-trophy"></i> 成就徽章</h4>
+              <h4><i class="fa-solid fa-trophy"></i> 成就徽章 <span class="gma-count">{{ unlockedAchievements }}/{{ achievements.length }}</span></h4>
               <div class="gm-ach-grid">
                 <div
                   v-for="achievement in achievements"
                   :key="achievement.id"
                   class="gm-ach-item"
                   :class="{ unlocked: achievement.unlocked }"
+                  :title="achievement.description"
                 >
                   <div class="gma-icon">
                     <i :class="achievement.icon"></i>
