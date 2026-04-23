@@ -993,6 +993,27 @@ async def record_bookmark_delete():
     return {"status": "success"}
 
 
+# ==================== 阶段统计 API ====================
+
+@router.post("/stages/record_complete")
+async def record_stage_complete(stage_name: str = None):
+    """记录阶段完成"""
+    await ensure_storage()
+    cache = await get_cache()
+
+    # 增加阶段统计和经验
+    await cache.increment("growth", "stats.stagesCompleted", 1)
+    await cache.increment("growth", "exp", 25)
+    await cache.increment("growth", "totalExp", 25)
+
+    data = await cache.get("growth")
+    return {
+        "status": "success",
+        "stagesCompleted": data.get("stats", {}).get("stagesCompleted", 0),
+        "stageName": stage_name
+    }
+
+
 # ==================== 健康检查 ====================
 
 @router.get("/health")
@@ -1059,6 +1080,8 @@ class ChatRequest(BaseModel):
     use_fast_model: bool = False  # 强制使用快速模型
     max_tokens: Optional[int] = None  # 覆盖默认max_tokens
     voice_mode: bool = False  # 语音模式：简洁回复
+    current_stage: int = 0  # 当前阶段索引
+    stage_name: Optional[str] = None  # 当前阶段名称
 
 
 class ChatResponse(BaseModel):
@@ -1551,6 +1574,22 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
 """
         else:
             system_prompt = base_system_prompt
+
+        # 添加阶段上下文提示（让AI知道当前阶段）
+        stage_context = ""
+        if request.stage_name:
+            stage_context = f"""
+
+## 当前学习阶段
+用户当前处于【{request.stage_name}】阶段（第{request.current_stage + 1}阶段）。
+请严格按照此阶段的学习目标进行指导：
+- 聚焦于当前阶段的核心任务，不要跳过或提前讨论后续阶段的内容
+- 如果用户问题超出当前阶段范围，温和地引导回当前阶段
+- 只有当用户充分理解当前阶段内容后，才自然推进到下一阶段
+- 在回复开头用【{request.stage_name}】标记当前阶段
+- 需要跳转阶段时使用指令：[跳转阶段:目标阶段名]"""
+
+        system_prompt += stage_context
 
         messages.append({
             "role": "system",
