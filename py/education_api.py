@@ -23,7 +23,22 @@ def get_shared_http_client() -> httpx.AsyncClient:
     """获取共享的 HTTP 客户端，延迟初始化"""
     global _shared_http_client
     if _shared_http_client is None:
-        _shared_http_client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0))
+        # 配置更健壮的超时和重试设置
+        _shared_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=15.0,      # 连接超时 15 秒
+                read=60.0,         # 读取超时 60 秒
+                write=30.0,        # 写入超时 30 秒
+                pool=10.0          # 连接池超时 10 秒
+            ),
+            limits=httpx.Limits(
+                max_connections=100,
+                max_keepalive_connections=20,
+                keepalive_expiry=30.0
+            ),
+            # 在 Windows 上启用 HTTP/2 可能导致问题，禁用
+            http2=False
+        )
     return _shared_http_client
 
 def get_global_http_client():
@@ -946,6 +961,38 @@ async def get_skill_usage_stats():
     return {"usageStats": data.get("skillUsage", {})}
 
 
+# ==================== 书签统计 API ====================
+
+@router.post("/bookmarks/record_save")
+async def record_bookmark_save():
+    """记录书签保存"""
+    await ensure_storage()
+    cache = await get_cache()
+
+    # 增加书签统计和经验
+    await cache.increment("growth", "stats.bookmarksSaved", 1)
+    await cache.increment("growth", "exp", 5)
+    await cache.increment("growth", "totalExp", 5)
+
+    data = await cache.get("growth")
+    return {"status": "success", "bookmarksSaved": data.get("stats", {}).get("bookmarksSaved", 0)}
+
+
+@router.post("/bookmarks/record_delete")
+async def record_bookmark_delete():
+    """记录书签删除（减少统计）"""
+    await ensure_storage()
+    cache = await get_cache()
+
+    # 减少书签统计（最小为0）
+    data = await cache.get("growth", {"stats": {}})
+    current = data.get("stats", {}).get("bookmarksSaved", 0)
+    if current > 0:
+        await cache.increment("growth", "stats.bookmarksSaved", -1)
+
+    return {"status": "success"}
+
+
 # ==================== 健康检查 ====================
 
 @router.get("/health")
@@ -1811,10 +1858,27 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
             yield f"data: {json.dumps({'content': '', 'done': True, 'emotion': emotion, 'exp_gained': 10}, ensure_ascii=False)}\n\n"
 
         except httpx.TimeoutException:
+            print(f"[流式对话] 超时错误: API 响应超时")
             yield f"data: {json.dumps({'error': 'AI 响应超时，请稍后重试'}, ensure_ascii=False)}\n\n"
+        except httpx.ConnectError as e:
+            # DNS 解析失败或连接被拒绝
+            error_msg = str(e)
+            print(f"[流式对话] 连接错误: {error_msg}")
+            if "getaddrinfo failed" in error_msg or "11001" in error_msg:
+                yield f"data: {json.dumps({'error': '无法连接到 AI 服务，请检查网络连接或 API 地址配置是否正确'}, ensure_ascii=False)}\n\n"
+            else:
+                yield f"data: {json.dumps({'error': f'连接失败: {error_msg}'}, ensure_ascii=False)}\n\n"
+        except httpx.ConnectTimeout:
+            print(f"[流式对话] 连接超时: 无法建立与 API 服务器的连接")
+            yield f"data: {json.dumps({'error': '连接 AI 服务超时，请检查网络或代理设置'}, ensure_ascii=False)}\n\n"
         except Exception as e:
-            print(f"[流式对话] 错误: {e}")
-            yield f"data: {json.dumps({'error': f'对话失败: {str(e)}'}, ensure_ascii=False)}\n\n"
+            error_msg = str(e)
+            print(f"[流式对话] 错误: {error_msg}")
+            # 检测特定错误类型
+            if "getaddrinfo failed" in error_msg or "11001" in error_msg:
+                yield f"data: {json.dumps({'error': 'DNS 解析失败，请检查网络连接或 API 地址是否正确'}, ensure_ascii=False)}\n\n"
+            else:
+                yield f"data: {json.dumps({'error': f'对话失败: {error_msg}'}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         generate_stream(),
@@ -1851,14 +1915,18 @@ async def update_chat_stats(skill_id: str = None):
     await ensure_storage()
     cache = await get_cache()
 
-    # 使用原子增量操作，避免全量读写
-    await cache.increment("growth", "stats.conversations", 1)
+    # 根据是否使用技能分别统计
+    if skill_id:
+        # 使用技能对话，统计到技能使用次数
+        await cache.increment("growth", "stats.skillUses", 1)
+        # 同时更新具体技能的使用次数
+        await cache.increment("growth", f"skillUsage.{skill_id}", 1)
+    else:
+        # 普通对话，统计到对话次数
+        await cache.increment("growth", "stats.conversations", 1)
+
     await cache.increment("growth", "exp", 10)
     await cache.increment("growth", "totalExp", 10)
-
-    # 更新技能使用统计
-    if skill_id:
-        await cache.increment("growth", f"skillUsage.{skill_id}", 1)
 
     # 检查升级（需要读取当前数据）
     data = await cache.get("growth", {
@@ -2853,6 +2921,11 @@ ERROR_MESSAGES = {
         "message": "AI 服务暂时不可用",
         "detail": "请检查网络连接或稍后重试"
     },
+    "dns_resolution_failed": {
+        "code": "API_004",
+        "message": "无法连接到 AI 服务",
+        "detail": "DNS 解析失败，请检查网络连接或 API 地址配置是否正确"
+    },
     "api_rate_limit": {
         "code": "API_003",
         "message": "请求过于频繁，请稍后再试",
@@ -2935,6 +3008,10 @@ def _classify_error(error: Exception) -> str:
         错误类型键值
     """
     error_str = str(error).lower()
+
+    # DNS 解析失败 (Windows: 11001, Linux: -2)
+    if "getaddrinfo failed" in error_str or "11001" in error_str or "name or service not known" in error_str:
+        return "dns_resolution_failed"
 
     # 超时相关
     if "timeout" in error_str or "timed out" in error_str:
