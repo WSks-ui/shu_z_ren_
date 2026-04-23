@@ -38,7 +38,7 @@
             :key="s.id"
             class="di-stage"
             :class="{ active: i === currentStage, done: i < currentStage }"
-            @click="setStage(i)"
+            @click="setUserStage(i)"
           >
             <div class="di-stage-icon">
               <i :class="s.icon"></i>
