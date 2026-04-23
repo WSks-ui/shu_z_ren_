@@ -10773,6 +10773,7 @@ app.mount("/vrm", StaticFiles(directory=DEFAULT_VRM_DIR), name="vrm")
 app.mount("/tool_temp", StaticFiles(directory=TOOL_TEMP_DIR), name="tool_temp")
 app.mount("/uploaded_files", StaticFiles(directory=UPLOAD_FILES_DIR), name="uploaded_files")
 app.mount("/ext", StaticFiles(directory=EXT_DIR), name="ext")
+app.mount("/mp3", StaticFiles(directory=os.path.join(base_path, "mp3")), name="mp3")
 app.mount("/", StaticFiles(directory=os.path.join(base_path, "static"), html=True), name="static")
 
 # 简化main函数
