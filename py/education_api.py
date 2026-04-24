@@ -980,7 +980,7 @@ async def record_bookmark_save():
 
 @router.post("/bookmarks/record_delete")
 async def record_bookmark_delete():
-    """记录书签删除（减少统计）"""
+    """记录书签删除（减少统计和经验）"""
     await ensure_storage()
     cache = await get_cache()
 
@@ -989,6 +989,13 @@ async def record_bookmark_delete():
     current = data.get("stats", {}).get("bookmarksSaved", 0)
     if current > 0:
         await cache.increment("growth", "stats.bookmarksSaved", -1)
+        # 同时减少经验（最小为0）
+        current_exp = data.get("exp", 0)
+        if current_exp >= 5:
+            await cache.increment("growth", "exp", -5)
+        current_total = data.get("totalExp", 0)
+        if current_total >= 5:
+            await cache.increment("growth", "totalExp", -5)
 
     return {"status": "success"}
 
@@ -4206,3 +4213,469 @@ async def _generate_report_docx(report: dict) -> bytes:
     doc.save(buffer)
     buffer.seek(0)
     return buffer.getvalue()
+
+
+# ==================== 智能笔记系统 ====================
+
+# 笔记数据文件
+NOTES_DATA_FILE = EDUCATION_DATA_DIR / "notes_data.json"
+
+class NoteModel(BaseModel):
+    """笔记数据模型"""
+    id: str
+    title: str
+    content: str
+    summary: Optional[str] = None
+    tags: List[str] = []
+    skill_id: Optional[str] = None
+    skill_name: Optional[str] = None
+    source_type: str = "manual"  # manual, ai_generated, from_chat
+    source_session_id: Optional[str] = None
+    related_notes: List[str] = []
+    created_at: str
+    updated_at: str
+
+class NoteCreateRequest(BaseModel):
+    """创建笔记请求"""
+    title: str
+    content: str
+    tags: List[str] = []
+    skill_id: Optional[str] = None
+    skill_name: Optional[str] = None
+    source_type: str = "manual"
+    source_session_id: Optional[str] = None
+
+class NoteUpdateRequest(BaseModel):
+    """更新笔记请求"""
+    title: Optional[str] = None
+    content: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+class AIGenerateNoteRequest(BaseModel):
+    """AI生成笔记请求"""
+    session_id: Optional[str] = None
+    messages: Optional[List[Dict[str, str]]] = None
+    skill_id: Optional[str] = None
+    skill_name: Optional[str] = None
+    custom_prompt: Optional[str] = None
+
+
+async def load_notes() -> Dict[str, Any]:
+    """加载笔记数据"""
+    if NOTES_DATA_FILE.exists():
+        try:
+            with open(NOTES_DATA_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"notes": [], "tags": {}}
+
+
+async def save_notes(data: Dict[str, Any]):
+    """保存笔记数据"""
+    with open(NOTES_DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+@router.get("/notes")
+async def get_notes(
+    skill_id: Optional[str] = None,
+    tag: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0
+):
+    """获取笔记列表"""
+    data = await load_notes()
+    notes = data.get("notes", [])
+
+    # 过滤
+    if skill_id:
+        notes = [n for n in notes if n.get("skill_id") == skill_id]
+    if tag:
+        notes = [n for n in notes if tag in n.get("tags", [])]
+    if search:
+        search_lower = search.lower()
+        notes = [n for n in notes if
+                 search_lower in n.get("title", "").lower() or
+                 search_lower in n.get("content", "").lower() or
+                 search_lower in n.get("summary", "").lower()]
+
+    # 按更新时间排序
+    notes.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+
+    total = len(notes)
+    notes = notes[offset:offset + limit]
+
+    return {
+        "notes": notes,
+        "total": total,
+        "tags": data.get("tags", {})
+    }
+
+
+@router.post("/notes")
+async def create_note(request: NoteCreateRequest = Body(...)):
+    """创建笔记"""
+    import uuid
+    data = await load_notes()
+
+    now = datetime.now().isoformat()
+    note = {
+        "id": str(uuid.uuid4()),
+        "title": request.title,
+        "content": request.content,
+        "summary": request.content[:200] + "..." if len(request.content) > 200 else request.content,
+        "tags": request.tags,
+        "skill_id": request.skill_id,
+        "skill_name": request.skill_name,
+        "source_type": request.source_type,
+        "source_session_id": request.source_session_id,
+        "related_notes": [],
+        "created_at": now,
+        "updated_at": now
+    }
+
+    data["notes"].append(note)
+
+    # 更新标签统计
+    tags = data.get("tags", {})
+    for tag in request.tags:
+        tags[tag] = tags.get(tag, 0) + 1
+    data["tags"] = tags
+
+    await save_notes(data)
+
+    # 更新成长统计
+    cache = await get_cache()
+    await cache.increment("growth", "stats.notesCreated", 1)
+    await cache.increment("growth", "exp", 10)
+    await cache.increment("growth", "totalExp", 10)
+
+    return {"status": "success", "note": note}
+
+
+@router.get("/notes/{note_id}")
+async def get_note(note_id: str):
+    """获取单个笔记详情"""
+    data = await load_notes()
+    notes = data.get("notes", [])
+
+    for note in notes:
+        if note.get("id") == note_id:
+            return note
+
+    raise HTTPException(status_code=404, detail="笔记不存在")
+
+
+@router.put("/notes/{note_id}")
+async def update_note(note_id: str, request: NoteUpdateRequest = Body(...)):
+    """更新笔记"""
+    data = await load_notes()
+    notes = data.get("notes", [])
+
+    for i, note in enumerate(notes):
+        if note.get("id") == note_id:
+            if request.title is not None:
+                note["title"] = request.title
+            if request.content is not None:
+                note["content"] = request.content
+                note["summary"] = request.content[:200] + "..." if len(request.content) > 200 else request.content
+            if request.tags is not None:
+                # 更新标签统计
+                old_tags = set(note.get("tags", []))
+                new_tags = set(request.tags)
+                tags = data.get("tags", {})
+
+                for tag in old_tags - new_tags:
+                    if tag in tags and tags[tag] > 0:
+                        tags[tag] -= 1
+                for tag in new_tags - old_tags:
+                    tags[tag] = tags.get(tag, 0) + 1
+
+                note["tags"] = request.tags
+                data["tags"] = tags
+
+            note["updated_at"] = datetime.now().isoformat()
+            notes[i] = note
+            data["notes"] = notes
+            await save_notes(data)
+            return {"status": "success", "note": note}
+
+    raise HTTPException(status_code=404, detail="笔记不存在")
+
+
+@router.delete("/notes/{note_id}")
+async def delete_note(note_id: str):
+    """删除笔记"""
+    data = await load_notes()
+    notes = data.get("notes", [])
+
+    for i, note in enumerate(notes):
+        if note.get("id") == note_id:
+            # 更新标签统计
+            tags = data.get("tags", {})
+            for tag in note.get("tags", []):
+                if tag in tags and tags[tag] > 0:
+                    tags[tag] -= 1
+
+            notes.pop(i)
+            data["notes"] = notes
+            data["tags"] = tags
+            await save_notes(data)
+            return {"status": "success"}
+
+    raise HTTPException(status_code=404, detail="笔记不存在")
+
+
+@router.post("/notes/ai_generate")
+async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
+    """AI自动生成笔记"""
+    import uuid
+    import re
+    from collections import Counter
+
+    # 获取对话内容
+    messages = request.messages or []
+
+    if not messages and request.session_id:
+        # 从历史记录获取消息
+        if CHAT_HISTORY_FILE.exists():
+            try:
+                with open(CHAT_HISTORY_FILE, 'r', encoding='utf-8') as f:
+                    history = json.load(f)
+                for session in history.get("sessions", []):
+                    if session.get("session_id") == request.session_id:
+                        messages = session.get("messages", [])[-20:]  # 最近20条
+                        break
+            except Exception:
+                pass
+
+    if not messages:
+        raise HTTPException(status_code=400, detail="没有可用的对话内容")
+
+    # 构建AI提示词
+    conversation_text = "\n".join([
+        f"{'用户' if m.get('role') == 'user' else 'AI'}: {m.get('content', '')}"
+        for m in messages
+    ])
+
+    system_prompt = """你是一个学习笔记助手。请根据以下对话内容，生成一份结构化的学习笔记。
+
+要求：
+1. 提取核心知识点和概念
+2. 使用Markdown格式，包含标题、列表、重点标记
+3. 总结关键要点
+4. 如果有方法论或步骤，请清晰列出
+5. 标注可能的疑问点或需要深入学习的方向
+
+输出格式：
+## [主题标题]
+
+### 核心概念
+- ...
+
+### 关键要点
+1. ...
+
+### 方法/步骤
+1. ...
+
+### 疑问与深入方向
+- ..."""
+
+    # 调用AI生成
+    client = get_global_http_client()
+    settings = await get_cached_settings()
+
+    ai_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"请根据以下对话生成学习笔记：\n\n{conversation_text}"}
+    ]
+
+    try:
+        base_url = settings.get("base_url", "https://api.openai.com/v1")
+        api_key = settings.get("api_key", "")
+        model = settings.get("model", "gpt-4o-mini")
+
+        response = await client.post(
+            f"{base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "messages": ai_messages,
+                "max_tokens": 2000,
+                "temperature": 0.7
+            }
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="AI生成失败")
+
+        result = response.json()
+        content = result["choices"][0]["message"]["content"]
+
+        # 提取标题（第一个##后的内容）
+        title_match = re.search(r'##\s*(.+)', content)
+        title = title_match.group(1) if title_match else "学习笔记"
+
+        # 生成摘要
+        summary = content[:200] + "..." if len(content) > 200 else content
+
+        # 自动生成标签
+        tags = []
+        if request.skill_name:
+            tags.append(request.skill_name)
+        # 简单的关键词提取
+        keywords = re.findall(r'[\u4e00-\u9fa5]{2,4}', content)
+        tag_candidates = [k for k, _ in Counter(keywords).most_common(3)]
+        tags.extend(tag_candidates)
+
+        # 保存笔记
+        data = await load_notes()
+        now = datetime.now().isoformat()
+        note = {
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "content": content,
+            "summary": summary,
+            "tags": list(set(tags)),
+            "skill_id": request.skill_id,
+            "skill_name": request.skill_name,
+            "source_type": "ai_generated",
+            "source_session_id": request.session_id,
+            "related_notes": [],
+            "created_at": now,
+            "updated_at": now
+        }
+
+        data["notes"].append(note)
+
+        # 更新标签统计
+        note_tags = data.get("tags", {})
+        for tag in note["tags"]:
+            note_tags[tag] = note_tags.get(tag, 0) + 1
+        data["tags"] = note_tags
+
+        await save_notes(data)
+
+        # 更新成长统计
+        cache = await get_cache()
+        await cache.increment("growth", "stats.notesCreated", 1)
+        await cache.increment("growth", "exp", 15)
+        await cache.increment("growth", "totalExp", 15)
+
+        return {"status": "success", "note": note}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI生成失败: {str(e)}")
+
+
+@router.get("/notes/{note_id}/related")
+async def get_related_notes(note_id: str, limit: int = 5):
+    """获取相关笔记推荐"""
+    data = await load_notes()
+    notes = data.get("notes", [])
+
+    # 找到当前笔记
+    current_note = None
+    for note in notes:
+        if note.get("id") == note_id:
+            current_note = note
+            break
+
+    if not current_note:
+        raise HTTPException(status_code=404, detail="笔记不存在")
+
+    # 简单的相关性计算：基于标签和技能
+    related = []
+    current_tags = set(current_note.get("tags", []))
+    current_skill = current_note.get("skill_id")
+
+    for note in notes:
+        if note.get("id") == note_id:
+            continue
+
+        score = 0
+        note_tags = set(note.get("tags", []))
+
+        # 标签重叠度
+        tag_overlap = len(current_tags & note_tags)
+        score += tag_overlap * 2
+
+        # 同技能
+        if current_skill and note.get("skill_id") == current_skill:
+            score += 3
+
+        if score > 0:
+            related.append({"note": note, "score": score})
+
+    # 按相关度排序
+    related.sort(key=lambda x: x["score"], reverse=True)
+    related = [r["note"] for r in related[:limit]]
+
+    return {"related_notes": related}
+
+
+@router.post("/notes/export")
+async def export_notes(note_ids: List[str] = Body(..., embed=True)):
+    """导出笔记为Word文档"""
+    from docx import Document
+    from io import BytesIO
+
+    data = await load_notes()
+    notes = data.get("notes", [])
+
+    # 筛选要导出的笔记
+    export_list = [n for n in notes if n.get("id") in note_ids]
+
+    if not export_list:
+        raise HTTPException(status_code=400, detail="没有可导出的笔记")
+
+    doc = Document()
+    doc.add_heading("研伴学习笔记", 0)
+
+    for note in export_list:
+        doc.add_heading(note.get("title", "无标题"), level=1)
+
+        # 元信息
+        meta = doc.add_paragraph()
+        meta.add_run(f"创建时间: {note.get('created_at', '')}").italic = True
+        if note.get("skill_name"):
+            meta.add_run(f" | 技能: {note.get('skill_name')}").italic = True
+        if note.get("tags"):
+            meta.add_run(f" | 标签: {', '.join(note.get('tags', []))}").italic = True
+
+        doc.add_paragraph()
+
+        # 内容
+        content = note.get("content", "")
+        # 简单的Markdown转Word
+        for line in content.split("\n"):
+            if line.startswith("### "):
+                doc.add_heading(line[4:], level=3)
+            elif line.startswith("## "):
+                doc.add_heading(line[3:], level=2)
+            elif line.startswith("- "):
+                doc.add_paragraph(line[2:], style='List Bullet')
+            elif line.startswith(("1. ", "2. ", "3. ", "4. ", "5. ")):
+                doc.add_paragraph(line[3:], style='List Number')
+            else:
+                doc.add_paragraph(line)
+
+        doc.add_paragraph()
+        doc.add_paragraph("─" * 40)
+        doc.add_paragraph()
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": "attachment; filename=notes_export.docx"}
+    )
