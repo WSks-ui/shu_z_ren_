@@ -92,6 +92,10 @@
           <i class="fa-solid fa-bookmark"></i>
           <span>书签</span>
         </button>
+        <button class="quick-btn" :class="{ active: activePanel === 'notes' }" @click="togglePanel('notes')" title="智能笔记">
+          <i class="fa-solid fa-note-sticky"></i>
+          <span>笔记</span>
+        </button>
         <div class="quick-divider"></div>
         <!-- 番茄钟按钮 -->
         <button class="quick-btn pomodoro-btn" :class="{ active: showPomodoro, running: pomodoroState.isRunning }" @click="showPomodoro = !showPomodoro" title="番茄钟">
@@ -116,10 +120,11 @@
 
       <!-- 番茄钟悬浮面板 -->
       <transition name="pomodoro-panel">
-        <div v-if="showPomodoro" class="pomodoro-panel" :class="pomodoroState.phase">
+        <div v-if="showPomodoro" class="pomodoro-panel" :class="pomodoroState.phase"
+             :style="{ left: pomodoroPanelPos.x + 'px', top: pomodoroPanelPos.y + 'px' }">
           <div class="pp-glow"></div>
 
-          <div class="pp-header">
+          <div class="pp-header" @mousedown="startPomodoroDrag" style="cursor: move;">
             <div class="pph-title">
               <div class="pph-icon">
                 <i class="fa-solid fa-clock"></i>
@@ -129,7 +134,7 @@
                 <span class="pph-subtitle">{{ pomodoroPhaseText }}</span>
               </div>
             </div>
-            <button class="pp-close" @click="showPomodoro = false"><i class="fa-solid fa-xmark"></i></button>
+            <button class="pp-close" @click.stop="showPomodoro = false"><i class="fa-solid fa-xmark"></i></button>
           </div>
 
           <!-- 计时器核心 -->
@@ -1089,6 +1094,146 @@
             </div>
           </div>
 
+        </div>
+      </div>
+    </transition>
+
+    <!-- 智能笔记面板 -->
+    <transition name="notes-modal">
+      <div v-if="activePanel === 'notes'" class="notes-overlay" @click.self="activePanel = null">
+        <div class="notes-modal">
+
+          <!-- 标题栏 -->
+          <div class="notes-head">
+            <div class="nh-left">
+              <div class="nh-icon"><i class="fa-solid fa-note-sticky"></i></div>
+              <div>
+                <h2>智能笔记</h2>
+                <span class="nh-count">{{ notes.length }} 条笔记</span>
+              </div>
+            </div>
+            <div class="nh-actions">
+              <button class="nh-btn" @click="showNoteEditor = true" title="新建笔记">
+                <i class="fa-solid fa-plus"></i>
+              </button>
+              <button class="nh-btn" @click="generateNoteFromChat" title="AI生成笔记" :disabled="messages.length < 2">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </button>
+              <button class="nh-close" @click="activePanel = null"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <!-- 搜索 & 筛选 -->
+          <div class="notes-toolbar">
+            <div class="nt-search-wrap">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input v-model="noteSearch" type="text" class="nt-search" placeholder="搜索笔记..." />
+            </div>
+            <div class="nt-filters">
+              <button class="nt-filter" :class="{ active: noteSkillFilter === '' }" @click="noteSkillFilter = ''">全部</button>
+              <button v-for="sk in uniqueNoteSkills" :key="sk" class="nt-filter" :class="{ active: noteSkillFilter === sk }" @click="noteSkillFilter = sk">{{ sk }}</button>
+            </div>
+          </div>
+
+          <!-- 空状态 -->
+          <div v-if="notes.length === 0" class="notes-empty">
+            <div class="notes-empty-icon"><i class="fa-solid fa-note-sticky"></i></div>
+            <h3>还没有笔记</h3>
+            <p>点击 <i class="fa-solid fa-plus"></i> 新建笔记，或 <i class="fa-solid fa-wand-magic-sparkles"></i> 让AI自动生成</p>
+          </div>
+
+          <!-- 搜索无结果 -->
+          <div v-else-if="filteredNotes.length === 0" class="notes-empty notes-empty-small">
+            <div class="notes-empty-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+            <h3>未找到匹配的笔记</h3>
+            <p>试试调整搜索关键词</p>
+          </div>
+
+          <!-- 笔记列表 -->
+          <div v-else class="notes-list">
+            <div v-for="(note, idx) in filteredNotes" :key="note.id" class="note-card"
+                 :style="{ '--card-delay': idx * 0.05 + 's' }"
+                 @click="openNoteDetail(note)">
+              <div class="nc-header">
+                <h4 class="nc-title">{{ note.title }}</h4>
+                <span class="nc-time">{{ formatTime(note.updated_at) }}</span>
+              </div>
+              <p class="nc-summary">{{ note.summary }}</p>
+              <div class="nc-footer">
+                <div class="nc-tags">
+                  <span v-for="tag in note.tags.slice(0, 3)" :key="tag" class="nc-tag">{{ tag }}</span>
+                </div>
+                <span v-if="note.skill_name" class="nc-skill">{{ note.skill_name }}</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </transition>
+
+    <!-- 笔记编辑器 -->
+    <transition name="note-editor">
+      <div v-if="showNoteEditor" class="note-editor-overlay" @click.self="closeNoteEditor">
+        <div class="note-editor-modal">
+          <div class="ne-header">
+            <h3>{{ editingNote ? '编辑笔记' : '新建笔记' }}</h3>
+            <button class="ne-close" @click="closeNoteEditor"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="ne-body">
+            <input v-model="noteForm.title" type="text" class="ne-title" placeholder="笔记标题..." />
+            <div class="ne-toolbar">
+              <button class="ne-tb-btn" @click="insertMarkdown('**', '**')" title="加粗"><i class="fa-solid fa-bold"></i></button>
+              <button class="ne-tb-btn" @click="insertMarkdown('*', '*')" title="斜体"><i class="fa-solid fa-italic"></i></button>
+              <button class="ne-tb-btn" @click="insertMarkdown('### ', '')" title="标题"><i class="fa-solid fa-heading"></i></button>
+              <button class="ne-tb-btn" @click="insertMarkdown('- ', '')" title="列表"><i class="fa-solid fa-list"></i></button>
+              <button class="ne-tb-btn" @click="insertMarkdown('`', '`')" title="代码"><i class="fa-solid fa-code"></i></button>
+            </div>
+            <textarea v-model="noteForm.content" class="ne-content" placeholder="开始记录你的学习笔记...&#10;&#10;支持 Markdown 格式：&#10;- **加粗** *斜体*&#10;- ### 标题&#10;- - 列表项"></textarea>
+            <div class="ne-tags">
+              <input v-model="noteForm.tagsInput" type="text" class="ne-tags-input" placeholder="标签（用逗号分隔）" />
+            </div>
+          </div>
+          <div class="ne-footer">
+            <button class="ne-btn ne-btn-cancel" @click="closeNoteEditor">取消</button>
+            <button class="ne-btn ne-btn-save" @click="saveNote" :disabled="!noteForm.title || !noteForm.content">
+              <i class="fa-solid fa-check"></i> 保存
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 笔记详情 -->
+    <transition name="note-detail">
+      <div v-if="viewingNote" class="note-detail-overlay" @click.self="viewingNote = null">
+        <div class="note-detail-modal">
+          <div class="nd-header">
+            <h3>{{ viewingNote.title }}</h3>
+            <div class="nd-actions">
+              <button class="nd-btn" @click="editNote(viewingNote)" title="编辑"><i class="fa-solid fa-pen"></i></button>
+              <button class="nd-btn nd-btn-del" @click="deleteNoteConfirm(viewingNote.id)" title="删除"><i class="fa-solid fa-trash"></i></button>
+              <button class="nd-close" @click="viewingNote = null"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+          <div class="nd-meta">
+            <span><i class="fa-regular fa-clock"></i> {{ formatTime(viewingNote.created_at) }}</span>
+            <span v-if="viewingNote.skill_name"><i class="fa-solid fa-wand-magic-sparkles"></i> {{ viewingNote.skill_name }}</span>
+            <span v-if="viewingNote.source_type === 'ai_generated'" class="nd-ai-badge"><i class="fa-solid fa-robot"></i> AI生成</span>
+          </div>
+          <div class="nd-tags">
+            <span v-for="tag in viewingNote.tags" :key="tag" class="nd-tag">{{ tag }}</span>
+          </div>
+          <div class="nd-content" v-html="renderMarkdown(viewingNote.content)"></div>
+          <div v-if="relatedNotes.length > 0" class="nd-related">
+            <h4><i class="fa-solid fa-link"></i> 相关笔记</h4>
+            <div class="nd-related-list">
+              <div v-for="rn in relatedNotes" :key="rn.id" class="nd-related-item" @click="openNoteDetail(rn)">
+                <span class="ndri-title">{{ rn.title }}</span>
+                <i class="fa-solid fa-chevron-right"></i>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </transition>
