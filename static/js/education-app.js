@@ -316,6 +316,53 @@ createApp({
     let pomodoroTimer = null;
     let pomodoroAudio = null;
 
+    // 番茄钟面板拖拽
+    const pomodoroPanelPos = ref({ x: window.innerWidth - 340, y: 80 });
+    let pomodoroDragStart = { x: 0, y: 0, posX: 0, posY: 0 };
+    let isDraggingPomodoro = false;
+
+    // 恢复番茄钟面板位置
+    const pomodoroPosSaved = localStorage.getItem('edu-pomodoro-pos');
+    if (pomodoroPosSaved) {
+      try {
+        pomodoroPanelPos.value = JSON.parse(pomodoroPosSaved);
+      } catch (e) {}
+    }
+
+    // 番茄钟拖拽开始
+    const startPomodoroDrag = (e) => {
+      e.preventDefault();
+      isDraggingPomodoro = true;
+      pomodoroDragStart = {
+        x: e.clientX,
+        y: e.clientY,
+        posX: pomodoroPanelPos.value.x,
+        posY: pomodoroPanelPos.value.y
+      };
+      document.addEventListener('mousemove', onPomodoroDrag);
+      document.addEventListener('mouseup', stopPomodoroDrag);
+    };
+
+    // 番茄钟拖拽中
+    const onPomodoroDrag = (e) => {
+      if (!isDraggingPomodoro) return;
+      const dx = e.clientX - pomodoroDragStart.x;
+      const dy = e.clientY - pomodoroDragStart.y;
+      // 限制在屏幕范围内
+      const newX = Math.max(0, Math.min(window.innerWidth - 320, pomodoroDragStart.posX + dx));
+      const newY = Math.max(0, Math.min(window.innerHeight - 100, pomodoroDragStart.posY + dy));
+      pomodoroPanelPos.value = { x: newX, y: newY };
+    };
+
+    // 番茄钟拖拽结束
+    const stopPomodoroDrag = () => {
+      isDraggingPomodoro = false;
+      document.removeEventListener('mousemove', onPomodoroDrag);
+      document.removeEventListener('mouseup', stopPomodoroDrag);
+      // 保存位置
+      localStorage.setItem('edu-pomodoro-pos', JSON.stringify(pomodoroPanelPos.value));
+    };
+
     // 音乐曲目列表 - 使用本地mp3文件
     const pomodoroTracks = [
       { id: 'nostalgia', name: 'Nostalgia', icon: 'fa-solid fa-moon', file: '01_Nostalgia.mp3' },
@@ -1199,6 +1246,239 @@ createApp({
       return list;
     });
 
+    // ==================== 智能笔记 ====================
+    const notes = ref([]);
+    const noteSearch = ref('');
+    const noteSkillFilter = ref('');
+    const showNoteEditor = ref(false);
+    const editingNote = ref(null);
+    const viewingNote = ref(null);
+    const relatedNotes = ref([]);
+    const noteForm = ref({
+      title: '',
+      content: '',
+      tagsInput: ''
+    });
+    const noteGenerating = ref(false);
+
+    // 加载笔记
+    const loadNotes = async () => {
+      try {
+        const res = await fetch('/api/education/notes?limit=100');
+        if (res.ok) {
+          const data = await res.json();
+          notes.value = data.notes || [];
+        }
+      } catch (e) {
+        console.error('加载笔记失败:', e);
+      }
+    };
+
+    // 初始加载
+    loadNotes();
+
+    const uniqueNoteSkills = computed(() => {
+      const skills = new Set();
+      notes.value.forEach(n => {
+        if (n.skill_name) skills.add(n.skill_name);
+      });
+      return [...skills];
+    });
+
+    const filteredNotes = computed(() => {
+      let list = notes.value;
+      if (noteSkillFilter.value) {
+        list = list.filter(n => n.skill_name === noteSkillFilter.value);
+      }
+      if (noteSearch.value.trim()) {
+        const q = noteSearch.value.trim().toLowerCase();
+        list = list.filter(n =>
+          n.title.toLowerCase().includes(q) ||
+          n.content.toLowerCase().includes(q) ||
+          n.summary.toLowerCase().includes(q)
+        );
+      }
+      return list;
+    });
+
+    // 打开笔记详情
+    const openNoteDetail = async (note) => {
+      viewingNote.value = note;
+      // 加载相关笔记
+      try {
+        const res = await fetch(`/api/education/notes/${note.id}/related`);
+        if (res.ok) {
+          const data = await res.json();
+          relatedNotes.value = data.related_notes || [];
+        }
+      } catch (e) {
+        relatedNotes.value = [];
+      }
+    };
+
+    // 编辑笔记
+    const editNote = (note) => {
+      editingNote.value = note;
+      noteForm.value = {
+        title: note.title,
+        content: note.content,
+        tagsInput: note.tags.join(', ')
+      };
+      viewingNote.value = null;
+      showNoteEditor.value = true;
+    };
+
+    // 关闭编辑器
+    const closeNoteEditor = () => {
+      showNoteEditor.value = false;
+      editingNote.value = null;
+      noteForm.value = { title: '', content: '', tagsInput: '' };
+    };
+
+    // 保存笔记
+    const saveNote = async () => {
+      if (!noteForm.value.title || !noteForm.value.content) return;
+
+      const tags = noteForm.value.tagsInput
+        .split(/[,，]/)
+        .map(t => t.trim())
+        .filter(t => t);
+
+      try {
+        if (editingNote.value) {
+          // 更新
+          const res = await fetch(`/api/education/notes/${editingNote.value.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: noteForm.value.title,
+              content: noteForm.value.content,
+              tags: tags
+            })
+          });
+          if (res.ok) {
+            await loadNotes();
+            closeNoteEditor();
+          }
+        } else {
+          // 创建
+          const res = await fetch('/api/education/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: noteForm.value.title,
+              content: noteForm.value.content,
+              tags: tags,
+              skill_id: currentSkill.value,
+              skill_name: currentSkillName.value
+            })
+          });
+          if (res.ok) {
+            await loadNotes();
+            closeNoteEditor();
+            // 更新成长统计
+            growth.value.stats.notesCreated = (growth.value.stats.notesCreated || 0) + 1;
+            growth.value.exp += 10;
+            growth.value.totalExp += 10;
+          }
+        }
+      } catch (e) {
+        console.error('保存笔记失败:', e);
+      }
+    };
+
+    // 删除笔记
+    const deleteNoteConfirm = async (noteId) => {
+      if (!confirm('确定要删除这条笔记吗？')) return;
+
+      try {
+        const res = await fetch(`/api/education/notes/${noteId}`, { method: 'DELETE' });
+        if (res.ok) {
+          notes.value = notes.value.filter(n => n.id !== noteId);
+          viewingNote.value = null;
+        }
+      } catch (e) {
+        console.error('删除笔记失败:', e);
+      }
+    };
+
+    // AI生成笔记
+    const generateNoteFromChat = async () => {
+      if (messages.value.length < 2) {
+        alert('需要先进行对话才能生成笔记');
+        return;
+      }
+
+      noteGenerating.value = true;
+      try {
+        const res = await fetch('/api/education/notes/ai_generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: messages.value.slice(-20).map(m => ({
+              role: m.role,
+              content: m.content
+            })),
+            skill_id: currentSkill.value,
+            skill_name: currentSkillName.value,
+            session_id: sessionId.value
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          await loadNotes();
+          // 更新成长统计
+          growth.value.stats.notesCreated = (growth.value.stats.notesCreated || 0) + 1;
+          growth.value.exp += 15;
+          growth.value.totalExp += 15;
+          // 打开新生成的笔记
+          if (data.note) {
+            openNoteDetail(data.note);
+          }
+        } else {
+          const err = await res.json();
+          alert('生成失败: ' + (err.detail || '未知错误'));
+        }
+      } catch (e) {
+        console.error('AI生成笔记失败:', e);
+        alert('生成失败，请稍后重试');
+      } finally {
+        noteGenerating.value = false;
+      }
+    };
+
+    // Markdown工具栏插入
+    const insertMarkdown = (before, after) => {
+      const textarea = document.querySelector('.ne-content');
+      if (!textarea) return;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = noteForm.value.content;
+      const selected = text.substring(start, end);
+      noteForm.value.content = text.substring(0, start) + before + selected + after + text.substring(end);
+      // 恢复焦点和选区
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + before.length, start + before.length + selected.length);
+      }, 0);
+    };
+
+    // 简单的Markdown渲染
+    const renderMarkdown = (content) => {
+      if (!content) return '';
+      return content
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`(.+?)`/g, '<code>$1</code>')
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+        .replace(/\n/g, '<br>');
+    };
+
     // ==================== 计算属性 ====================
     const statusText = computed(() => {
       if (xingyunSession.value.status === 'connecting') return '连接中...';
@@ -1924,7 +2204,12 @@ createApp({
     };
 
     const syncBookmarkDelete = () => {
+      const oldExp = growth.value.exp;
       growth.value.stats.bookmarksSaved = Math.max(0, (growth.value.stats.bookmarksSaved || 0) - 1);
+      // 取消收藏时减少经验（最小为0）
+      growth.value.exp = Math.max(0, growth.value.exp - 5);
+      growth.value.totalExp = Math.max(0, growth.value.totalExp - 5);
+      console.log(`[书签删除] 经验: ${oldExp} -> ${growth.value.exp}`);
       fetch('/api/education/bookmarks/record_delete', { method: 'POST' }).catch(() => {});
     };
 
@@ -2436,7 +2721,22 @@ createApp({
     const formatTime = (timestamp) => {
       if (!timestamp) return '';
       const date = new Date(timestamp);
-      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      const now = new Date();
+      const isToday = date.toDateString() === now.toDateString();
+      const isSameYear = date.getFullYear() === now.getFullYear();
+
+      if (isToday) {
+        // 今天只显示时间
+        return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      } else if (isSameYear) {
+        // 同年显示月日时间
+        return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' +
+               date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      } else {
+        // 不同年显示年月日时间
+        return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }) + ' ' +
+               date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      }
     };
 
     const formatDate = (dateStr) => {
@@ -3473,6 +3773,28 @@ createApp({
       insertBookmarkToChat,
       deleteMessage,
 
+      // 智能笔记
+      notes,
+      noteSearch,
+      noteSkillFilter,
+      filteredNotes,
+      uniqueNoteSkills,
+      showNoteEditor,
+      editingNote,
+      viewingNote,
+      relatedNotes,
+      noteForm,
+      noteGenerating,
+      loadNotes,
+      openNoteDetail,
+      editNote,
+      closeNoteEditor,
+      saveNote,
+      deleteNoteConfirm,
+      generateNoteFromChat,
+      insertMarkdown,
+      renderMarkdown,
+
       // 标签页
       tabs,
 
@@ -3535,6 +3857,8 @@ createApp({
       pomodoroProgress,
       pomodoroPercent,
       showCompletedPanel,
+      pomodoroPanelPos,
+      startPomodoroDrag,
       startPomodoro,
       pausePomodoro,
       resetPomodoro,
