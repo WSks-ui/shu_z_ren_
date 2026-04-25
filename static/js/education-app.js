@@ -8,10 +8,23 @@ const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
 // ==================== 应用创建 ====================
 createApp({
   setup() {
+    // ==================== 工具函数 ====================
+    const downloadBlob = async (response, filename) => {
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    };
+
     // ==================== 基础状态 ====================
     const activeTab = ref('skills');
-    const activePanel = ref(null);  // 新布局：当前激活的面板
-    const chatExpanded = ref(false);  // 新布局：对话栏是否展开
+    const activePanel = ref(null);
+    const chatExpanded = ref(false);
     const chatMode = ref(localStorage.getItem('edu-chat-mode') || 'bottom');  // 'bottom' | 'sidebar'
     const chatHeight = ref(parseInt(localStorage.getItem('edu-chat-height')) || 450);  // 底部模式高度
     const isResizing = ref(false);  // 拖拽调整中
@@ -1402,6 +1415,42 @@ createApp({
       }
     };
 
+    // 导出单条笔记为Word
+    const exportNoteWord = async (noteId) => {
+      try {
+        const res = await fetch('/api/education/notes/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify([noteId])
+        });
+        if (res.ok) {
+          await downloadBlob(res, '笔记导出.docx');
+        }
+      } catch (e) {
+        console.error('导出笔记失败:', e);
+      }
+    };
+
+    // 导出全部笔记为Word
+    const exportAllNotesWord = async () => {
+      const ids = filteredNotes.value.map(n => n.id);
+      if (ids.length === 0) return;
+
+      try {
+        const res = await fetch('/api/education/notes/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ids)
+        });
+        if (res.ok) {
+          const filename = `研伴笔记_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.docx`;
+          await downloadBlob(res, filename);
+        }
+      } catch (e) {
+        console.error('导出笔记失败:', e);
+      }
+    };
+
     // AI生成笔记
     const generateNoteFromChat = async () => {
       if (messages.value.length < 2) {
@@ -1410,6 +1459,8 @@ createApp({
       }
 
       noteGenerating.value = true;
+      console.log('[笔记] 开始AI生成...');
+
       try {
         const res = await fetch('/api/education/notes/ai_generate', {
           method: 'POST',
@@ -1427,22 +1478,38 @@ createApp({
 
         if (res.ok) {
           const data = await res.json();
+          console.log('[笔记] AI生成完成:', data.note?.title);
           await loadNotes();
           // 更新成长统计
           growth.value.stats.notesCreated = (growth.value.stats.notesCreated || 0) + 1;
           growth.value.exp += 15;
           growth.value.totalExp += 15;
+          // 显示成功提示
+          showAchievementNotification({
+            name: '笔记生成成功',
+            description: `已创建笔记「${data.note?.title || '学习笔记'}」`,
+            icon: 'fa-solid fa-note-sticky'
+          });
           // 打开新生成的笔记
           if (data.note) {
             openNoteDetail(data.note);
           }
         } else {
           const err = await res.json();
-          alert('生成失败: ' + (err.detail || '未知错误'));
+          console.error('[笔记] 生成失败:', err);
+          showAchievementNotification({
+            name: '生成失败',
+            description: err.detail || '请稍后重试',
+            icon: 'fa-solid fa-exclamation-circle'
+          });
         }
       } catch (e) {
-        console.error('AI生成笔记失败:', e);
-        alert('生成失败，请稍后重试');
+        console.error('[笔记] AI生成笔记失败:', e);
+        showAchievementNotification({
+          name: '生成失败',
+          description: '网络错误，请稍后重试',
+          icon: 'fa-solid fa-exclamation-circle'
+        });
       } finally {
         noteGenerating.value = false;
       }
@@ -2839,15 +2906,7 @@ createApp({
           const errData = await response.json().catch(() => ({}));
           throw new Error(errData.detail || '导出失败');
         }
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `协作记录_${new Date().toISOString().slice(0,10)}.docx`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        await downloadBlob(response, `协作记录_${new Date().toISOString().slice(0,10)}.docx`);
         selectedSessionIds.value = [];
       } catch (e) {
         console.error('导出协作记录失败:', e);
@@ -2876,15 +2935,7 @@ createApp({
           const errData = await response.json().catch(() => ({}));
           throw new Error(errData.detail || '导出失败');
         }
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `协作记录_${record.title || record.type}_${new Date().toISOString().slice(0,10)}.docx`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        await downloadBlob(response, `协作记录_${record.title || record.type}_${new Date().toISOString().slice(0,10)}.docx`);
       } catch (e) {
         console.error('导出协作记录失败:', e);
         alert('导出失败: ' + e.message);
@@ -2921,15 +2972,7 @@ createApp({
           const errData = await response.json().catch(() => ({}));
           throw new Error(errData.detail || '导出报告失败');
         }
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `学习报告_${new Date().toISOString().slice(0,10)}.docx`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        await downloadBlob(response, `学习报告_${new Date().toISOString().slice(0,10)}.docx`);
       } catch (e) {
         console.error('导出学习报告失败:', e);
         alert('导出失败: ' + e.message);
@@ -2962,8 +3005,8 @@ createApp({
           messages.value = data.history;
           sessionId.value = targetSessionId;
           showHistoryModal.value = false;
-          chatExpanded.value = true;  // 新布局：展开对话栏
-          activePanel.value = null;   // 收起功能面板
+          chatExpanded.value = true;
+          activePanel.value = null;
           await nextTick();
           scrollToBottom();
           renderKatex();
@@ -3628,7 +3671,13 @@ createApp({
     // ==================== 数据加载 ====================
     const loadData = async () => {
       try {
-        const dashboardRes = await fetch('/api/education/dashboard');
+        const [dashboardRes, achRes, collabRes, statsRes] = await Promise.all([
+          fetch('/api/education/dashboard'),
+          fetch('/api/education/achievements'),
+          fetch('/api/education/collaboration'),
+          fetch('/api/education/collaboration/stats')
+        ]);
+
         if (dashboardRes.ok) {
           const dashboardData = await dashboardRes.json();
           growth.value.level = dashboardData.level || 1;
@@ -3638,13 +3687,11 @@ createApp({
           skillUsage.value = dashboardData.skillUsage || {};
         }
 
-        const achRes = await fetch('/api/education/achievements');
         if (achRes.ok) {
           const achData = await achRes.json();
           achievements.value = achData.achievements || achievements.value;
         }
 
-        const collabRes = await fetch('/api/education/collaboration');
         if (collabRes.ok) {
           const collabData = await collabRes.json();
           const allRecords = [
@@ -3656,7 +3703,6 @@ createApp({
           collaborationRecords.value = allRecords;
         }
 
-        const statsRes = await fetch('/api/education/collaboration/stats');
         if (statsRes.ok) {
           collabStats.value = await statsRes.json();
         }
@@ -3674,7 +3720,6 @@ createApp({
 
     watch(showHandwriteDialog, (newVal) => {
       if (newVal) {
-        // 重置状态
         handwritePaths.value = [];
         handwriteResult.value = '';
         handwriteLatexPreview.value = '';
@@ -3699,11 +3744,11 @@ createApp({
     // ==================== 生命周期 ====================
     onMounted(async () => {
       applyTheme();
-      await checkDailyLogin();  // 检查每日登录奖励
+      await checkDailyLogin();
       await loadData();
       await loadApiSettings();
-      loadPomodoroState();  // 加载番茄钟状态
-      loadTodoLists();      // 加载待办列表
+      loadPomodoroState();
+      loadTodoLists();
       setTimeout(() => {
         document.getElementById('loadingOverlay').classList.add('hidden');
       }, 500);
@@ -3791,6 +3836,8 @@ createApp({
       closeNoteEditor,
       saveNote,
       deleteNoteConfirm,
+      exportNoteWord,
+      exportAllNotesWord,
       generateNoteFromChat,
       insertMarkdown,
       renderMarkdown,

@@ -4433,7 +4433,11 @@ async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
     """AI自动生成笔记"""
     import uuid
     import re
+    import time as time_module
     from collections import Counter
+
+    start_time = time_module.time()
+    print("[笔记生成] 开始处理请求")
 
     # 获取对话内容
     messages = request.messages or []
@@ -4453,6 +4457,8 @@ async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
 
     if not messages:
         raise HTTPException(status_code=400, detail="没有可用的对话内容")
+
+    print(f"[笔记生成] 获取到 {len(messages)} 条消息, 耗时: {time_module.time() - start_time:.2f}s")
 
     # 构建AI提示词
     conversation_text = "\n".join([
@@ -4485,6 +4491,7 @@ async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
 - ..."""
 
     # 调用AI生成
+    t_ai_start = time_module.time()
     client = get_global_http_client()
     settings = await get_cached_settings()
 
@@ -4497,6 +4504,23 @@ async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
         base_url = settings.get("base_url", "https://api.openai.com/v1")
         api_key = settings.get("api_key", "")
         model = settings.get("model", "gpt-4o-mini")
+
+        # 优先使用快速模型配置（笔记生成不需要复杂模型）
+        fast_settings = settings.get("fast", {})
+        model_providers = settings.get("modelProviders", [])
+        fast_provider_id = fast_settings.get("selectedProvider")
+
+        if fast_provider_id and model_providers:
+            for provider in model_providers:
+                if str(provider.get("id", "")) == str(fast_provider_id):
+                    if provider.get("apiKey"):
+                        base_url = provider.get("baseUrl", base_url)
+                        api_key = provider.get("apiKey", api_key)
+                        model = provider.get("model", model)
+                        print(f"[笔记生成] 使用快速模型配置: {model}")
+                        break
+
+        print(f"[笔记生成] 调用AI: model={model}, base_url={base_url}")
 
         response = await client.post(
             f"{base_url}/chat/completions",
@@ -4512,8 +4536,12 @@ async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
             }
         )
 
+        print(f"[笔记生成] AI响应完成, 耗时: {time_module.time() - t_ai_start:.2f}s, 状态码: {response.status_code}")
+
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="AI生成失败")
+            error_text = response.text[:200] if response.text else "无错误信息"
+            print(f"[笔记生成] AI调用失败: {error_text}")
+            raise HTTPException(status_code=500, detail=f"AI生成失败: {error_text}")
 
         result = response.json()
         content = result["choices"][0]["message"]["content"]
@@ -4621,10 +4649,40 @@ async def get_related_notes(note_id: str, limit: int = 5):
 
 
 @router.post("/notes/export")
-async def export_notes(note_ids: List[str] = Body(..., embed=True)):
+async def export_notes(note_ids: List[str] = Body(...)):
     """导出笔记为Word文档"""
     from docx import Document
     from io import BytesIO
+    import re
+
+    def add_formatted_runs(paragraph, text):
+        """将Markdown行内格式转为Word格式（加粗、斜体、代码）"""
+        # 匹配 **加粗**、*斜体*、`代码` 的混合文本
+        pattern = r'(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)'
+        last_end = 0
+
+        for match in re.finditer(pattern, text):
+            # 匹配前的普通文本
+            if match.start() > last_end:
+                paragraph.add_run(text[last_end:match.start()])
+
+            full = match.group(0)
+            if full.startswith("**"):
+                run = paragraph.add_run(match.group(2))
+                run.bold = True
+            elif full.startswith("*"):
+                run = paragraph.add_run(match.group(3))
+                run.italic = True
+            elif full.startswith("`"):
+                run = paragraph.add_run(match.group(4))
+                run.font.name = "宋体"
+                run.font.size = Pt(10)
+
+            last_end = match.end()
+
+        # 剩余普通文本
+        if last_end < len(text):
+            paragraph.add_run(text[last_end:])
 
     data = await load_notes()
     notes = data.get("notes", [])
@@ -4651,20 +4709,32 @@ async def export_notes(note_ids: List[str] = Body(..., embed=True)):
 
         doc.add_paragraph()
 
-        # 内容
+        # 内容 - 完整的Markdown转Word
         content = note.get("content", "")
-        # 简单的Markdown转Word
         for line in content.split("\n"):
-            if line.startswith("### "):
-                doc.add_heading(line[4:], level=3)
-            elif line.startswith("## "):
-                doc.add_heading(line[3:], level=2)
-            elif line.startswith("- "):
-                doc.add_paragraph(line[2:], style='List Bullet')
-            elif line.startswith(("1. ", "2. ", "3. ", "4. ", "5. ")):
-                doc.add_paragraph(line[3:], style='List Number')
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            # 标题
+            if stripped.startswith("### "):
+                doc.add_heading(stripped[4:], level=3)
+            elif stripped.startswith("## "):
+                doc.add_heading(stripped[3:], level=2)
+            elif stripped.startswith("# "):
+                doc.add_heading(stripped[2:], level=1)
+            # 无序列表
+            elif stripped.startswith("- ") or stripped.startswith("* "):
+                p = doc.add_paragraph(style='List Bullet')
+                add_formatted_runs(p, stripped[2:])
+            # 有序列表
+            elif len(stripped) > 2 and stripped[0].isdigit() and stripped[1] == '.':
+                p = doc.add_paragraph(style='List Number')
+                add_formatted_runs(p, stripped[3:])
+            # 普通段落
             else:
-                doc.add_paragraph(line)
+                p = doc.add_paragraph()
+                add_formatted_runs(p, stripped)
 
         doc.add_paragraph()
         doc.add_paragraph("─" * 40)

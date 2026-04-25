@@ -1116,10 +1116,22 @@
               <button class="nh-btn" @click="showNoteEditor = true" title="新建笔记">
                 <i class="fa-solid fa-plus"></i>
               </button>
-              <button class="nh-btn" @click="generateNoteFromChat" title="AI生成笔记" :disabled="messages.length < 2">
-                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <button class="nh-btn" :class="{ 'nh-btn-loading': noteGenerating }" @click="generateNoteFromChat" title="AI生成笔记" :disabled="messages.length < 2 || noteGenerating">
+                <i :class="noteGenerating ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-wand-magic-sparkles'"></i>
+              </button>
+              <button class="nh-btn" @click="exportAllNotesWord" title="导出全部笔记" :disabled="notes.length === 0">
+                <i class="fa-solid fa-file-word"></i>
               </button>
               <button class="nh-close" @click="activePanel = null"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <!-- AI生成中提示 -->
+          <div v-if="noteGenerating" class="note-generating-tip">
+            <div class="ngt-spinner"><i class="fa-solid fa-spinner fa-spin"></i></div>
+            <div class="ngt-text">
+              <span class="ngt-title">AI正在分析对话内容...</span>
+              <span class="ngt-desc">提取知识点、生成结构化笔记</span>
             </div>
           </div>
 
@@ -1152,18 +1164,21 @@
           <!-- 笔记列表 -->
           <div v-else class="notes-list">
             <div v-for="(note, idx) in filteredNotes" :key="note.id" class="note-card"
-                 :style="{ '--card-delay': idx * 0.05 + 's' }"
+                 :style="{ '--card-delay': idx * 0.05 + 's', '--skill-color': getSkillColor(note.skill_id) || '#06b6d4' }"
                  @click="openNoteDetail(note)">
-              <div class="nc-header">
-                <h4 class="nc-title">{{ note.title }}</h4>
-                <span class="nc-time">{{ formatTime(note.updated_at) }}</span>
-              </div>
-              <p class="nc-summary">{{ note.summary }}</p>
-              <div class="nc-footer">
-                <div class="nc-tags">
-                  <span v-for="tag in note.tags.slice(0, 3)" :key="tag" class="nc-tag">{{ tag }}</span>
+              <div class="nc-accent"></div>
+              <div class="nc-body">
+                <div class="nc-top">
+                  <span class="nc-tag" :style="{ background: (getSkillColor(note.skill_id) || '#06b6d4') + '18', color: getSkillColor(note.skill_id) || '#06b6d4' }">{{ note.skill_name || '笔记' }}</span>
+                  <span class="nc-time">{{ formatTime(note.updated_at) }}</span>
                 </div>
-                <span v-if="note.skill_name" class="nc-skill">{{ note.skill_name }}</span>
+                <h4 class="nc-title">{{ note.title }}</h4>
+                <p class="nc-summary">{{ note.summary }}</p>
+                <div class="nc-footer">
+                  <div class="nc-tags">
+                    <span v-for="tag in note.tags.slice(0, 3)" :key="tag" class="nc-tag-item">{{ tag }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1211,6 +1226,7 @@
           <div class="nd-header">
             <h3>{{ viewingNote.title }}</h3>
             <div class="nd-actions">
+              <button class="nd-btn" @click="exportNoteWord(viewingNote.id)" title="导出Word"><i class="fa-solid fa-file-word"></i></button>
               <button class="nd-btn" @click="editNote(viewingNote)" title="编辑"><i class="fa-solid fa-pen"></i></button>
               <button class="nd-btn nd-btn-del" @click="deleteNoteConfirm(viewingNote.id)" title="删除"><i class="fa-solid fa-trash"></i></button>
               <button class="nd-close" @click="viewingNote = null"><i class="fa-solid fa-xmark"></i></button>
