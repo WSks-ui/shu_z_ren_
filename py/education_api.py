@@ -93,7 +93,15 @@ async def ensure_storage():
 
 # 技能系统提示词
 SKILL_PROMPTS = {
-    "research-assistant": """你是"研友"，一个专业的科研助手，专注于帮助研究人员进行学术研究。你的角色是协作者，而非替代者。
+    "research-assistant": """你是"研友"，一个专业的科研助手。
+
+## 🔴 系统命令（最高优先级 - 必须执行）
+番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
+
+⚠️ 规则：
+1. 用户请求时必须输出对应命令
+2. 输出命令后只需简短确认，不要展开说明
+3. 笔记生成需要时间，输出[生成笔记]后说"正在生成笔记..."，不要说"已生成"
 
 ## 核心能力
 - 文献检索与综述：帮助设计检索策略，选择合适的数据库
@@ -106,11 +114,6 @@ SKILL_PROMPTS = {
 - 【假设构建】：引导用户提出可检验的研究假设，明确自变量、因变量和控制变量
 - 【实验设计】：协助设计严谨的研究方案，包括样本选择、实验流程、数据收集方法
 - 【数据分析】：指导选择统计方法，解读分析结果，讨论研究局限性和改进方向
-
-## 阶段跳转功能
-你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
-例如：当讨论已深入到实验设计时，可以输出 [跳转阶段:实验设计] 来更新界面进度。
-这在用户主动切换话题或你判断需要回溯到前一阶段时特别有用。
 
 ## 追问策略
 - 苏格拉底式引导：不直接给答案，而是通过提问帮助用户自己发现答案
@@ -133,7 +136,11 @@ SKILL_PROMPTS = {
 
 请用专业但友好的语气回答问题，引导用户独立思考。""",
 
-    "literature-review": """你是"研友"，一位文献综述专家，帮助用户进行系统性文献综述和元分析。
+    "literature-review": """你是"研友"，一位文献综述专家。
+
+## 🔴 系统命令（最高优先级 - 必须执行）
+番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
+⚠️ 输出命令后只需简短确认，笔记生成需要时间，说"正在生成笔记..."，不要说"已生成"！
 
 ## 核心能力
 - 检索策略设计：帮助制定 PICO 框架，设计检索词和布尔逻辑
@@ -146,10 +153,6 @@ SKILL_PROMPTS = {
 - 【检索策略】：设计系统化的检索方案，选择数据库和关键词
 - 【筛选评估】：制定纳入/排除标准，评估文献质量和偏倚风险
 - 【综合撰写】：整合研究发现，撰写结构化的综述结论
-
-## 阶段跳转功能
-你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
-例如：当用户想跳过检索策略直接讨论筛选标准时，输出 [跳转阶段:筛选评估]
 
 ## 追问策略
 - 引导用户明确 PICO 各要素后再开始检索
@@ -169,7 +172,11 @@ SKILL_PROMPTS = {
 
 请用系统化的方法指导用户完成文献综述。""",
 
-    "paper-writing": """你是"研友"，一位学术论文写作指导专家，帮助用户撰写高质量的学术论文。
+    "paper-writing": """你是"研友"，一位学术论文写作指导专家。
+
+## 🔴 系统命令（最高优先级 - 必须执行）
+番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
+⚠️ 输出命令后只需简短确认，笔记生成需要时间，说"正在生成笔记..."，不要说"已生成"！
 
 ## 核心能力
 - 论文结构规划：帮助设计论文框架和章节安排
@@ -182,10 +189,6 @@ SKILL_PROMPTS = {
 - 【框架搭建】：设计论文整体结构，规划各章节内容和逻辑脉络
 - 【内容撰写】：逐章指导写作，包括引言、方法、结果、讨论
 - 【润色定稿】：检查学术规范，优化语言表达，完善引用格式
-
-## 阶段跳转功能
-你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
-例如：当用户已完成选题，想直接进入写作阶段，输出 [跳转阶段:内容撰写]
 
 ## 追问策略
 - 先理解论文的研究背景再给写作建议
@@ -207,7 +210,11 @@ SKILL_PROMPTS = {
 
 请帮助用户逐步完善论文内容。""",
 
-    "academic-tutoring": """你是"研友"，一位虚拟导师，为学习者提供个性化的学习支持和答疑解惑。
+    "academic-tutoring": """你是"研友"，一位虚拟导师。
+
+## 🔴 系统命令（最高优先级 - 必须执行）
+番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
+⚠️ 输出命令后只需简短确认，笔记生成需要时间，说"正在生成笔记..."，不要说"已生成"！
 
 ## 核心能力
 - 知识讲解：用通俗易懂的方式解释复杂概念
@@ -220,10 +227,6 @@ SKILL_PROMPTS = {
 - 【知识讲解】：用类比和实例解释核心概念，确保用户理解
 - 【练习巩固】：设计针对性练习题，帮助用户应用所学知识
 - 【总结提升】：归纳知识点，建议下一步学习方向
-
-## 阶段跳转功能
-你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
-例如：当用户表示已经理解概念想做练习时，输出 [跳转阶段:练习巩固]
 
 ## 追问策略
 - 先了解用户的基础水平再调整讲解深度
@@ -246,7 +249,11 @@ SKILL_PROMPTS = {
 
 请用鼓励和引导的方式帮助用户学习。""",
 
-    "math-assistant": """你是"研友"，一位专业的数学助手，帮助用户解决数学问题、识别数学公式并进行数学推导。
+    "math-assistant": """你是"研友"，一位专业的数学助手。
+
+## 🔴 系统命令（最高优先级 - 必须执行）
+番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
+⚠️ 输出命令后只需简短确认，笔记生成需要时间，说"正在生成笔记..."，不要说"已生成"！
 
 ## 核心能力
 - 公式识别：识别手写数学公式和印刷公式，转换为 LaTeX 格式
@@ -260,10 +267,6 @@ SKILL_PROMPTS = {
 - 【方法选择】：分析问题类型，选择合适的解题方法
 - 【逐步求解】：详细展示每一步推导过程，标注数学依据
 - 【验证总结】：验证结果的正确性，总结解题策略和推广
-
-## 阶段跳转功能
-你可以使用特殊指令跳转到指定阶段，格式：[跳转阶段:阶段名]
-例如：当用户已理解问题想直接看解法时，输出 [跳转阶段:逐步求解]
 
 ## 追问策略
 - 先确认用户是否理解题目再开始解题
@@ -653,6 +656,29 @@ async def update_growth_stats(stats: Dict[str, Any] = Body(...)):
 
 # ==================== 成就系统 API ====================
 
+# 成就定义：包含分类、奖励经验、解锁条件
+ACHIEVEMENT_DEFINITIONS = [
+    # 基础成就 - 新手入门
+    {"id": "first_chat", "name": "初次对话", "description": "完成第一次对话", "icon": "fa-solid fa-comments", "category": "basic", "reward": 30, "condition": "conversations >= 1"},
+    {"id": "skill_explorer", "name": "技能探索者", "description": "使用所有技能各1次", "icon": "fa-solid fa-wand-magic-sparkles", "category": "basic", "reward": 50, "condition": "使用全部5种技能"},
+
+    # 进阶成就 - 持续使用
+    {"id": "level_5", "name": "进阶学者", "description": "达到5级", "icon": "fa-solid fa-star", "category": "advanced", "reward": 100, "condition": "等级达到5"},
+    {"id": "collaboration_master", "name": "协作大师", "description": "完成20次协作会话", "icon": "fa-solid fa-handshake", "category": "advanced", "reward": 80, "condition": "协作会话 >= 20"},
+    {"id": "pomodoro_master", "name": "番茄大师", "description": "完成10个番茄钟", "icon": "fa-solid fa-clock", "category": "advanced", "reward": 60, "condition": "番茄钟 >= 10"},
+    {"id": "bookworm", "name": "知识收藏家", "description": "收藏20条知识书签", "icon": "fa-solid fa-bookmark", "category": "advanced", "reward": 70, "condition": "书签 >= 20"},
+
+    # 挑战成就 - 高难度
+    {"id": "level_10", "name": "资深学者", "description": "达到10级", "icon": "fa-solid fa-crown", "category": "challenge", "reward": 200, "condition": "等级达到10"},
+    {"id": "todo_expert", "name": "任务达人", "description": "完成50个待办任务", "icon": "fa-solid fa-list-check", "category": "challenge", "reward": 150, "condition": "待办 >= 50"},
+    {"id": "formula_master", "name": "公式达人", "description": "识别10个手写公式", "icon": "fa-solid fa-square-root-variable", "category": "challenge", "reward": 100, "condition": "公式 >= 10"},
+    {"id": "stage_master", "name": "阶段大师", "description": "完成20个学习阶段", "icon": "fa-solid fa-flag-checkered", "category": "challenge", "reward": 120, "condition": "阶段 >= 20"},
+
+    # 隐藏成就 - 特殊触发
+    {"id": "night_owl", "name": "夜间学者", "description": "在深夜(23:00-5:00)使用研伴", "icon": "fa-solid fa-moon", "category": "hidden", "reward": 50, "condition": "深夜使用"},
+    {"id": "voice_pioneer", "name": "语音先锋", "description": "进行10次语音对话", "icon": "fa-solid fa-microphone", "category": "hidden", "reward": 80, "condition": "语音 >= 10"},
+]
+
 @router.get("/achievements")
 async def get_achievements():
     """获取成就列表和解锁状态"""
@@ -660,21 +686,11 @@ async def get_achievements():
     cache = await get_cache()
     data = await cache.get("achievement", {"unlocked": [], "history": []})
 
-    # 定义所有成就
-    all_achievements = [
-        {"id": "first_chat", "name": "初次对话", "description": "完成第一次对话", "icon": "fa-solid fa-comments"},
-        {"id": "paper_reader", "name": "文献读者", "description": "阅读10篇文献", "icon": "fa-solid fa-book"},
-        {"id": "experiment_designer", "name": "实验设计师", "description": "设计5个实验方案", "icon": "fa-solid fa-flask"},
-        {"id": "paper_writer", "name": "论文写作者", "description": "完成论文写作协助", "icon": "fa-solid fa-pen"},
-        {"id": "level_5", "name": "进阶学者", "description": "达到5级", "icon": "fa-solid fa-star"},
-        {"id": "level_10", "name": "资深学者", "description": "达到10级", "icon": "fa-solid fa-crown"},
-        {"id": "collaboration_master", "name": "协作大师", "description": "完成20次人机协作", "icon": "fa-solid fa-handshake"},
-        {"id": "knowledge_seeker", "name": "知识探索者", "description": "使用所有教育技能", "icon": "fa-solid fa-compass"}
-    ]
-
     unlocked_ids = data.get("unlocked", [])
+    all_achievements = []
 
-    for ach in all_achievements:
+    for ach_def in ACHIEVEMENT_DEFINITIONS:
+        ach = ach_def.copy()
         ach["unlocked"] = ach["id"] in unlocked_ids
         if ach["unlocked"]:
             # 查找解锁时间
@@ -682,13 +698,28 @@ async def get_achievements():
                 if h.get("id") == ach["id"]:
                     ach["unlockedAt"] = h.get("unlockedAt")
                     break
+        all_achievements.append(ach)
 
-    return {"achievements": all_achievements, "unlockedCount": len(unlocked_ids)}
+    # 按分类统计
+    category_stats = {}
+    for ach in all_achievements:
+        cat = ach.get("category", "basic")
+        if cat not in category_stats:
+            category_stats[cat] = {"total": 0, "unlocked": 0}
+        category_stats[cat]["total"] += 1
+        if ach["unlocked"]:
+            category_stats[cat]["unlocked"] += 1
+
+    return {
+        "achievements": all_achievements,
+        "unlockedCount": len(unlocked_ids),
+        "categoryStats": category_stats
+    }
 
 
 @router.post("/achievements/unlock")
 async def unlock_achievement(achievement_id: str = Body(..., embed=True)):
-    """解锁成就"""
+    """解锁成就并发放奖励"""
     await ensure_storage()
     cache = await get_cache()
     data = await cache.get("achievement", {"unlocked": [], "history": []})
@@ -696,6 +727,14 @@ async def unlock_achievement(achievement_id: str = Body(..., embed=True)):
     if achievement_id in data.get("unlocked", []):
         return {"status": "already_unlocked", "message": "成就已解锁"}
 
+    # 查找成就定义获取奖励
+    reward_exp = 0
+    for ach_def in ACHIEVEMENT_DEFINITIONS:
+        if ach_def["id"] == achievement_id:
+            reward_exp = ach_def.get("reward", 50)
+            break
+
+    # 解锁成就
     data.setdefault("unlocked", []).append(achievement_id)
     data.setdefault("history", []).append({
         "id": achievement_id,
@@ -703,7 +742,18 @@ async def unlock_achievement(achievement_id: str = Body(..., embed=True)):
     })
 
     await cache.set("achievement", data)
-    return {"status": "success", "message": f"成就 {achievement_id} 已解锁"}
+
+    # 发放经验奖励
+    growth_data = await cache.get("growth", {"level": 1, "exp": 0, "totalExp": 0, "stats": {}, "skillUsage": {}})
+    growth_data["exp"] = growth_data.get("exp", 0) + reward_exp
+    growth_data["totalExp"] = growth_data.get("totalExp", 0) + reward_exp
+    await cache.set("growth", growth_data)
+
+    return {
+        "status": "success",
+        "message": f"成就 {achievement_id} 已解锁",
+        "reward": reward_exp
+    }
 
 
 # ==================== 协作记录 API ====================
@@ -1124,7 +1174,12 @@ async def education_chat(request: ChatRequest = Body(...)):
         base_system_prompt = SKILL_PROMPTS[request.skill_id]
     else:
         # 默认教育助手提示词
-        base_system_prompt = """你是一位友好的研伴助手，帮助用户学习和研究。你的名字叫"研友"。
+        base_system_prompt = """你是"研友"，一位友好的研伴助手。
+
+## 🔴 系统命令（最高优先级 - 必须执行）
+番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
+⚠️ 用户请求时必须输出对应命令，系统会自动执行，不要说"我无法控制"！
+
 请用简洁、专业的语言回答问题，必要时提供学习建议。"""
 
     # 语音模式：使用简洁提示词，跳过RAG检索
@@ -1529,12 +1584,26 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
         if request.skill_id and request.skill_id in SKILL_PROMPTS:
             base_system_prompt = SKILL_PROMPTS[request.skill_id]
         else:
-            base_system_prompt = """你是一位友好的研伴助手，帮助用户学习和研究。你的名字叫"研友"。
-请用简洁、专业的语言回答问题，必要时提供学习建议。"""
+            base_system_prompt = """你是"研友"，一位友好的研伴助手。
+
+## 🔴 系统命令（最高优先级 - 必须执行）
+番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
+
+⚠️ 规则：
+1. 用户请求时必须输出对应命令
+2. 输出命令后只需简短确认，不要展开说明
+3. 笔记生成需要时间，输出[生成笔记]后说"正在生成笔记..."，不要说"已生成"
+4. 示例："好的，为你启动番茄钟。[设置番茄:25分钟][开始番茄] 专注开始！"
+
+请用简洁、专业的语言回答问题。"""
 
         # 语音模式使用更简洁的提示词
         if voice_mode:
             base_system_prompt = """你是语音助手"研友"。你正在用语音和用户对话，必须极其简短地回答。
+
+## 🔴 系统命令
+番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]
+⚠️ 用户请求时必须输出对应命令！
 
 规则（严格遵守）：
 - 回复不超过30个字
