@@ -1,0 +1,280 @@
+/* =========================================================
+   Chapter edu-04 · 成长系统
+   ink 主题 · 左右分栏布局
+   ========================================================= */
+
+.edu04 {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--f-sans);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+}
+
+/* 背景网格 */
+.edu04__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right,  var(--line) 0, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 0, var(--line) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(circle at 30% 50%, #000 0%, #000 50%, transparent 90%);
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+/* 左侧 */
+.edu04__left {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 80px 60px 80px 100px;
+}
+
+.edu04__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--f-mono);
+  font-size: 16px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  margin-bottom: 48px;
+}
+
+.edu04__eyebrow-bar {
+  width: 48px;
+  height: 1px;
+  background: var(--line-mid);
+}
+
+.edu04__title {
+  font-family: var(--f-serif);
+  font-weight: 400;
+  font-size: 80px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  margin: 0 0 48px;
+}
+
+.edu04__title-em {
+  color: var(--accent);
+  font-style: italic;
+  position: relative;
+}
+
+.edu04__title-em::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  height: 6px;
+  background: oklch(0.700 0.170 42 / 0.25);
+  z-index: -1;
+}
+
+/* 等级展示 */
+.edu04__level {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--line-mid);
+  background: oklch(0.965 0.018 78 / 0.025);
+  border-radius: 4px;
+}
+
+.edu04__level-badge {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent), oklch(0.600 0.150 42));
+  border-radius: 8px;
+}
+
+.edu04__level-num {
+  font-family: var(--f-serif);
+  font-size: 28px;
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.edu04__level-info {
+  flex: 1;
+}
+
+.edu04__level-label {
+  font-size: 14px;
+  color: var(--fg-mute);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.edu04__level-exp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--f-mono);
+  font-size: 14px;
+  color: var(--fg-soft);
+}
+
+.edu04__level-bar {
+  flex: 1;
+  height: 8px;
+  background: oklch(0.350 0.014 60);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.edu04__level-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), oklch(0.600 0.150 42));
+  border-radius: 4px;
+}
+
+/* 右侧 */
+.edu04__right {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 80px 100px 80px 60px;
+}
+
+.edu04__achievements-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 32px;
+}
+
+.edu04__achievements-title {
+  font-family: var(--f-serif);
+  font-size: 36px;
+  color: var(--fg);
+}
+
+.edu04__achievements-count {
+  font-family: var(--f-mono);
+  font-size: 14px;
+  color: var(--fg-mute);
+  letter-spacing: 0.1em;
+}
+
+/* 成就分类网格 */
+.edu04__achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.edu04__achievement-category {
+  padding: 20px;
+  border: 1px solid var(--line-mid);
+  background: oklch(0.965 0.018 78 / 0.025);
+  border-radius: 4px;
+}
+
+.edu04__category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid;
+}
+
+.edu04__category-name {
+  font-family: var(--f-mono);
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.edu04__category-count {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--fg-mute);
+}
+
+.edu04__category-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.edu04__badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: oklch(0.320 0.014 60);
+  border-radius: 2px;
+  font-size: 13px;
+  color: var(--fg-soft);
+}
+
+.edu04__badge-icon {
+  font-size: 14px;
+}
+
+.edu04__badge-name {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+/* 统计数据 */
+.edu04__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.edu04__stat {
+  text-align: center;
+}
+
+.edu04__stat-value {
+  display: block;
+  font-family: var(--f-serif);
+  font-size: 36px;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+
+.edu04__stat-label {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+}
+
+/* 底部标识 */
+.edu04__footer {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--f-mono);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}

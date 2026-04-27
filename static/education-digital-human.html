@@ -479,6 +479,9 @@
             </select>
           </div>
           <div class="chat-tools">
+            <button class="tool-btn" @click="startNewChat" title="新建对话">
+              <i class="fa-solid fa-plus"></i>
+            </button>
             <button class="tool-btn mode-btn" @click="toggleChatMode" :title="chatMode === 'bottom' ? '切换为侧边栏' : '切换为底部栏'">
               <i :class="chatMode === 'bottom' ? 'fa-solid fa-table-columns' : 'fa-solid fa-window-maximize'"></i>
             </button>
@@ -841,21 +844,71 @@
             <!-- 成就墙 -->
             <div class="gm-achievements">
               <h4><i class="fa-solid fa-trophy"></i> 成就徽章 <span class="gma-count">{{ unlockedAchievements }}/{{ achievements.length }}</span></h4>
-              <div class="gm-ach-grid">
-                <div
-                  v-for="achievement in achievements"
-                  :key="achievement.id"
-                  class="gm-ach-item"
-                  :class="{ unlocked: achievement.unlocked }"
-                  :title="achievement.description"
-                >
-                  <div class="gma-icon">
-                    <i :class="achievement.icon"></i>
+
+              <!-- 分类显示 -->
+              <div v-for="(cat, catKey) in achievementsByCategory" :key="catKey" class="gm-ach-category">
+                <div class="gm-cat-header">
+                  <i :class="cat.icon" :style="{ color: cat.color }"></i>
+                  <span>{{ cat.name }}</span>
+                  <span class="gm-cat-progress">{{ cat.unlocked }}/{{ cat.achievements.length }}</span>
+                </div>
+                <div class="gm-ach-grid">
+                  <div
+                    v-for="achievement in cat.achievements"
+                    :key="achievement.id"
+                    class="gm-ach-item"
+                    :class="{ unlocked: achievement.unlocked, hidden: achievement.category === 'hidden' && !achievement.unlocked }"
+                    @click="openAchievementDetail(achievement)"
+                  >
+                    <div class="gma-icon">
+                      <i v-if="achievement.unlocked || achievement.category !== 'hidden'" :class="achievement.icon"></i>
+                      <i v-else class="fa-solid fa-question"></i>
+                    </div>
+                    <div class="gma-name" v-if="achievement.unlocked || achievement.category !== 'hidden'">{{ achievement.name }}</div>
+                    <div class="gma-name" v-else>???</div>
+                    <div class="gma-reward" v-if="achievement.unlocked">+{{ achievement.reward }}</div>
                   </div>
-                  <div class="gma-name">{{ achievement.name }}</div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 成就详情弹窗 -->
+    <transition name="ach-detail">
+      <div v-if="showAchievementDetail && selectedAchievement" class="ach-detail-overlay" @click.self="closeAchievementDetail">
+        <div class="ach-detail-modal">
+          <button class="ach-detail-close" @click="closeAchievementDetail">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+          <div class="ach-detail-icon" :class="{ unlocked: selectedAchievement.unlocked }">
+            <i v-if="selectedAchievement.unlocked || selectedAchievement.category !== 'hidden'" :class="selectedAchievement.icon"></i>
+            <i v-else class="fa-solid fa-question"></i>
+          </div>
+          <h3 class="ach-detail-name" v-if="selectedAchievement.unlocked || selectedAchievement.category !== 'hidden'">
+            {{ selectedAchievement.name }}
+          </h3>
+          <h3 class="ach-detail-name" v-else>???</h3>
+          <p class="ach-detail-desc">{{ selectedAchievement.description }}</p>
+          <div class="ach-detail-info">
+            <div class="ach-info-item">
+              <i class="fa-solid fa-layer-group"></i>
+              <span>{{ achievementCategories[selectedAchievement.category]?.name || '未知' }}</span>
+            </div>
+            <div class="ach-info-item">
+              <i class="fa-solid fa-gem"></i>
+              <span>+{{ selectedAchievement.reward }} 经验</span>
+            </div>
+          </div>
+          <div v-if="selectedAchievement.unlocked && selectedAchievement.unlockedAt" class="ach-detail-time">
+            <i class="fa-solid fa-calendar-check"></i>
+            解锁于 {{ new Date(selectedAchievement.unlockedAt).toLocaleString() }}
+          </div>
+          <div v-else class="ach-detail-locked">
+            <i class="fa-solid fa-lock"></i>
+            尚未解锁
           </div>
         </div>
       </div>
@@ -1310,6 +1363,7 @@
           <button class="modal-x" @click="showReportModal = false"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="modal-body" v-if="learningReport">
+          <!-- 核心统计 -->
           <div class="report-stats">
             <div class="rs-item">
               <span class="rs-value">{{ learningReport.collaboration?.totalSessions || 0 }}</span>
@@ -1320,19 +1374,85 @@
               <span class="rs-label">总贡献</span>
             </div>
             <div class="rs-item">
-              <span class="rs-value">{{ learningReport.stats?.studyTime || 0 }}</span>
-              <span class="rs-label">学习时长</span>
+              <span class="rs-value">{{ learningReport.stats?.conversations || 0 }}</span>
+              <span class="rs-label">对话次数</span>
             </div>
             <div class="rs-item">
               <span class="rs-value">Lv.{{ learningReport.summary?.level || 1 }}</span>
               <span class="rs-label">当前等级</span>
             </div>
           </div>
-          <div class="report-section" v-if="learningReport.recommendations?.length">
-            <h4><i class="fa-solid fa-lightbulb"></i> 学习建议</h4>
-            <ul>
-              <li v-for="(rec, idx) in learningReport.recommendations" :key="idx">{{ rec }}</li>
-            </ul>
+
+          <!-- 成就解锁时间线 -->
+          <div class="report-section" v-if="learningReport.achievements?.timeline?.length">
+            <h4><i class="fa-solid fa-trophy"></i> 成就解锁时间线</h4>
+            <div class="achievement-timeline">
+              <div v-for="(item, idx) in learningReport.achievements.timeline" :key="idx" class="timeline-item">
+                <div class="timeline-date">{{ item.date }}</div>
+                <div class="timeline-dot"></div>
+                <div class="timeline-content">
+                  <span class="timeline-badge">🏆</span>
+                  <span class="timeline-name">{{ item.name }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="achievement-summary">
+              已解锁 {{ learningReport.achievements?.unlockedCount || 0 }} / {{ learningReport.achievements?.totalCount || 12 }} 个成就
+            </div>
+          </div>
+
+          <!-- 技能使用趋势 -->
+          <div class="report-section" v-if="learningReport.skills?.usage">
+            <h4><i class="fa-solid fa-chart-line"></i> 技能使用统计</h4>
+            <div class="skill-usage-chart">
+              <div v-for="(count, name) in learningReport.skills.usage" :key="name" class="skill-bar-item">
+                <div class="skill-bar-label">{{ name }}</div>
+                <div class="skill-bar-track">
+                  <div class="skill-bar-fill" :style="{ width: Math.min(count / Math.max(...Object.values(learningReport.skills.usage)) * 100, 100) + '%' }"></div>
+                </div>
+                <div class="skill-bar-count">{{ count }}次</div>
+              </div>
+            </div>
+            <div class="most-used-skill" v-if="learningReport.skills?.mostUsed">
+              <i class="fa-solid fa-star"></i> 最常用: {{ learningReport.skills.mostUsed }}
+            </div>
+          </div>
+
+          <!-- 智能学习建议 -->
+          <div class="report-section" v-if="learningReport.recommendations">
+            <h4><i class="fa-solid fa-lightbulb"></i> 智能学习建议</h4>
+
+            <!-- 优势领域 -->
+            <div class="rec-category" v-if="learningReport.recommendations.strengths?.length">
+              <div class="rec-title"><i class="fa-solid fa-star"></i> 优势领域</div>
+              <ul>
+                <li v-for="(rec, idx) in learningReport.recommendations.strengths" :key="'s'+idx">{{ rec }}</li>
+              </ul>
+            </div>
+
+            <!-- 改进建议 -->
+            <div class="rec-category" v-if="learningReport.recommendations.improvements?.length">
+              <div class="rec-title"><i class="fa-solid fa-arrow-up"></i> 改进建议</div>
+              <ul>
+                <li v-for="(rec, idx) in learningReport.recommendations.improvements" :key="'i'+idx">{{ rec }}</li>
+              </ul>
+            </div>
+
+            <!-- 下一步目标 -->
+            <div class="rec-category" v-if="learningReport.recommendations.nextGoals?.length">
+              <div class="rec-title"><i class="fa-solid fa-bullseye"></i> 下一步目标</div>
+              <ul>
+                <li v-for="(rec, idx) in learningReport.recommendations.nextGoals" :key="'g'+idx">{{ rec }}</li>
+              </ul>
+            </div>
+
+            <!-- 学习技巧 -->
+            <div class="rec-category" v-if="learningReport.recommendations.tips?.length">
+              <div class="rec-title"><i class="fa-solid fa-lightbulb"></i> 学习技巧</div>
+              <ul>
+                <li v-for="(rec, idx) in learningReport.recommendations.tips" :key="'t'+idx">{{ rec }}</li>
+              </ul>
+            </div>
           </div>
         </div>
         <div class="modal-foot">
@@ -1548,6 +1668,21 @@
         </div>
       </div>
     </transition>
+
+    <!-- 新建对话确认弹窗 -->
+    <div v-if="showNewChatConfirm" class="modal-overlay" @click.self="cancelNewChat">
+      <div class="modal-card confirm-modal">
+        <div class="confirm-icon">
+          <i class="fa-solid fa-comments"></i>
+        </div>
+        <h3>开始新对话？</h3>
+        <p>当前对话将被清空，是否继续？</p>
+        <div class="confirm-actions">
+          <button class="btn-cancel" @click="cancelNewChat">取消</button>
+          <button class="btn-confirm" @click="confirmNewChat">确认新建</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 历史记录 -->
     <div v-if="showHistoryModal" class="modal-overlay" @click.self="showHistoryModal = false">

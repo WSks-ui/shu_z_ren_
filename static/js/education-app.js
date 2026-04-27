@@ -269,9 +269,16 @@ createApp({
     const parseStageCommand = (content) => {
       // 匹配 [跳转阶段:检索策略] 或 [阶段:筛选评估] 格式
       const match = content.match(/\[(?:跳转阶段|阶段)[:：]\s*([^\]]+)\]/);
+      console.log('[阶段跳转] 解析内容:', content?.substring(0, 100), '匹配结果:', match);
       if (match) {
         const targetName = match[1].trim();
         const stages = skillStagesList.value;
+        console.log('[阶段跳转] 目标阶段:', targetName, '当前技能:', currentSkill.value, '阶段列表:', stages?.map(s => s.name));
+
+        if (!stages || stages.length === 0) {
+          console.warn('[阶段跳转] 阶段列表为空，无法跳转');
+          return false;
+        }
 
         // 先尝试精确匹配
         for (let i = 0; i < stages.length; i++) {
@@ -285,8 +292,11 @@ createApp({
                 const arr = Array.from(processedStageCommands.value);
                 processedStageCommands.value = new Set(arr.slice(-10));
               }
+              console.log('[阶段跳转] 精确匹配成功，跳转到:', stages[i].name, '索引:', i);
               setStage(i, true);  // AI触发的跳转
               return true;
+            } else {
+              console.log('[阶段跳转] 命令已处理过，跳过:', commandKey);
             }
           }
         }
@@ -297,11 +307,53 @@ createApp({
             const commandKey = `${currentSkill.value}-${i}-${Date.now().toString().slice(0, -5)}`;
             if (!processedStageCommands.value.has(commandKey)) {
               processedStageCommands.value.add(commandKey);
+              console.log('[阶段跳转] 模糊匹配成功，跳转到:', stages[i].name, '索引:', i);
               setStage(i, true);
               return true;
             }
           }
         }
+        console.warn('[阶段跳转] 未找到匹配的阶段:', targetName);
+      }
+      return false;
+    };
+
+    // ==================== AI触发笔记生成 ====================
+    const processedNoteCommands = ref(new Set());
+
+    // 解析笔记生成命令：[生成笔记] 或 [自动笔记]
+    const parseNoteCommand = async (content) => {
+      // 匹配 [生成笔记] 或 [自动笔记] 格式
+      const match = content.match(/\[(?:生成笔记|自动笔记)\]/);
+      if (match) {
+        console.log('[笔记生成] 检测到AI触发笔记生成命令');
+
+        // 防止重复触发（5秒内只触发一次）
+        const now = Date.now();
+        const recentCommands = Array.from(processedNoteCommands.value).filter(t => now - t < 5000);
+        if (recentCommands.length > 0) {
+          console.log('[笔记生成] 5秒内已触发过，跳过');
+          return false;
+        }
+        processedNoteCommands.value.add(now);
+
+        // 检查是否有足够的对话内容
+        if (messages.value.length < 2) {
+          console.warn('[笔记生成] 对话内容不足，无法生成笔记');
+          return false;
+        }
+
+        // 先显示"正在生成"提示
+        showAchievementNotification({
+          name: '正在生成笔记',
+          description: '请稍候...',
+          icon: 'fa-solid fa-spinner fa-spin'
+        });
+
+        // 调用笔记生成
+        console.log('[笔记生成] 开始自动生成笔记...');
+        await generateNoteFromChat();
+        return true;
       }
       return false;
     };
@@ -321,6 +373,7 @@ createApp({
       completedPomodoros: 0,
       todayPomodoros: 0
     });
+    const pomodoroTask = ref('');  // 当前番茄任务名
     const pomodoroSettingsExpanded = ref(false);
     const pomodoroMusicEnabled = ref(false);
     const pomodoroVolume = ref(50);
@@ -618,6 +671,98 @@ createApp({
       pomodoroState.value.timeLeft = pomodoroSettings.value.workDuration * 60;
     };
 
+    // ==================== AI触发番茄钟控制 ====================
+    const processedPomodoroCommands = ref(new Set());
+
+    // 解析番茄钟命令：[开始番茄:任务名] [设置番茄:25分钟] [暂停番茄] [重置番茄]
+    const parsePomodoroCommand = (content) => {
+      // 匹配 [开始番茄:任务名] 或 [开始番茄]
+      const startMatch = content.match(/\[开始番茄(?::([^\]]+))?\]/);
+      if (startMatch) {
+        const taskName = startMatch[1]?.trim() || '';
+        console.log('[番茄钟] AI触发开始番茄，任务:', taskName || '无');
+
+        // 防止重复触发（3秒内）
+        const now = Date.now();
+        const recent = Array.from(processedPomodoroCommands.value).filter(t => now - t < 3000);
+        if (recent.length > 0) {
+          console.log('[番茄钟] 3秒内已触发过，跳过');
+          return false;
+        }
+        processedPomodoroCommands.value.add(now);
+
+        // 设置任务名并显示番茄钟面板
+        if (taskName) {
+          pomodoroTask.value = taskName;
+        }
+        showPomodoro.value = true;
+
+        // 如果番茄钟未运行，则启动
+        if (!pomodoroState.value.isRunning) {
+          // 重置到工作阶段
+          pomodoroState.value.phase = 'work';
+          pomodoroState.value.timeLeft = pomodoroSettings.value.workDuration * 60;
+          startPomodoro();
+        }
+
+        // 显示通知
+        showAchievementNotification({
+          name: '番茄钟已启动',
+          description: taskName ? `任务：${taskName}` : '专注时间开始',
+          icon: 'fa-solid fa-clock'
+        });
+        return true;
+      }
+
+      // 匹配 [设置番茄:25分钟] 或 [设置番茄:25]
+      const settingMatch = content.match(/\[设置番茄[:：](\d+)分钟?\]/);
+      if (settingMatch) {
+        const minutes = parseInt(settingMatch[1]);
+        if (minutes >= 1 && minutes <= 60) {
+          console.log('[番茄钟] AI设置番茄时长:', minutes, '分钟');
+          pomodoroSettings.value.workDuration = minutes;
+          // 如果未运行，更新倒计时
+          if (!pomodoroState.value.isRunning && pomodoroState.value.phase === 'work') {
+            pomodoroState.value.timeLeft = minutes * 60;
+          }
+          showAchievementNotification({
+            name: '番茄钟设置已更新',
+            description: `工作时长：${minutes}分钟`,
+            icon: 'fa-solid fa-sliders'
+          });
+          return true;
+        }
+      }
+
+      // 匹配 [暂停番茄]
+      if (content.includes('[暂停番茄]')) {
+        console.log('[番茄钟] AI触发暂停番茄');
+        if (pomodoroState.value.isRunning) {
+          pausePomodoro();
+          showAchievementNotification({
+            name: '番茄钟已暂停',
+            description: '可以随时继续',
+            icon: 'fa-solid fa-pause'
+          });
+        }
+        return true;
+      }
+
+      // 匹配 [重置番茄]
+      if (content.includes('[重置番茄]')) {
+        console.log('[番茄钟] AI触发重置番茄');
+        resetPomodoro();
+        showAchievementNotification({
+          name: '番茄钟已重置',
+          description: '准备开始新的专注',
+          icon: 'fa-solid fa-rotate-right'
+        });
+        return true;
+      }
+
+      return false;
+    };
+
     // ==================== 待办事项系统 ====================
     const showTodoPanel = ref(false);
     const todoLists = ref([]);
@@ -903,20 +1048,65 @@ createApp({
       todoComplete: 5        // 完成待办任务
     };
 
+    // 成就定义（与后端同步）
     const achievements = ref([
-      { id: 'first_chat', name: '初次对话', description: '完成第一次对话', icon: 'fa-solid fa-comments', unlocked: false },
-      { id: 'skill_explorer', name: '技能探索者', description: '使用所有技能各1次', icon: 'fa-solid fa-wand-magic-sparkles', unlocked: false },
-      { id: 'level_5', name: '进阶学者', description: '达到5级', icon: 'fa-solid fa-star', unlocked: false },
-      { id: 'level_10', name: '资深学者', description: '达到10级', icon: 'fa-solid fa-crown', unlocked: false },
-      { id: 'collaboration_master', name: '协作大师', description: '完成20次协作会话', icon: 'fa-solid fa-handshake', unlocked: false },
-      { id: 'formula_master', name: '公式达人', description: '识别10个手写公式', icon: 'fa-solid fa-square-root-variable', unlocked: false },
-      { id: 'bookworm', name: '知识收藏家', description: '收藏20条知识书签', icon: 'fa-solid fa-bookmark', unlocked: false },
-      { id: 'night_owl', name: '夜间学者', description: '在深夜使用研伴', icon: 'fa-solid fa-moon', unlocked: false },
-      { id: 'pomodoro_master', name: '番茄大师', description: '完成10个番茄钟', icon: 'fa-solid fa-clock', unlocked: false },
-      { id: 'todo_expert', name: '任务达人', description: '完成50个待办任务', icon: 'fa-solid fa-list-check', unlocked: false },
-      { id: 'voice_pioneer', name: '语音先锋', description: '进行10次语音对话', icon: 'fa-solid fa-microphone', unlocked: false },
-      { id: 'stage_master', name: '阶段大师', description: '完成20个学习阶段', icon: 'fa-solid fa-flag-checkered', unlocked: false }
+      // 基础成就
+      { id: 'first_chat', name: '初次对话', description: '完成第一次对话', icon: 'fa-solid fa-comments', category: 'basic', reward: 30, unlocked: false },
+      { id: 'skill_explorer', name: '技能探索者', description: '使用所有技能各1次', icon: 'fa-solid fa-wand-magic-sparkles', category: 'basic', reward: 50, unlocked: false },
+      // 进阶成就
+      { id: 'level_5', name: '进阶学者', description: '达到5级', icon: 'fa-solid fa-star', category: 'advanced', reward: 100, unlocked: false },
+      { id: 'collaboration_master', name: '协作大师', description: '完成20次协作会话', icon: 'fa-solid fa-handshake', category: 'advanced', reward: 80, unlocked: false },
+      { id: 'pomodoro_master', name: '番茄大师', description: '完成10个番茄钟', icon: 'fa-solid fa-clock', category: 'advanced', reward: 60, unlocked: false },
+      { id: 'bookworm', name: '知识收藏家', description: '收藏20条知识书签', icon: 'fa-solid fa-bookmark', category: 'advanced', reward: 70, unlocked: false },
+      // 挑战成就
+      { id: 'level_10', name: '资深学者', description: '达到10级', icon: 'fa-solid fa-crown', category: 'challenge', reward: 200, unlocked: false },
+      { id: 'todo_expert', name: '任务达人', description: '完成50个待办任务', icon: 'fa-solid fa-list-check', category: 'challenge', reward: 150, unlocked: false },
+      { id: 'formula_master', name: '公式达人', description: '识别10个手写公式', icon: 'fa-solid fa-square-root-variable', category: 'challenge', reward: 100, unlocked: false },
+      { id: 'stage_master', name: '阶段大师', description: '完成20个学习阶段', icon: 'fa-solid fa-flag-checkered', category: 'challenge', reward: 120, unlocked: false },
+      // 隐藏成就
+      { id: 'night_owl', name: '夜间学者', description: '在深夜使用研伴', icon: 'fa-solid fa-moon', category: 'hidden', reward: 50, unlocked: false },
+      { id: 'voice_pioneer', name: '语音先锋', description: '进行10次语音对话', icon: 'fa-solid fa-microphone', category: 'hidden', reward: 80, unlocked: false }
     ]);
+
+    // 成就分类配置
+    const achievementCategories = {
+      basic: { name: '基础成就', icon: 'fa-solid fa-seedling', color: '#10b981' },
+      advanced: { name: '进阶成就', icon: 'fa-solid fa-medal', color: '#3b82f6' },
+      challenge: { name: '挑战成就', icon: 'fa-solid fa-fire', color: '#f59e0b' },
+      hidden: { name: '隐藏成就', icon: 'fa-solid fa-eye-slash', color: '#8b5cf6' }
+    };
+
+    // 成就详情弹窗状态
+    const selectedAchievement = ref(null);
+    const showAchievementDetail = ref(false);
+
+    // 打开成就详情
+    const openAchievementDetail = (achievement) => {
+      selectedAchievement.value = achievement;
+      showAchievementDetail.value = true;
+    };
+
+    // 关闭成就详情
+    const closeAchievementDetail = () => {
+      showAchievementDetail.value = false;
+      selectedAchievement.value = null;
+    };
+
+    // 按分类获取成就
+    const achievementsByCategory = computed(() => {
+      const result = {};
+      for (const [catKey, catInfo] of Object.entries(achievementCategories)) {
+        const catAchievements = achievements.value.filter(a => a.category === catKey);
+        if (catAchievements.length > 0) {
+          result[catKey] = {
+            ...catInfo,
+            achievements: catAchievements,
+            unlocked: catAchievements.filter(a => a.unlocked).length
+          };
+        }
+      }
+      return result;
+    });
 
     // 统计卡片 - 与实际业务数据匹配
     const statCards = [
@@ -2379,27 +2569,55 @@ createApp({
       return skillColors[skillId] || 'oklch(0.72 0.15 160)';
     };
 
-    const selectSkill = (skillId) => {
-      currentSkill.value = skillId;
-    };
+    // 新建对话确认弹窗状态
+    const showNewChatConfirm = ref(false);
+    const pendingSkillId = ref(null);
 
-    const togglePanel = (panelId) => {
-      if (activePanel.value === panelId) {
-        activePanel.value = null;
-      } else {
-        activePanel.value = panelId;
+    // 技能选择 - 联动新建对话
+    const selectSkill = (skillId) => {
+      // 如果点击的是当前技能，且已有对话内容，显示确认弹窗
+      if (currentSkill.value === skillId && messages.value.length > 1) {
+        pendingSkillId.value = skillId;
+        showNewChatConfirm.value = true;
+        return;
+      }
+
+      // 如果切换到不同技能，或当前无对话，直接新建
+      if (currentSkill.value !== skillId || messages.value.length <= 1) {
+        currentSkill.value = skillId;
+        // 如果已有对话内容，自动开始新对话
+        if (messages.value.length > 1) {
+          startNewChat();
+        }
       }
     };
 
-    const startConversation = async () => {
-      chatExpanded.value = true;
-      activePanel.value = null;
+    // 确认新建对话（从弹窗触发）
+    const confirmNewChat = () => {
+      showNewChatConfirm.value = false;
+      if (pendingSkillId.value) {
+        currentSkill.value = pendingSkillId.value;
+        pendingSkillId.value = null;
+      }
+      startNewChat();
+    };
+
+    // 取消新建对话
+    const cancelNewChat = () => {
+      showNewChatConfirm.value = false;
+      pendingSkillId.value = null;
+    };
+
+    // 开始新对话（核心逻辑）
+    const startNewChat = () => {
       messages.value = [];
       sessionId.value = 'session_' + Date.now();
-      currentStage.value = 0;  // 重置阶段进度
+      currentStage.value = 0;
+      processedStageCommands.value = new Set();  // 重置已处理的阶段命令
+      chatExpanded.value = true;
+      activePanel.value = null;
 
-      // 不在此处记录技能使用，由 sendMessage 流程统一处理（避免重复计数）
-
+      // 显示欢迎语
       const greetings = {
         'research-assistant': `你好！我是**研友**的科研助手模式。\n\n我可以帮助你：\n- 设计实验方案\n- 构建研究假设\n- 选择合适的研究方法\n- 分析实验数据\n\n请告诉我你正在研究的课题，我们一起探讨！`,
         'literature-review': `你好！我是**研友**的文献综述模式。\n\n我可以帮助你：\n- 制定 PICO 检索框架\n- 设计检索策略和布尔逻辑\n- 使用 PRISMA 流程进行文献筛选\n- 评估文献质量和偏倚风险\n\n请告诉我你的研究主题或感兴趣的领域！`,
@@ -2416,6 +2634,19 @@ createApp({
         timestamp: new Date().toISOString()
       });
       renderKatex();
+    };
+
+    const togglePanel = (panelId) => {
+      if (activePanel.value === panelId) {
+        activePanel.value = null;
+      } else {
+        activePanel.value = panelId;
+      }
+    };
+
+    const startConversation = async () => {
+      // 复用 startNewChat 逻辑
+      startNewChat();
     };
 
     // ==================== 对话方法 ====================
@@ -2592,6 +2823,10 @@ createApp({
         if (fullContent) {
           // 先检查AI的阶段跳转指令
           parseStageCommand(fullContent);
+          // 检查AI的笔记生成指令
+          parseNoteCommand(fullContent);
+          // 检查AI的番茄钟控制指令
+          parsePomodoroCommand(fullContent);
           // 再检测标记格式
           detectStageFromResponse(fullContent);
           saveSkillContext();
@@ -3653,7 +3888,13 @@ createApp({
               achievement.unlocked = true;
               achievement.unlockedAt = new Date().toISOString();
             }
-            showAchievementNotification(achievements.value.find(a => a.id === achievementId));
+            // 显示解锁通知（包含奖励经验）
+            const reward = data.reward || achievement?.reward || 50;
+            showAchievementNotification({
+              ...achievement,
+              name: achievement?.name || achievementId,
+              description: `+${reward} 经验`
+            });
           }
         }
       } catch (error) {
@@ -3689,7 +3930,20 @@ createApp({
 
         if (achRes.ok) {
           const achData = await achRes.json();
-          achievements.value = achData.achievements || achievements.value;
+          // 合并后端数据，保留前端默认值中的category和reward
+          if (achData.achievements) {
+            achData.achievements.forEach(serverAch => {
+              const localAch = achievements.value.find(a => a.id === serverAch.id);
+              if (localAch) {
+                // 更新解锁状态和时间
+                localAch.unlocked = serverAch.unlocked;
+                localAch.unlockedAt = serverAch.unlockedAt;
+                // 如果后端有新字段也更新
+                if (serverAch.category) localAch.category = serverAch.category;
+                if (serverAch.reward) localAch.reward = serverAch.reward;
+              }
+            });
+          }
         }
 
         if (collabRes.ok) {
@@ -3839,6 +4093,7 @@ createApp({
       exportNoteWord,
       exportAllNotesWord,
       generateNoteFromChat,
+      parseNoteCommand,
       insertMarkdown,
       renderMarkdown,
 
@@ -3868,6 +4123,12 @@ createApp({
       // 成长系统
       growth,
       achievements,
+      achievementCategories,
+      achievementsByCategory,
+      selectedAchievement,
+      showAchievementDetail,
+      openAchievementDetail,
+      closeAchievementDetail,
       statCards,
       levelTitle,
       expForNextLevel,
@@ -3894,6 +4155,7 @@ createApp({
       showPomodoro,
       pomodoroSettings,
       pomodoroState,
+      pomodoroTask,
       pomodoroSettingsExpanded,
       pomodoroMusicEnabled,
       pomodoroVolume,
@@ -3913,6 +4175,7 @@ createApp({
       updatePomodoroSetting,
       togglePomodoroMusic,
       selectPomodoroTrack,
+      parsePomodoroCommand,
 
       // 待办事项
       showTodoPanel,
@@ -4008,6 +4271,12 @@ createApp({
       deleteHistorySession,
       clearCurrentChat,
       clearAllHistory,
+
+      // 新建对话
+      showNewChatConfirm,
+      confirmNewChat,
+      cancelNewChat,
+      startNewChat,
 
       // 导出
       exportLoading,

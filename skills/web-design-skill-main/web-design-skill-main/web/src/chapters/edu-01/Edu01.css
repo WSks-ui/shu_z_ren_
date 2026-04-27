@@ -1,0 +1,201 @@
+/* =========================================================
+   Chapter edu-01 · 开场
+   ink 主题 · 深墨底 + 网格氛围
+   4 步：eyebrow → 项目名称 → 副标题+定位 → 三大理念
+   ========================================================= */
+
+.edu01 {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--f-sans);
+  overflow: hidden;
+}
+
+/* 背景网格氛围 */
+.edu01__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right,  var(--line) 0, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 0, var(--line) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(circle at 50% 50%, #000 0%, #000 60%, transparent 95%);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* 角落坐标十字 */
+.edu01__cornerTL,
+.edu01__cornerBR {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+}
+.edu01__cornerTL { top: 56px; left: 64px; }
+.edu01__cornerBR { bottom: 56px; right: 64px; }
+.edu01__cornerTL span,
+.edu01__cornerBR span {
+  position: absolute;
+  background: var(--fg-faint);
+}
+.edu01__cornerTL span:nth-child(1),
+.edu01__cornerBR span:nth-child(1) { top: 0; left: 50%; width: 1px; height: 100%; transform: translateX(-50%); }
+.edu01__cornerTL span:nth-child(2),
+.edu01__cornerBR span:nth-child(2) { left: 0; top: 50%; width: 100%; height: 1px; transform: translateY(-50%); }
+
+/* 主内容区 */
+.edu01__main {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120px 140px;
+  text-align: center;
+}
+
+/* Eyebrow */
+.edu01__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-family: var(--f-mono);
+  font-size: 18px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  margin-bottom: 64px;
+}
+.edu01__eyebrow-bar {
+  width: 64px;
+  height: 1px;
+  background: var(--line-mid);
+}
+
+/* 项目名称 */
+.edu01__title {
+  font-family: var(--f-serif);
+  font-weight: 400;
+  font-size: 200px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  margin: 0 0 48px;
+  position: relative;
+}
+.edu01__title::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -16px;
+  width: 120px;
+  height: 4px;
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+/* 副标题区域 */
+.edu01__subtitle-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 80px;
+}
+
+.edu01__subtitle {
+  font-family: var(--f-sans);
+  font-size: 36px;
+  font-weight: 300;
+  color: var(--fg-soft);
+  letter-spacing: 0.08em;
+}
+
+.edu01__positioning {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 28px;
+}
+.edu01__positioning-highlight {
+  font-family: var(--f-serif);
+  font-style: italic;
+  font-size: 48px;
+  color: var(--accent);
+  position: relative;
+}
+.edu01__positioning-highlight::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 6px;
+  background: oklch(0.700 0.170 42 / 0.25);
+  z-index: -1;
+}
+.edu01__positioning-muted {
+  color: var(--fg-mute);
+}
+.edu01__positioning-line {
+  color: var(--fg-soft);
+  text-decoration: line-through;
+  text-decoration-color: var(--fg-faint);
+}
+
+/* 三大设计理念 */
+.edu01__principles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 48px;
+  max-width: 1200px;
+  width: 100%;
+}
+
+.edu01__principle {
+  text-align: center;
+  padding: 32px 24px;
+  border: 1px solid var(--line-mid);
+  background: oklch(0.965 0.018 78 / 0.025);
+  backdrop-filter: blur(4px);
+  border-radius: 4px;
+}
+
+.edu01__principle-num {
+  font-family: var(--f-mono);
+  font-size: 14px;
+  letter-spacing: 0.3em;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.edu01__principle-title {
+  font-family: var(--f-serif);
+  font-size: 28px;
+  color: var(--fg);
+  margin-bottom: 12px;
+}
+
+.edu01__principle-desc {
+  font-size: 18px;
+  color: var(--fg-soft);
+  line-height: 1.5;
+}
+
+/* 底部标识 */
+.edu01__footer {
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--f-mono);
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
