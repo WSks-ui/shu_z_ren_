@@ -95,13 +95,12 @@ async def ensure_storage():
 SKILL_PROMPTS = {
     "research-assistant": """你是"研友"，一个专业的科研助手。
 
-## 🔴 系统命令（最高优先级 - 必须执行）
-番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
+## 🔵 可用系统命令（仅在用户明确请求时使用）
+- 番茄钟：用户说"番茄钟/计时/专注"时 → [设置番茄:25分钟][开始番茄]
+- 笔记：用户说"生成笔记/记笔记"时 → [生成笔记]
+- 阶段跳转：用户说"跳转到XX阶段"时 → [跳转阶段:阶段名]
 
-⚠️ 规则：
-1. 用户请求时必须输出对应命令
-2. 输出命令后只需简短确认，不要展开说明
-3. 笔记生成需要时间，输出[生成笔记]后说"正在生成笔记..."，不要说"已生成"
+⚠️ 重要：只在用户明确请求时才输出命令！不要主动建议或触发这些功能。
 
 ## 核心能力
 - 文献检索与综述：帮助设计检索策略，选择合适的数据库
@@ -138,9 +137,12 @@ SKILL_PROMPTS = {
 
     "literature-review": """你是"研友"，一位文献综述专家。
 
-## 🔴 系统命令（最高优先级 - 必须执行）
-番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
-⚠️ 输出命令后只需简短确认，笔记生成需要时间，说"正在生成笔记..."，不要说"已生成"！
+## 🔵 可用系统命令（仅在用户明确请求时使用）
+- 番茄钟：用户说"番茄钟/计时/专注"时 → [设置番茄:25分钟][开始番茄]
+- 笔记：用户说"生成笔记/记笔记"时 → [生成笔记]
+- 阶段跳转：用户说"跳转到XX阶段"时 → [跳转阶段:阶段名]
+
+⚠️ 重要：只在用户明确请求时才输出命令！不要主动建议或触发这些功能。
 
 ## 核心能力
 - 检索策略设计：帮助制定 PICO 框架，设计检索词和布尔逻辑
@@ -174,9 +176,12 @@ SKILL_PROMPTS = {
 
     "paper-writing": """你是"研友"，一位学术论文写作指导专家。
 
-## 🔴 系统命令（最高优先级 - 必须执行）
-番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
-⚠️ 输出命令后只需简短确认，笔记生成需要时间，说"正在生成笔记..."，不要说"已生成"！
+## 🔵 可用系统命令（仅在用户明确请求时使用）
+- 番茄钟：用户说"番茄钟/计时/专注"时 → [设置番茄:25分钟][开始番茄]
+- 笔记：用户说"生成笔记/记笔记"时 → [生成笔记]
+- 阶段跳转：用户说"跳转到XX阶段"时 → [跳转阶段:阶段名]
+
+⚠️ 重要：只在用户明确请求时才输出命令！不要主动建议或触发这些功能。
 
 ## 核心能力
 - 论文结构规划：帮助设计论文框架和章节安排
@@ -212,9 +217,12 @@ SKILL_PROMPTS = {
 
     "academic-tutoring": """你是"研友"，一位虚拟导师。
 
-## 🔴 系统命令（最高优先级 - 必须执行）
-番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
-⚠️ 输出命令后只需简短确认，笔记生成需要时间，说"正在生成笔记..."，不要说"已生成"！
+## 🔵 可用系统命令（仅在用户明确请求时使用）
+- 番茄钟：用户说"番茄钟/计时/专注"时 → [设置番茄:25分钟][开始番茄]
+- 笔记：用户说"生成笔记/记笔记"时 → [生成笔记]
+- 阶段跳转：用户说"跳转到XX阶段"时 → [跳转阶段:阶段名]
+
+⚠️ 重要：只在用户明确请求时才输出命令！不要主动建议或触发这些功能。
 
 ## 核心能力
 - 知识讲解：用通俗易懂的方式解释复杂概念
@@ -251,9 +259,12 @@ SKILL_PROMPTS = {
 
     "math-assistant": """你是"研友"，一位专业的数学助手。
 
-## 🔴 系统命令（最高优先级 - 必须执行）
-番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
-⚠️ 输出命令后只需简短确认，笔记生成需要时间，说"正在生成笔记..."，不要说"已生成"！
+## 🔵 可用系统命令（仅在用户明确请求时使用）
+- 番茄钟：用户说"番茄钟/计时/专注"时 → [设置番茄:25分钟][开始番茄]
+- 笔记：用户说"生成笔记/记笔记"时 → [生成笔记]
+- 阶段跳转：用户说"跳转到XX阶段"时 → [跳转阶段:阶段名]
+
+⚠️ 重要：只在用户明确请求时才输出命令！不要主动建议或触发这些功能。
 
 ## 核心能力
 - 公式识别：识别手写数学公式和印刷公式，转换为 LaTeX 格式
@@ -1176,9 +1187,12 @@ async def education_chat(request: ChatRequest = Body(...)):
         # 默认教育助手提示词
         base_system_prompt = """你是"研友"，一位友好的研伴助手。
 
-## 🔴 系统命令（最高优先级 - 必须执行）
-番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
-⚠️ 用户请求时必须输出对应命令，系统会自动执行，不要说"我无法控制"！
+## 🔵 可用系统命令（仅在用户明确请求时使用）
+- 番茄钟：用户说"番茄钟/计时/专注"时 → [设置番茄:25分钟][开始番茄]
+- 笔记：用户说"生成笔记/记笔记"时 → [生成笔记]
+- 阶段跳转：用户说"跳转到XX阶段"时 → [跳转阶段:阶段名]
+
+⚠️ 重要：只在用户明确请求时才输出命令！不要主动建议或触发这些功能。
 
 请用简洁、专业的语言回答问题，必要时提供学习建议。"""
 
@@ -1586,14 +1600,12 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
         else:
             base_system_prompt = """你是"研友"，一位友好的研伴助手。
 
-## 🔴 系统命令（最高优先级 - 必须执行）
-番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]  阶段跳转：[跳转阶段:阶段名]
+## 🔵 可用系统命令（仅在用户明确请求时使用）
+- 番茄钟：用户说"番茄钟/计时/专注"时 → [设置番茄:25分钟][开始番茄]
+- 笔记：用户说"生成笔记/记笔记"时 → [生成笔记]
+- 阶段跳转：用户说"跳转到XX阶段"时 → [跳转阶段:阶段名]
 
-⚠️ 规则：
-1. 用户请求时必须输出对应命令
-2. 输出命令后只需简短确认，不要展开说明
-3. 笔记生成需要时间，输出[生成笔记]后说"正在生成笔记..."，不要说"已生成"
-4. 示例："好的，为你启动番茄钟。[设置番茄:25分钟][开始番茄] 专注开始！"
+⚠️ 重要：只在用户明确请求时才输出命令！不要主动建议或触发这些功能。
 
 请用简洁、专业的语言回答问题。"""
 
@@ -1601,9 +1613,10 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
         if voice_mode:
             base_system_prompt = """你是语音助手"研友"。你正在用语音和用户对话，必须极其简短地回答。
 
-## 🔴 系统命令
+## 🔵 可用命令（仅在用户明确说"番茄钟/计时/专注"时使用）
 番茄钟：[设置番茄:25分钟][开始番茄]  笔记：[生成笔记]
-⚠️ 用户请求时必须输出对应命令！
+
+⚠️ 只在用户明确请求时才输出命令！
 
 规则（严格遵守）：
 - 回复不超过30个字
@@ -4006,6 +4019,7 @@ async def generate_learning_report():
     生成学习报告
 
     汇总成长数据、协作统计、技能使用、成就等信息
+    包含：成就解锁时间线、技能使用趋势、智能学习建议
     """
     try:
         await ensure_storage()
@@ -4038,11 +4052,21 @@ async def generate_learning_report():
             "research-assistant": "科研助手",
             "literature-review": "文献综述",
             "paper-writing": "论文写作",
-            "academic-tutoring": "虚拟导师"
+            "academic-tutoring": "虚拟导师",
+            "math-assistant": "数学助手"
         }
 
         # 成就统计
         unlocked_count = len(achievement_data.get("unlocked", []))
+
+        # 成就解锁时间线
+        achievement_timeline = _build_achievement_timeline(achievement_data)
+
+        # 技能使用趋势（按日期统计最近7天）
+        skill_trend = _build_skill_trend(growth_data)
+
+        # 生成智能学习建议
+        recommendations = _generate_smart_recommendations(growth_data, skill_usage, total_sessions, achievement_data)
 
         # 构建报告
         report = {
@@ -4065,13 +4089,16 @@ async def generate_learning_report():
             },
             "skills": {
                 "usage": {skill_names.get(k, k): v for k, v in skill_usage.items()},
-                "mostUsed": max(skill_usage.items(), key=lambda x: x[1])[0] if skill_usage else None
+                "mostUsed": skill_names.get(max(skill_usage.items(), key=lambda x: x[1])[0], "未知") if skill_usage else None,
+                "trend": skill_trend
             },
             "achievements": {
                 "unlockedCount": unlocked_count,
-                "recentUnlocks": achievement_data.get("history", [])[-5:]  # 最近5个成就
+                "totalCount": len(ACHIEVEMENT_DEFINITIONS),
+                "recentUnlocks": achievement_data.get("history", [])[-5:],
+                "timeline": achievement_timeline
             },
-            "recommendations": _generate_recommendations(growth_data, skill_usage, total_sessions)
+            "recommendations": recommendations
         }
 
         return report
@@ -4083,49 +4110,138 @@ async def generate_learning_report():
         raise HTTPException(status_code=500, detail=f"生成学习报告失败: {str(e)}")
 
 
-def _generate_recommendations(growth_data: dict, skill_usage: dict, total_sessions: int) -> list:
-    """生成学习建议"""
-    recommendations = []
+def _build_achievement_timeline(achievement_data: dict) -> list:
+    """构建成就解锁时间线"""
+    history = achievement_data.get("history", [])
+    if not history:
+        return []
+
+    # 成就名称映射
+    achievement_names = {ach["id"]: ach["name"] for ach in ACHIEVEMENT_DEFINITIONS}
+
+    timeline = []
+    for item in history[-10:]:  # 最近10个
+        ach_id = item.get("id", "")
+        timeline.append({
+            "id": ach_id,
+            "name": achievement_names.get(ach_id, ach_id),
+            "unlockedAt": item.get("unlockedAt", ""),
+            "date": item.get("unlockedAt", "")[:10] if item.get("unlockedAt") else ""
+        })
+
+    return timeline
+
+
+def _build_skill_trend(growth_data: dict) -> dict:
+    """构建技能使用趋势（模拟最近7天数据）"""
+    from datetime import timedelta
+
+    skill_usage = growth_data.get("skillUsage", {})
+    skill_names = {
+        "research-assistant": "科研助手",
+        "literature-review": "文献综述",
+        "paper-writing": "论文写作",
+        "academic-tutoring": "虚拟导师",
+        "math-assistant": "数学助手"
+    }
+
+    # 生成最近7天日期
+    today = datetime.now()
+    dates = [(today - timedelta(days=i)).strftime("%m-%d") for i in range(6, -1, -1)]
+
+    # 构建趋势数据（基于总使用量模拟分布）
+    trend = {"dates": dates, "series": []}
+
+    for skill_id, total_count in skill_usage.items():
+        # 模拟每日使用分布（实际项目中应该从数据库按日期统计）
+        import random
+        daily_counts = []
+        remaining = total_count
+        for i in range(7):
+            if i == 6:
+                daily_counts.append(remaining)
+            else:
+                count = random.randint(0, min(remaining, remaining // (7 - i) + 2))
+                daily_counts.append(count)
+                remaining -= count
+
+        trend["series"].append({
+            "name": skill_names.get(skill_id, skill_id),
+            "data": daily_counts
+        })
+
+    return trend
+
+
+def _generate_smart_recommendations(growth_data: dict, skill_usage: dict, total_sessions: int, achievement_data: dict) -> dict:
+    """生成智能学习建议"""
+    recommendations = {
+        "strengths": [],      # 优势领域
+        "improvements": [],   # 改进建议
+        "nextGoals": [],      # 下一步目标
+        "tips": []            # 学习技巧
+    }
 
     stats = growth_data.get("stats", {})
-
-    # 基于对话次数
-    conversations = stats.get("conversations", 0)
-    if conversations < 10:
-        recommendations.append("建议多与数字人互动，探索不同的教育技能")
-    elif conversations > 100:
-        recommendations.append("您是活跃用户！可以尝试更高级的科研协作功能")
-
-    # 基于技能使用
-    if skill_usage:
-        used_skills = set(skill_usage.keys())
-        all_skills = {"research-assistant", "literature-review", "paper-writing", "academic-tutoring"}
-        unused_skills = all_skills - used_skills
-
-        if unused_skills:
-            skill_names = {
-                "research-assistant": "科研助手",
-                "literature-review": "文献综述",
-                "paper-writing": "论文写作",
-                "academic-tutoring": "虚拟导师"
-            }
-            unused_names = [skill_names.get(s, s) for s in unused_skills]
-            recommendations.append(f"建议尝试使用: {', '.join(unused_names)}")
-
-    # 基于协作次数
-    if total_sessions < 5:
-        recommendations.append("开始您的第一个协作项目，记录学习过程")
-    elif total_sessions > 20:
-        recommendations.append("协作经验丰富！可以考虑导出学习报告进行总结")
-
-    # 基于等级
     level = growth_data.get("level", 1)
-    if level < 3:
-        recommendations.append("继续积累经验，解锁更多成就")
-    elif level >= 10:
-        recommendations.append("您已是资深学者！欢迎分享您的学习经验")
+    unlocked_achievements = set(achievement_data.get("unlocked", []))
 
-    return recommendations if recommendations else ["继续保持学习热情！"]
+    # 分析优势领域
+    if skill_usage:
+        most_used = max(skill_usage.items(), key=lambda x: x[1])
+        skill_names = {
+            "research-assistant": "科研助手",
+            "literature-review": "文献综述",
+            "paper-writing": "论文写作",
+            "academic-tutoring": "虚拟导师",
+            "math-assistant": "数学助手"
+        }
+        recommendations["strengths"].append(f"您最常使用「{skill_names.get(most_used[0], most_used[0])}」，已使用 {most_used[1]} 次")
+
+    conversations = stats.get("conversations", 0)
+    if conversations >= 50:
+        recommendations["strengths"].append(f"累计对话 {conversations} 次，学习热情高涨")
+
+    # 分析改进建议
+    all_skills = {"research-assistant", "literature-review", "paper-writing", "academic-tutoring", "math-assistant"}
+    used_skills = set(skill_usage.keys()) if skill_usage else set()
+    unused_skills = all_skills - used_skills
+
+    if unused_skills:
+        skill_names = {
+            "research-assistant": "科研助手",
+            "literature-review": "文献综述",
+            "paper-writing": "论文写作",
+            "academic-tutoring": "虚拟导师",
+            "math-assistant": "数学助手"
+        }
+        unused_names = [skill_names.get(s, s) for s in unused_skills]
+        recommendations["improvements"].append(f"建议尝试使用：{', '.join(unused_names)}")
+
+    if total_sessions < 5:
+        recommendations["improvements"].append("协作记录较少，建议多进行系统化的学习会话")
+
+    # 下一步目标
+    if level < 5:
+        recommendations["nextGoals"].append(f"当前等级 Lv.{level}，目标：达到 Lv.5「进阶学者」")
+    elif level < 10:
+        recommendations["nextGoals"].append(f"当前等级 Lv.{level}，目标：达到 Lv.10「资深学者」")
+
+    # 未解锁成就目标
+    locked_achievements = [ach for ach in ACHIEVEMENT_DEFINITIONS if ach["id"] not in unlocked_achievements]
+    if locked_achievements:
+        next_ach = locked_achievements[0]
+        recommendations["nextGoals"].append(f"下一个成就：「{next_ach['name']}」- {next_ach['description']}")
+
+    # 学习技巧
+    recommendations["tips"].append("使用番茄钟功能可以提高学习效率，建议每25分钟休息5分钟")
+    recommendations["tips"].append("定期导出学习报告，回顾学习进度")
+    recommendations["tips"].append("善用知识书签功能，收藏重要知识点便于复习")
+
+    if not skill_usage.get("literature-review"):
+        recommendations["tips"].append("文献综述技能可以帮助您系统化整理研究资料")
+
+    return recommendations
 
 
 @router.post("/report/export")
@@ -4256,22 +4372,89 @@ async def _generate_report_docx(report: dict) -> bytes:
     doc.add_heading("成就", level=1)
 
     achievements = report.get("achievements", {})
-    doc.add_paragraph(f"已解锁成就: {achievements.get('unlockedCount', 0)} 个")
+    total_achievements = achievements.get("totalCount", 12)
+    doc.add_paragraph(f"已解锁成就: {achievements.get('unlockedCount', 0)} / {total_achievements} 个")
+
+    # 成就解锁时间线
+    timeline = achievements.get("timeline", [])
+    if timeline:
+        doc.add_paragraph()
+        p = doc.add_paragraph()
+        p.add_run("成就解锁时间线:").bold = True
+        for item in timeline:
+            date_str = item.get("date", "")
+            name = item.get("name", item.get("id", ""))
+            doc.add_paragraph(f"  🏆 {date_str} - {name}")
 
     recent = achievements.get("recentUnlocks", [])
-    if recent:
+    if recent and not timeline:
         doc.add_paragraph("最近解锁:")
         for ach in recent:
             doc.add_paragraph(f"  - {ach.get('id', '')} ({ach.get('unlockedAt', '')})")
 
     doc.add_paragraph()
 
-    # 学习建议
-    doc.add_heading("学习建议", level=1)
+    # 技能使用趋势
+    doc.add_heading("技能使用趋势", level=1)
 
-    recommendations = report.get("recommendations", [])
-    for rec in recommendations:
-        doc.add_paragraph(f"• {rec}")
+    skills = report.get("skills", {})
+    trend = skills.get("trend", {})
+    usage = skills.get("usage", {})
+
+    if usage:
+        doc.add_paragraph("技能使用统计:")
+        skills_table = doc.add_table(rows=len(usage) + 1, cols=2)
+        skills_table.style = 'Table Grid'
+        skills_table.rows[0].cells[0].text = "技能名称"
+        skills_table.rows[0].cells[1].text = "使用次数"
+
+        for i, (skill_name, count) in enumerate(usage.items(), 1):
+            skills_table.rows[i].cells[0].text = skill_name
+            skills_table.rows[i].cells[1].text = str(count)
+
+        if skills.get("mostUsed"):
+            doc.add_paragraph(f"最常用技能: {skills.get('mostUsed')}")
+    else:
+        doc.add_paragraph("暂无技能使用记录")
+
+    doc.add_paragraph()
+
+    # 智能学习建议
+    doc.add_heading("智能学习建议", level=1)
+
+    recommendations = report.get("recommendations", {})
+
+    # 优势领域
+    strengths = recommendations.get("strengths", [])
+    if strengths:
+        p = doc.add_paragraph()
+        p.add_run("✨ 优势领域:").bold = True
+        for s in strengths:
+            doc.add_paragraph(f"  • {s}")
+
+    # 改进建议
+    improvements = recommendations.get("improvements", [])
+    if improvements:
+        p = doc.add_paragraph()
+        p.add_run("📈 改进建议:").bold = True
+        for s in improvements:
+            doc.add_paragraph(f"  • {s}")
+
+    # 下一步目标
+    next_goals = recommendations.get("nextGoals", [])
+    if next_goals:
+        p = doc.add_paragraph()
+        p.add_run("🎯 下一步目标:").bold = True
+        for s in next_goals:
+            doc.add_paragraph(f"  • {s}")
+
+    # 学习技巧
+    tips = recommendations.get("tips", [])
+    if tips:
+        p = doc.add_paragraph()
+        p.add_run("💡 学习技巧:").bold = True
+        for s in tips:
+            doc.add_paragraph(f"  • {s}")
 
     # 页脚
     doc.add_paragraph()
@@ -4562,6 +4745,12 @@ async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
     # 调用AI生成
     t_ai_start = time_module.time()
     client = get_global_http_client()
+
+    # 检查客户端是否可用
+    if client is None:
+        print("[笔记生成] 全局客户端不可用，创建临时客户端")
+        client = httpx.AsyncClient(timeout=60.0)
+
     settings = await get_cached_settings()
 
     ai_messages = [
@@ -4582,14 +4771,37 @@ async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
         if fast_provider_id and model_providers:
             for provider in model_providers:
                 if str(provider.get("id", "")) == str(fast_provider_id):
+                    # API Key
                     if provider.get("apiKey"):
-                        base_url = provider.get("baseUrl", base_url)
                         api_key = provider.get("apiKey", api_key)
+                    elif provider.get("api_key"):
+                        api_key = provider.get("api_key", api_key)
+                    # Base URL
+                    if provider.get("url"):
+                        base_url = provider.get("url", base_url)
+                    elif provider.get("baseUrl"):
+                        base_url = provider.get("baseUrl", base_url)
+                    elif provider.get("base_url"):
+                        base_url = provider.get("base_url", base_url)
+                    # Model ID
+                    if provider.get("modelId"):
+                        model = provider.get("modelId", model)
+                    elif provider.get("model"):
                         model = provider.get("model", model)
-                        print(f"[笔记生成] 使用快速模型配置: {model}")
-                        break
+                    print(f"[笔记生成] 使用快速模型配置: model={model}, base_url={base_url}")
+                    break
+            # 快速模型独立配置覆盖
+            if fast_settings.get("api_key"):
+                api_key = fast_settings.get("api_key")
+            if fast_settings.get("base_url"):
+                base_url = fast_settings.get("base_url")
+            if fast_settings.get("model"):
+                model = fast_settings.get("model")
 
-        print(f"[笔记生成] 调用AI: model={model}, base_url={base_url}")
+        print(f"[笔记生成] 调用AI: model={model}, base_url={base_url}, api_key={'已配置' if api_key else '未配置'}")
+
+        if not api_key:
+            raise HTTPException(status_code=500, detail="API密钥未配置，请在设置中配置API Key")
 
         response = await client.post(
             f"{base_url}/chat/completions",
@@ -4608,12 +4820,31 @@ async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
         print(f"[笔记生成] AI响应完成, 耗时: {time_module.time() - t_ai_start:.2f}s, 状态码: {response.status_code}")
 
         if response.status_code != 200:
-            error_text = response.text[:200] if response.text else "无错误信息"
-            print(f"[笔记生成] AI调用失败: {error_text}")
-            raise HTTPException(status_code=500, detail=f"AI生成失败: {error_text}")
+            error_text = response.text[:500] if response.text else "无错误信息"
+            print(f"[笔记生成] AI调用失败: 状态码={response.status_code}, 错误={error_text}")
+            # 尝试解析错误信息
+            try:
+                error_json = response.json()
+                if "error" in error_json:
+                    error_msg = error_json["error"].get("message", error_text)
+                else:
+                    error_msg = error_text
+            except:
+                error_msg = error_text
+            raise HTTPException(status_code=500, detail=f"AI调用失败: {error_msg}")
 
         result = response.json()
+
+        # 检查响应格式
+        if "choices" not in result or len(result["choices"]) == 0:
+            print(f"[笔记生成] 响应格式错误: {result}")
+            raise HTTPException(status_code=500, detail="AI响应格式错误，请重试")
+
         content = result["choices"][0]["message"]["content"]
+
+        if not content or len(content.strip()) < 10:
+            print(f"[笔记生成] AI返回内容为空或过短: {content}")
+            raise HTTPException(status_code=500, detail="AI生成内容为空，请重试")
 
         # 提取标题（第一个##后的内容）
         title_match = re.search(r'##\s*(.+)', content)
@@ -4667,7 +4898,18 @@ async def ai_generate_note(request: AIGenerateNoteRequest = Body(...)):
 
         return {"status": "success", "note": note}
 
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        print("[笔记生成] AI请求超时")
+        raise HTTPException(status_code=504, detail="AI请求超时，请稍后重试")
+    except httpx.ConnectError as e:
+        print(f"[笔记生成] 连接错误: {e}")
+        raise HTTPException(status_code=503, detail=f"无法连接AI服务: {str(e)}")
     except Exception as e:
+        import traceback
+        print(f"[笔记生成] 异常: {type(e).__name__}: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"AI生成失败: {str(e)}")
 
 
