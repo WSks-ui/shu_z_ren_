@@ -19,8 +19,8 @@ XINGYUN_BASE_URL = "https://nebula-agent.xingyun3d.com"
 
 # 魔珐星云配置
 XINGYUN_CONFIG = {
-    "app_id": "",
-    "app_secret": "",
+    "app_id": "869cc917e55e42ffacb3abde578d597d",
+    "app_secret": "3b226e202c07463cb5db3c4c4575c75f",
     "gateway_server": "https://nebula-agent.xingyun3d.com/user/v1/ttsa/session",
 }
 
