@@ -5795,6 +5795,164 @@ body {
   border-left: 3px solid var(--primary-400);
 }
 
+/* 成就解锁时间线 */
+.achievement-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.timeline-date {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  min-width: 60px;
+}
+
+.timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary-400);
+  position: relative;
+}
+
+.timeline-dot::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 2px;
+  height: 20px;
+  background: var(--glass-border);
+  transform: translateX(-50%);
+}
+
+.timeline-item:last-child .timeline-dot::before {
+  display: none;
+}
+
+.timeline-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--glass-bg);
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+}
+
+.timeline-badge {
+  font-size: 14px;
+}
+
+.timeline-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.achievement-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 8px;
+  background: rgba(251, 191, 36, 0.1);
+  border-radius: 8px;
+}
+
+/* 技能使用图表 */
+.skill-usage-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.skill-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.skill-bar-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 70px;
+}
+
+.skill-bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--glass-bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.skill-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-400), var(--accent-400));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.skill-bar-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  min-width: 40px;
+  text-align: right;
+}
+
+.most-used-skill {
+  font-size: 12px;
+  color: var(--warning-400);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(251, 191, 36, 0.1);
+  border-radius: 8px;
+}
+
+/* 智能建议分类 */
+.rec-category {
+  margin-bottom: 16px;
+}
+
+.rec-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.rec-title i {
+  font-size: 12px;
+}
+
+.rec-category ul {
+  list-style: none;
+}
+
+.rec-category li {
+  padding: 10px 12px;
+  background: var(--glass-bg);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  border-left: 3px solid var(--primary-400);
+  color: var(--text-primary);
+}
+
 /* 设置模态框 */
 
 /* 遮罩 */
