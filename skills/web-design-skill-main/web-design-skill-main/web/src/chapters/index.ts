@@ -14,10 +14,21 @@ import References from './12-references';
 import Closing from './13-closing';
 import Outro from './14-outro';
 
+// 教育数字人演示章节
+import Edu01 from './edu-01';
+import Edu02 from './edu-02';
+import Edu03 from './edu-03';
+import Edu04 from './edu-04';
+import Edu05 from './edu-05';
+import Edu06 from './edu-06';
+import Edu07 from './edu-07';
+
 /**
  * 章节注册表 —— 顺序即播放顺序。
- * 后续每写一章，append 到这里即可，绝不修改既有章节文件。
+ * 原有章节保留，教育演示章节追加。
  */
+
+// 原有章节（保留）
 export const chapters: ChapterDef[] = [
   Opening,
   Video,
@@ -33,4 +44,15 @@ export const chapters: ChapterDef[] = [
   References,
   Closing,
   Outro,
+];
+
+// 教育数字人演示章节（独立导出）
+export const eduChapters: ChapterDef[] = [
+  Edu01,
+  Edu02,
+  Edu03,
+  Edu04,
+  Edu05,
+  Edu06,
+  Edu07,
 ];
