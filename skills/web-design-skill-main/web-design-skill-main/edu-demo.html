@@ -1,0 +1,1716 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>研伴 · 智能教育数字人系统 · 竞赛演示</title>
+  <style>
+    /* ========== 设计令牌 ========== */
+    :root {
+      --bg: #1a1a1f;
+      --bg-card: #222228;
+      --fg: #f5f5f0;
+      --fg-soft: #b0b0a8;
+      --fg-mute: #707068;
+      --fg-faint: #505048;
+      --accent: #e8a050;
+      --accent-glow: rgba(232, 160, 80, 0.3);
+      --accent-deep: #c07030;
+      --line: #3a3a35;
+      --line-mid: #4a4a45;
+      --line-strong: #5a5a55;
+      --crimson: #d04040;
+      --success: #50c878;
+      --info: #60a0d0;
+      --purple: #9080c0;
+
+      --f-serif: "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
+      --f-sans: "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+      --f-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+
+      --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+      --ease-enter: cubic-bezier(0.0, 0.0, 0.2, 1);
+      --ease-exit: cubic-bezier(0.4, 0.0, 1, 1);
+      --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0c;
+      font-family: var(--f-sans);
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    /* ========== 舞台容器 ========== */
+    .stage-wrap {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, #151518 0%, #0a0a0c 100%);
+    }
+
+    .stage {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--fg);
+      transform-origin: center;
+    }
+
+    /* ========== 章节基础 ========== */
+    .chapter {
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--f-sans);
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s var(--ease-out);
+    }
+
+    .chapter.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* ========== 背景效果 ========== */
+    .grid-bg {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, var(--line) 0, var(--line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--line) 0, var(--line) 1px, transparent 1px);
+      background-size: 80px 80px;
+      mask-image: radial-gradient(circle at 50% 50%, #000 0%, #000 55%, transparent 90%);
+      pointer-events: none;
+      opacity: 0.4;
+    }
+
+    .glow-orb {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.12;
+      pointer-events: none;
+    }
+    .glow-orb-1 {
+      top: -200px;
+      right: -100px;
+      background: var(--accent);
+    }
+    .glow-orb-2 {
+      bottom: -200px;
+      left: -100px;
+      background: #6080c0;
+    }
+
+    /* ========== 角落装饰 ========== */
+    .corner {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      pointer-events: none;
+    }
+    .corner-tl { top: 48px; left: 56px; }
+    .corner-br { bottom: 48px; right: 56px; }
+    .corner span {
+      position: absolute;
+      background: var(--fg-faint);
+    }
+    .corner span:nth-child(1) {
+      top: 0; left: 50%; width: 1px; height: 100%;
+      transform: translateX(-50%);
+    }
+    .corner span:nth-child(2) {
+      left: 0; top: 50%; width: 100%; height: 1px;
+      transform: translateY(-50%);
+    }
+
+    /* ========== 动画 ========== */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes blurIn {
+      from { opacity: 0; filter: blur(30px); transform: scale(0.92); }
+      to { opacity: 1; filter: blur(0); transform: scale(1); }
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(48px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.5; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.12; transform: scale(1); }
+      50% { opacity: 0.18; transform: scale(1.05); }
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    @keyframes typewriter {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+    @keyframes countUp {
+      from { opacity: 0; transform: translateY(20px) scale(0.8); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-60px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(60px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.7); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes rotateIn {
+      from { opacity: 0; transform: rotate(-10deg) scale(0.9); }
+      to { opacity: 1; transform: rotate(0) scale(1); }
+    }
+    @keyframes underlineGrow {
+      from { transform: scaleX(0); opacity: 0; }
+      to { transform: scaleX(1); opacity: 1; }
+    }
+    @keyframes barGrow {
+      from { width: 0; }
+      to { width: var(--bar-width, 100%); }
+    }
+    @keyframes breathe {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    @keyframes ripple {
+      0% { transform: scale(1); opacity: 0.4; }
+      100% { transform: scale(2); opacity: 0; }
+    }
+
+    .anim-fade { animation: fadeIn 0.7s var(--ease-out) both; }
+    .anim-blur { animation: blurIn 1.1s var(--ease-out) both; }
+    .anim-rise { animation: rise 0.8s var(--ease-out) both; }
+    .anim-slide-left { animation: slideInLeft 0.8s var(--ease-out) both; }
+    .anim-slide-right { animation: slideInRight 0.8s var(--ease-out) both; }
+    .anim-scale { animation: scaleIn 0.6s var(--ease-bounce) both; }
+    .anim-rotate { animation: rotateIn 0.7s var(--ease-out) both; }
+    .anim-count { animation: countUp 0.8s var(--ease-bounce) both; }
+
+    /* 发光球动画 */
+    .glow-orb { animation: glowPulse 4s ease-in-out infinite; }
+
+    /* 标题下划线动画 */
+    .title::after {
+      animation: underlineGrow 0.8s var(--ease-out) 0.3s both;
+      transform-origin: center;
+    }
+
+    /* 强调词动画 */
+    .title-em::after {
+      animation: underlineGrow 0.6s var(--ease-out) 0.5s both;
+      transform-origin: left;
+    }
+
+    /* 进度条动画 */
+    .progress-fill {
+      animation: barGrow 0.6s var(--ease-out) both;
+    }
+
+    /* 数据条动画 */
+    .stat-bar {
+      animation: barGrow 1s var(--ease-out) 0.3s both;
+    }
+
+    /* 卡片入场增强 */
+    .card.anim-rise {
+      animation: rise 0.8s var(--ease-out) both;
+    }
+    .card.anim-scale {
+      animation: scaleIn 0.6s var(--ease-bounce) both;
+    }
+
+    /* 徽章闪烁 */
+    .badge-icon {
+      animation: breathe 2s ease-in-out infinite;
+    }
+
+    /* 聊天消息动画增强 */
+    .chat-message {
+      animation: fadeIn 0.5s var(--ease-out) both;
+    }
+    .chat-message.user {
+      animation: slideInRight 0.5s var(--ease-out) both;
+    }
+    .chat-message.ai {
+      animation: slideInLeft 0.5s var(--ease-out) both;
+    }
+
+    /* 架构层动画 */
+    .arch-layer.anim-rise {
+      animation: rise 0.8s var(--ease-out) both;
+    }
+    .arch-module {
+      animation: fadeIn 0.5s var(--ease-out) both;
+    }
+
+    /* 连接器动画 */
+    .connector-line {
+      animation: underlineGrow 0.4s var(--ease-out) both;
+      transform-origin: left;
+    }
+
+    /* 情绪指示器动画 */
+    .emotion-bar.anim-rise {
+      animation: rise 0.8s var(--ease-out) both;
+    }
+    .emotion-value {
+      animation: breathe 1.5s ease-in-out infinite;
+    }
+
+    /* 成就分类动画 */
+    .achievement-cat.anim-rise {
+      animation: rise 0.8s var(--ease-out) both;
+    }
+    .cat-header {
+      animation: underlineGrow 0.6s var(--ease-out) 0.2s both;
+      transform-origin: left;
+    }
+
+    /* 贡献条动画 */
+    .contribution-bar {
+      animation: scaleIn 0.8s var(--ease-out) both;
+    }
+    .contribution-ai, .contribution-human {
+      animation: barGrow 1.2s var(--ease-out) 0.3s both;
+    }
+
+    /* 伦理声明动画 */
+    .ethics-box.anim-rise {
+      animation: rise 0.8s var(--ease-out) both;
+    }
+
+    /* 章节切换动画 */
+    .chapter {
+      transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
+    }
+    .chapter:not(.active) {
+      transform: scale(0.98);
+    }
+    .chapter.active {
+      transform: scale(1);
+    }
+
+    /* ========== SVG 图标 ========== */
+    .icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon svg {
+      width: 100%;
+      height: 100%;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* ========== 通用样式 ========== */
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-family: var(--f-mono);
+      font-size: 16px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--fg-mute);
+      margin-bottom: 40px;
+    }
+    .eyebrow-bar {
+      width: 56px;
+      height: 1px;
+      background: var(--line-mid);
+    }
+
+    .title {
+      font-family: var(--f-serif);
+      font-weight: 400;
+      font-size: 160px;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+      margin: 0 0 40px;
+      position: relative;
+    }
+    .title::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: -12px;
+      width: 100px;
+      height: 3px;
+      background: var(--accent);
+      opacity: 0.7;
+    }
+
+    .title-em {
+      color: var(--accent);
+      font-style: italic;
+      position: relative;
+    }
+    .title-em::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0;
+      bottom: 8px;
+      height: 8px;
+      background: var(--accent-glow);
+      z-index: -1;
+    }
+
+    .subtitle {
+      font-size: 32px;
+      font-weight: 300;
+      color: var(--fg-soft);
+      letter-spacing: 0.1em;
+      margin-bottom: 20px;
+    }
+
+    .positioning {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      font-size: 26px;
+      margin-bottom: 60px;
+    }
+    .positioning-highlight {
+      font-family: var(--f-serif);
+      font-style: italic;
+      font-size: 44px;
+      color: var(--accent);
+      position: relative;
+    }
+    .positioning-highlight::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0;
+      bottom: 4px;
+      height: 6px;
+      background: var(--accent-glow);
+      z-index: -1;
+    }
+    .positioning-muted { color: var(--fg-mute); }
+    .positioning-line {
+      color: var(--fg-soft);
+      text-decoration: line-through;
+      text-decoration-color: var(--fg-faint);
+    }
+
+    .footer {
+      position: absolute;
+      bottom: 48px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--f-mono);
+      font-size: 13px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--fg-faint);
+    }
+
+    /* ========== 卡片样式 ========== */
+    .card {
+      border: 1px solid var(--line-mid);
+      background: rgba(34, 34, 40, 0.8);
+      backdrop-filter: blur(8px);
+      border-radius: 6px;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .card:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-2px);
+    }
+
+    /* ========== 理念卡片 ========== */
+    .principles {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 40px;
+      max-width: 1200px;
+      width: 100%;
+    }
+    .principle {
+      text-align: center;
+      padding: 36px 28px;
+    }
+    .principle-num {
+      font-family: var(--f-mono);
+      font-size: 13px;
+      letter-spacing: 0.3em;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+    .principle-title {
+      font-family: var(--f-serif);
+      font-size: 26px;
+      color: var(--fg);
+      margin-bottom: 12px;
+    }
+    .principle-desc {
+      font-size: 17px;
+      color: var(--fg-soft);
+      line-height: 1.6;
+    }
+
+    /* ========== 技能卡片 ========== */
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      max-width: 1400px;
+      width: 100%;
+    }
+    .skill-card {
+      display: flex;
+      gap: 18px;
+      padding: 22px;
+    }
+    .skill-icon {
+      width: 52px;
+      height: 52px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      border-radius: 6px;
+      color: var(--accent);
+    }
+    .skill-content { flex: 1; }
+    .skill-title {
+      font-family: var(--f-serif);
+      font-size: 20px;
+      color: var(--fg);
+      margin-bottom: 6px;
+    }
+    .skill-desc {
+      font-size: 13px;
+      color: var(--fg-soft);
+      margin-bottom: 8px;
+    }
+    .skill-stages {
+      font-family: var(--f-mono);
+      font-size: 10px;
+      color: var(--fg-mute);
+      padding: 5px 10px;
+      background: var(--bg);
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    /* ========== 数据展示 ========== */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+    .stat-item {
+      text-align: center;
+      padding: 20px;
+    }
+    .stat-value {
+      display: block;
+      font-family: var(--f-serif);
+      font-size: 42px;
+      color: var(--fg);
+      margin-bottom: 8px;
+    }
+    .stat-label {
+      font-family: var(--f-mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--fg-mute);
+    }
+
+    /* ========== 进度条 ========== */
+    .progress-overlay {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+    .progress-overlay:hover { opacity: 1; }
+    .progress-bar {
+      height: 3px;
+      background: var(--line);
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-deep));
+      transition: width 0.4s var(--ease-out);
+    }
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 28px;
+      font-family: var(--f-mono);
+      font-size: 11px;
+      color: var(--fg-mute);
+      background: rgba(26, 26, 31, 0.95);
+      backdrop-filter: blur(8px);
+    }
+    .progress-chapters {
+      display: flex;
+      gap: 8px;
+    }
+    .progress-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--line-mid);
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .progress-dot.active {
+      background: var(--accent);
+      transform: scale(1.2);
+    }
+    .progress-dot:hover {
+      background: var(--fg-mute);
+    }
+
+    /* ========== 提示 ========== */
+    .hint {
+      position: fixed;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--f-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      color: var(--fg-faint);
+      opacity: 0.5;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    body:hover .hint { opacity: 0.8; }
+
+    /* ========== 时间指示器 ========== */
+    .time-indicator {
+      position: absolute;
+      top: 48px;
+      right: 56px;
+      font-family: var(--f-mono);
+      font-size: 14px;
+      color: var(--fg-mute);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .time-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    /* ========== 对话演示 ========== */
+    .chat-demo {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 700px;
+      width: 100%;
+    }
+    .chat-message {
+      padding: 16px 20px;
+      border-radius: 8px;
+      max-width: 85%;
+      animation: fadeIn 0.5s var(--ease-out) both;
+    }
+    .chat-message.user {
+      background: var(--accent);
+      color: var(--bg);
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+    .chat-message.ai {
+      background: var(--bg-card);
+      border: 1px solid var(--line-mid);
+      border-bottom-left-radius: 4px;
+    }
+    .chat-message .label {
+      font-family: var(--f-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      opacity: 0.6;
+      margin-bottom: 6px;
+    }
+
+    /* ========== 情绪指示器 ========== */
+    .emotion-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--line-mid);
+      border-radius: 6px;
+    }
+    .emotion-icon {
+      width: 24px;
+      height: 24px;
+      color: var(--accent);
+    }
+    .emotion-label {
+      font-size: 14px;
+      color: var(--fg-soft);
+    }
+    .emotion-value {
+      font-family: var(--f-mono);
+      font-size: 12px;
+      color: var(--accent);
+      margin-left: auto;
+    }
+
+    /* ========== 架构图 ========== */
+    .arch-layer {
+      width: 100%;
+      max-width: 1100px;
+      padding: 20px 28px;
+      border-radius: 6px;
+    }
+    .arch-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .arch-badge {
+      padding: 4px 12px;
+      background: var(--accent);
+      color: var(--bg);
+      font-family: var(--f-mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-radius: 3px;
+    }
+    .arch-title {
+      font-family: var(--f-serif);
+      font-size: 20px;
+      color: var(--fg);
+    }
+    .arch-modules {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .arch-module {
+      padding: 10px;
+      background: var(--bg);
+      border-radius: 4px;
+      font-family: var(--f-mono);
+      font-size: 12px;
+      color: var(--fg-soft);
+      text-align: center;
+    }
+    .arch-module span {
+      display: block;
+      font-size: 10px;
+      color: var(--fg-mute);
+      margin-top: 4px;
+    }
+
+    /* ========== 连接线 ========== */
+    .connector {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--fg-faint);
+    }
+    .connector-line {
+      flex: 1;
+      height: 1px;
+      background: var(--line-mid);
+    }
+    .connector-text {
+      font-family: var(--f-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* ========== 成就徽章 ========== */
+    .achievement-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .achievement-cat {
+      padding: 18px;
+      border-radius: 6px;
+    }
+    .cat-header {
+      display: flex;
+      justify-content: space-between;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+      border-bottom: 2px solid var(--accent);
+    }
+    .cat-name {
+      font-family: var(--f-mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .cat-count {
+      font-family: var(--f-mono);
+      font-size: 11px;
+      color: var(--fg-mute);
+    }
+    .badge-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      background: var(--bg);
+      border-radius: 3px;
+      font-size: 12px;
+      color: var(--fg-soft);
+    }
+    .badge-icon {
+      width: 14px;
+      height: 14px;
+      color: var(--accent);
+    }
+
+    /* ========== 贡献比例条 ========== */
+    .contribution-bar {
+      display: flex;
+      height: 36px;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .contribution-ai {
+      background: linear-gradient(90deg, #7060a0, #9080c0);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--f-mono);
+      font-size: 12px;
+      color: var(--bg);
+    }
+    .contribution-human {
+      background: linear-gradient(90deg, var(--accent), var(--accent-deep));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--f-mono);
+      font-size: 12px;
+      color: var(--bg);
+    }
+
+    /* ========== 伦理声明 ========== */
+    .ethics-box {
+      padding: 20px 24px;
+      border-left: 3px solid var(--accent);
+      background: var(--bg-card);
+      border-radius: 0 6px 6px 0;
+    }
+    .ethics-title {
+      font-family: var(--f-serif);
+      font-size: 18px;
+      color: var(--fg);
+      margin-bottom: 12px;
+    }
+    .ethics-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .ethics-item {
+      font-size: 14px;
+      color: var(--fg-soft);
+      padding-left: 16px;
+      position: relative;
+    }
+    .ethics-item::before {
+      content: '•';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+    }
+
+    /* ========== 数字人占位 ========== */
+    .avatar-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .avatar-circle {
+      width: 120px;
+      height: 120px;
+      border: 2px solid var(--line-strong);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: float 4s ease-in-out infinite;
+    }
+    .avatar-circle svg {
+      width: 60px;
+      height: 60px;
+      stroke: var(--fg-mute);
+      stroke-width: 1;
+      fill: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <!-- ========== 章节 01: 开场 ========== -->
+      <section class="chapter active" id="ch01">
+        <div class="grid-bg"></div>
+        <div class="glow-orb glow-orb-1"></div>
+        <div class="corner corner-tl"><span></span><span></span></div>
+        <div class="corner corner-br"><span></span><span></span></div>
+
+        <div class="time-indicator">
+          <span class="time-dot"></span>
+          <span>01 / 07</span>
+        </div>
+
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 80px;">
+          <div class="eyebrow anim-fade">
+            <span class="eyebrow-bar"></span>
+            <span>01 · 开场</span>
+            <span class="eyebrow-bar"></span>
+          </div>
+
+          <h1 class="title anim-blur" style="animation-delay: 0.1s;">研伴</h1>
+
+          <div class="subtitle anim-rise" style="animation-delay: 0.2s;">智能教育数字人系统</div>
+
+          <div class="positioning anim-rise" style="animation-delay: 0.3s;">
+            <span class="positioning-highlight">协作者</span>
+            <span class="positioning-muted">，而非</span>
+            <span class="positioning-line">答案生成器</span>
+          </div>
+
+          <div class="principles">
+            <div class="card principle anim-scale" style="animation-delay: 0.4s;">
+              <div class="principle-num">01</div>
+              <div class="principle-title">引导式交互</div>
+              <div class="principle-desc">苏格拉底式提问<br/>培养独立思考能力</div>
+            </div>
+            <div class="card principle anim-scale" style="animation-delay: 0.5s;">
+              <div class="principle-num">02</div>
+              <div class="principle-title">方法论支撑</div>
+              <div class="principle-desc">内置科研方法论知识库<br/>RAG 向量检索增强</div>
+            </div>
+            <div class="card principle anim-scale" style="animation-delay: 0.6s;">
+              <div class="principle-num">03</div>
+              <div class="principle-title">成长可量化</div>
+              <div class="principle-desc">经验等级 · 成就徽章<br/>学习进步有据可查</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">普通高等教育组 · 竞赛演示</div>
+      </section>
+
+      <!-- ========== 章节 02: 数字人 ========== -->
+      <section class="chapter" id="ch02">
+        <div class="grid-bg"></div>
+        <div class="glow-orb glow-orb-2"></div>
+
+        <div class="time-indicator">
+          <span class="time-dot"></span>
+          <span>02 / 07</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; width: 100%; height: 100%; padding: 80px;">
+          <!-- 左侧：数字人形象 -->
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <div class="card" style="width: 380px; height: 480px; position: relative; overflow: hidden;">
+              <img src="web/src/img.png" alt="数字人形象" style="width: 100%; height: 100%; object-fit: cover; border-radius: inherit;">
+              <div class="anim-fade" style="position: absolute; top: 20px; right: 20px; display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 4px; font-family: var(--f-mono); font-size: 11px; color: var(--fg-soft);">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 1.6s infinite;"></span>
+                云端渲染中
+              </div>
+            </div>
+
+            <!-- 情绪指示器 -->
+            <div class="emotion-bar anim-rise" style="animation-delay: 0.3s; margin-top: 24px; width: 380px;">
+              <div class="icon emotion-icon">
+                <svg viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                  <circle cx="9" cy="9" r="1" fill="currentColor"/>
+                  <circle cx="15" cy="9" r="1" fill="currentColor"/>
+                </svg>
+              </div>
+              <span class="emotion-label">当前情绪：专注</span>
+              <span class="emotion-value">置信度 92%</span>
+            </div>
+          </div>
+
+          <!-- 右侧：特性 -->
+          <div style="display: flex; flex-direction: column; justify-content: center; padding-left: 60px;">
+            <div class="eyebrow anim-fade">
+              <span class="eyebrow-bar"></span>
+              <span>02 · 数字人</span>
+            </div>
+
+            <h1 class="title anim-blur" style="font-size: 88px; margin-bottom: 48px;">
+              有温度的<span class="title-em">数字人</span>
+            </h1>
+
+            <div class="card anim-slide-left" style="display: flex; gap: 20px; padding: 20px; margin-bottom: 16px;">
+              <div class="icon" style="width: 44px; height: 44px; border: 1px solid var(--line-mid); border-radius: 4px; color: var(--accent);">
+                <svg viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+              </div>
+              <div style="flex: 1;">
+                <div style="font-family: var(--f-serif); font-size: 24px; color: var(--fg); margin-bottom: 4px;">云端渲染</div>
+                <div style="font-size: 15px; color: var(--fg-soft);">高质量 3D 形象，无需本地 GPU，低带宽可用</div>
+              </div>
+            </div>
+
+            <div class="card anim-slide-left" style="animation-delay: 0.1s; display: flex; gap: 20px; padding: 20px; margin-bottom: 16px;">
+              <div class="icon" style="width: 44px; height: 44px; border: 1px solid var(--line-mid); border-radius: 4px; color: var(--accent);">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/></svg>
+              </div>
+              <div style="flex: 1;">
+                <div style="font-family: var(--f-serif); font-size: 24px; color: var(--fg); margin-bottom: 4px;">情绪联动</div>
+                <div style="font-size: 15px; color: var(--fg-soft);">10+ 种情绪识别，表情实时响应，有温度的交互</div>
+              </div>
+            </div>
+
+            <div class="card anim-slide-left" style="animation-delay: 0.2s; display: flex; gap: 20px; padding: 20px;">
+              <div class="icon" style="width: 44px; height: 44px; border: 1px solid var(--line-mid); border-radius: 4px; color: var(--accent);">
+                <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              </div>
+              <div style="flex: 1;">
+                <div style="font-family: var(--f-serif); font-size: 24px; color: var(--fg); margin-bottom: 4px;">语音驱动</div>
+                <div style="font-size: 15px; color: var(--fg-soft);">文本驱动说话，唇形同步，支持流式 TTS</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">魔珐星云引擎驱动 · 云端渲染</div>
+      </section>
+
+      <!-- ========== 章节 03: 教育技能 ========== -->
+      <section class="chapter" id="ch03">
+        <div class="grid-bg"></div>
+
+        <div class="time-indicator">
+          <span class="time-dot"></span>
+          <span>03 / 07</span>
+        </div>
+
+        <div style="padding: 60px 80px; width: 100%; height: 100%; display: flex; flex-direction: column;">
+          <div style="text-align: center; margin-bottom: 36px;">
+            <div class="eyebrow anim-fade" style="display: inline-flex;">
+              <span class="eyebrow-bar"></span>
+              <span>03 · 教育技能</span>
+              <span class="eyebrow-bar"></span>
+            </div>
+            <h1 class="title anim-blur" style="font-size: 68px;">
+              五大专业<span class="title-em">教育技能</span>
+            </h1>
+          </div>
+
+          <div class="skills-grid" style="flex: 1; align-content: center;">
+            <div class="card skill-card anim-rise">
+              <div class="skill-icon">
+                <svg viewBox="0 0 24 24"><path d="M9 3h6v2H9zM12 5v3m-4 0h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z"/><circle cx="10" cy="14" r="1" fill="currentColor"/><circle cx="14" cy="14" r="1" fill="currentColor"/><path d="M10 17h4"/></svg>
+              </div>
+              <div class="skill-content">
+                <div class="skill-title">科研助手</div>
+                <div class="skill-desc">实验设计 · 研究方法 · 数据分析</div>
+                <div class="skill-stages">选题探索 → 假设构建 → 实验设计 → 数据分析</div>
+              </div>
+            </div>
+            <div class="card skill-card anim-scale" style="animation-delay: 0.08s;">
+              <div class="skill-icon">
+                <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              </div>
+              <div class="skill-content">
+                <div class="skill-title">文献综述</div>
+                <div class="skill-desc">PICO框架 · PRISMA流程 · 检索策略</div>
+                <div class="skill-stages">主题界定 → 检索策略 → 筛选评估 → 综合撰写</div>
+              </div>
+            </div>
+            <div class="card skill-card anim-scale" style="animation-delay: 0.16s;">
+              <div class="skill-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+              </div>
+              <div class="skill-content">
+                <div class="skill-title">论文写作</div>
+                <div class="skill-desc">结构规划 · 写作技巧 · 多格式引用</div>
+                <div class="skill-stages">论文选题 → 框架搭建 → 内容撰写 → 润色定稿</div>
+              </div>
+            </div>
+            <div class="card skill-card anim-scale" style="animation-delay: 0.24s;">
+              <div class="skill-icon">
+                <svg viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></svg>
+              </div>
+              <div class="skill-content">
+                <div class="skill-title">虚拟导师</div>
+                <div class="skill-desc">知识讲解 · 学习规划 · 答疑解惑</div>
+                <div class="skill-stages">学情诊断 → 知识讲解 → 练习巩固 → 总结提升</div>
+              </div>
+            </div>
+            <div class="card skill-card anim-rise" style="animation-delay: 0.32s;">
+              <div class="skill-icon">
+                <svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+              </div>
+              <div class="skill-content">
+                <div class="skill-title">数学助手</div>
+                <div class="skill-desc">公式识别 · 分步解题 · 错题分析</div>
+                <div class="skill-stages">问题理解 → 方法选择 → 逐步求解 → 验证总结</div>
+              </div>
+            </div>
+            <div class="card skill-card anim-rise" style="animation-delay: 0.4s;">
+              <div class="skill-icon">
+                <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="skill-content">
+                <div class="skill-title">共同特性</div>
+                <div class="skill-desc">图片识别 · 阶段跳转 · 番茄钟 · 笔记生成</div>
+                <div class="skill-stages">苏格拉底式引导 · 培养独立思考</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 对话演示 -->
+          <div class="anim-rise" style="animation-delay: 0.5s; margin-top: 24px; display: flex; justify-content: center;">
+            <div class="chat-demo" style="max-width: 800px;">
+              <div class="chat-message user" style="animation-delay: 0.6s;">
+                <div class="label">用户</div>
+                我想研究「AI在教育中的应用」，应该怎么开始？
+              </div>
+              <div class="chat-message ai" style="animation-delay: 0.8s;">
+                <div class="label">研伴</div>
+                这是一个很有意义的选题。在开始之前，我想先了解：您更关注哪个教育阶段？是 K-12、高等教育，还是职业教育？这将帮助我们缩小研究范围。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">苏格拉底式引导 · 培养独立思考</div>
+      </section>
+
+      <!-- ========== 章节 04: 成长系统 ========== -->
+      <section class="chapter" id="ch04">
+        <div class="grid-bg"></div>
+        <div class="glow-orb glow-orb-1"></div>
+
+        <div class="time-indicator">
+          <span class="time-dot"></span>
+          <span>04 / 07</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1.3fr; width: 100%; height: 100%; padding: 80px;">
+          <!-- 左侧 -->
+          <div style="display: flex; flex-direction: column; justify-content: center; padding-right: 40px;">
+            <div class="eyebrow anim-fade">
+              <span class="eyebrow-bar"></span>
+              <span>04 · 成长系统</span>
+            </div>
+
+            <h1 class="title anim-blur" style="font-size: 76px;">
+              学习进步<br/><span class="title-em">有据可查</span>
+            </h1>
+
+            <div class="card anim-rise" style="margin-top: 40px; display: flex; align-items: center; gap: 20px; padding: 20px;">
+              <div style="width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--accent), var(--accent-deep)); border-radius: 8px;">
+                <span style="font-family: var(--f-serif); font-size: 26px; color: var(--bg); font-weight: 600;">Lv.5</span>
+              </div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; color: var(--fg-mute); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.1em;">当前等级</div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <div style="flex: 1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden;">
+                    <div style="width: 65%; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-deep));"></div>
+                  </div>
+                  <span style="font-family: var(--f-mono); font-size: 13px; color: var(--fg-soft);">650 / 1000 EXP</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="stat-grid anim-rise" style="animation-delay: 0.2s; margin-top: 32px;">
+              <div class="card stat-item anim-count" style="animation-delay: 0.3s;">
+                <span class="stat-value">156</span>
+                <span class="stat-label">对话次数</span>
+              </div>
+              <div class="card stat-item anim-count" style="animation-delay: 0.4s;">
+                <span class="stat-value">23</span>
+                <span class="stat-label">论文阅读</span>
+              </div>
+              <div class="card stat-item anim-count" style="animation-delay: 0.5s;">
+                <span class="stat-value">8</span>
+                <span class="stat-label">实验设计</span>
+              </div>
+              <div class="card stat-item anim-count" style="animation-delay: 0.6s;">
+                <span class="stat-value">42h</span>
+                <span class="stat-label">学习时长</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右侧：成就 -->
+          <div style="display: flex; flex-direction: column; justify-content: center; padding-left: 40px;">
+            <div class="anim-fade" style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 28px;">
+              <div style="font-family: var(--f-serif); font-size: 32px; color: var(--fg);">成就徽章墙</div>
+              <div style="font-family: var(--f-mono); font-size: 13px; color: var(--fg-mute);">12 枚徽章 · 4 大类别</div>
+            </div>
+
+            <div class="achievement-grid">
+              <div class="card achievement-cat anim-rise">
+                <div class="cat-header"><span class="cat-name">基础</span><span class="cat-count">2</span></div>
+                <div class="badge-list">
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>初次对话</div>
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>技能探索者</div>
+                </div>
+              </div>
+              <div class="card achievement-cat anim-rise" style="animation-delay: 0.08s;">
+                <div class="cat-header" style="border-color: #50a0a0;"><span class="cat-name" style="color: #50a0a0;">进阶</span><span class="cat-count">4</span></div>
+                <div class="badge-list">
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>进阶学者</div>
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>协作大师</div>
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>番茄大师</div>
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>知识收藏家</div>
+                </div>
+              </div>
+              <div class="card achievement-cat anim-rise" style="animation-delay: 0.16s;">
+                <div class="cat-header" style="border-color: #a080c0;"><span class="cat-name" style="color: #a080c0;">挑战</span><span class="cat-count">4</span></div>
+                <div class="badge-list">
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>资深学者</div>
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>任务达人</div>
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>公式达人</div>
+                  <div class="badge"><div class="icon badge-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8 21l4-4 4 4"/></svg></div>阶段大师</div>
+                </div>
+              </div>
+              <div class="card achievement-cat anim-rise" style="animation-delay: 0.24s;">
+                <div class="cat-header" style="border-color: #c08080;"><span class="cat-name" style="color: #c08080;">隐藏</span><span class="cat-count">2</span></div>
+                <div class="badge-list">
+                  <div class="badge"><div class="icon badge-icon" style="color: var(--fg-faint);"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>夜间学者</div>
+                  <div class="badge"><div class="icon badge-icon" style="color: var(--fg-faint);"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>语音先锋</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="anim-rise" style="animation-delay: 0.32s; margin-top: 24px; padding: 16px 20px; background: var(--bg-card); border: 1px solid var(--line-mid); border-radius: 6px;">
+              <div style="font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-mute); margin-bottom: 10px;">技能使用趋势</div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span style="width: 80px; font-size: 13px; color: var(--fg-soft);">科研助手</span>
+                  <div style="flex: 1; height: 16px; background: var(--bg); border-radius: 3px; overflow: hidden;">
+                    <div style="width: 80%; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-deep));"></div>
+                  </div>
+                  <span style="font-family: var(--f-mono); font-size: 12px; color: var(--fg-mute);">48次</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span style="width: 80px; font-size: 13px; color: var(--fg-soft);">文献综述</span>
+                  <div style="flex: 1; height: 16px; background: var(--bg); border-radius: 3px; overflow: hidden;">
+                    <div style="width: 55%; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-deep));"></div>
+                  </div>
+                  <span style="font-family: var(--f-mono); font-size: 12px; color: var(--fg-mute);">33次</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span style="width: 80px; font-size: 13px; color: var(--fg-soft);">论文写作</span>
+                  <div style="flex: 1; height: 16px; background: var(--bg); border-radius: 3px; overflow: hidden;">
+                    <div style="width: 40%; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-deep));"></div>
+                  </div>
+                  <span style="font-family: var(--f-mono); font-size: 12px; color: var(--fg-mute);">24次</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">成长激励 · 持续进步</div>
+      </section>
+
+      <!-- ========== 章节 05: 人机协作 ========== -->
+      <section class="chapter" id="ch05">
+        <div class="grid-bg"></div>
+
+        <div class="time-indicator">
+          <span class="time-dot"></span>
+          <span>05 / 07</span>
+        </div>
+
+        <div style="padding: 60px 80px; width: 100%; height: 100%; display: flex; flex-direction: column;">
+          <div style="text-align: center; margin-bottom: 36px;">
+            <div class="eyebrow anim-fade" style="display: inline-flex;">
+              <span class="eyebrow-bar"></span>
+              <span>05 · 人机协作</span>
+              <span class="eyebrow-bar"></span>
+            </div>
+            <h1 class="title anim-blur" style="font-size: 76px;">
+              记录每一次<span class="title-em">协作</span>
+            </h1>
+          </div>
+
+          <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 28px;">
+            <!-- 协作类型 -->
+            <div class="anim-rise" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; width: 100%; max-width: 1000px;">
+              <div class="card" style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px;">
+                <div class="icon" style="width: 36px; height: 36px; color: var(--accent);">
+                  <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                </div>
+                <span style="font-family: var(--f-serif); font-size: 18px; color: var(--fg);">论文协作</span>
+                <span style="font-family: var(--f-mono); font-size: 13px; color: var(--fg-mute);">12 次</span>
+              </div>
+              <div class="card" style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px;">
+                <div class="icon" style="width: 36px; height: 36px; color: var(--accent);">
+                  <svg viewBox="0 0 24 24"><path d="M9 3h6v2H9zM12 5v3m-4 0h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z"/></svg>
+                </div>
+                <span style="font-family: var(--f-serif); font-size: 18px; color: var(--fg);">实验协作</span>
+                <span style="font-family: var(--f-mono); font-size: 13px; color: var(--fg-mute);">8 次</span>
+              </div>
+              <div class="card" style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px;">
+                <div class="icon" style="width: 36px; height: 36px; color: var(--accent);">
+                  <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                </div>
+                <span style="font-family: var(--f-serif); font-size: 18px; color: var(--fg);">综述协作</span>
+                <span style="font-family: var(--f-mono); font-size: 13px; color: var(--fg-mute);">5 次</span>
+              </div>
+              <div class="card" style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px;">
+                <div class="icon" style="width: 36px; height: 36px; color: var(--accent);">
+                  <svg viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></svg>
+                </div>
+                <span style="font-family: var(--f-serif); font-size: 18px; color: var(--fg);">辅导协作</span>
+                <span style="font-family: var(--f-mono); font-size: 13px; color: var(--fg-mute);">23 次</span>
+              </div>
+            </div>
+
+            <!-- 贡献追踪 -->
+            <div class="card anim-rise" style="animation-delay: 0.1s; width: 100%; max-width: 800px; padding: 28px;">
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+                <span style="font-family: var(--f-serif); font-size: 22px; color: var(--fg);">贡献追踪</span>
+                <span style="font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-mute);">人机协作比例</span>
+              </div>
+              <div class="contribution-bar">
+                <div class="contribution-ai" style="width: 35%;">AI 35%</div>
+                <div class="contribution-human" style="width: 65%;">用户 65%</div>
+              </div>
+              <div style="font-size: 14px; color: var(--fg-soft); text-align: center; margin-top: 12px;">自动记录双方贡献 · 支持 Word 格式导出</div>
+            </div>
+
+            <!-- 学习报告预览 -->
+            <div class="card anim-rise" style="animation-delay: 0.2s; width: 100%; max-width: 900px; overflow: hidden;">
+              <div style="display: flex; align-items: center; gap: 12px; padding: 16px 24px; background: var(--bg); border-bottom: 1px solid var(--line-mid);">
+                <div class="icon" style="width: 18px; height: 18px; color: var(--accent);">
+                  <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                </div>
+                <span style="font-family: var(--f-serif); font-size: 18px; color: var(--fg);">学习报告</span>
+              </div>
+              <div style="padding: 20px 24px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+                <div>
+                  <div style="font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-mute); margin-bottom: 10px;">成就时间线</div>
+                  <div style="font-size: 13px; color: var(--fg-soft); padding-left: 10px; border-left: 2px solid var(--accent); margin-bottom: 6px;">进阶学者 · 04-20</div>
+                  <div style="font-size: 13px; color: var(--fg-soft); padding-left: 10px; border-left: 2px solid var(--accent); margin-bottom: 6px;">协作大师 · 04-22</div>
+                  <div style="font-size: 13px; color: var(--fg-soft); padding-left: 10px; border-left: 2px solid var(--accent);">番茄大师 · 04-25</div>
+                </div>
+                <div>
+                  <div style="font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-mute); margin-bottom: 10px;">技能使用趋势</div>
+                  <div style="height: 18px; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); border-radius: 2px; margin-bottom: 6px; font-size: 10px; color: var(--bg); padding-left: 6px; display: flex; align-items: center;">科研助手</div>
+                  <div style="height: 18px; width: 70%; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); border-radius: 2px; font-size: 10px; color: var(--bg); padding-left: 6px; display: flex; align-items: center;">文献综述</div>
+                </div>
+                <div>
+                  <div style="font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-mute); margin-bottom: 10px;">智能学习建议</div>
+                  <div style="font-size: 13px; color: var(--fg-soft); line-height: 1.5; padding: 10px; background: var(--bg); border-radius: 4px;">建议增加数学助手使用频率，提升公式推导能力</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">人机协作 · 共同成长</div>
+      </section>
+
+      <!-- ========== 章节 06: 产品优势 ========== -->
+      <section class="chapter" id="ch06">
+        <div class="grid-bg"></div>
+        <div class="glow-orb glow-orb-1"></div>
+        <div class="glow-orb glow-orb-2"></div>
+
+        <div class="time-indicator">
+          <span class="time-dot"></span>
+          <span>06 / 07</span>
+        </div>
+
+        <div style="padding: 60px 80px; width: 100%; height: 100%; display: flex; flex-direction: column;">
+          <div style="text-align: center; margin-bottom: 40px;">
+            <div class="eyebrow anim-fade" style="display: inline-flex;">
+              <span class="eyebrow-bar"></span>
+              <span>06 · 产品优势</span>
+              <span class="eyebrow-bar"></span>
+            </div>
+            <h1 class="title anim-blur" style="font-size: 52px;">
+              研伴相较于市面同产品的<span class="title-em">优势</span>
+            </h1>
+          </div>
+
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px; max-width: 1300px; width: 100%; margin: 0 auto;">
+            <!-- 优势一：响应速度 -->
+            <div class="card anim-rise" style="padding: 32px; display: flex; flex-direction: column; position: relative; overflow: hidden; transition: all 0.3s ease;">
+              <div style="position: absolute; top: 0; right: 0; width: 120px; height: 120px; background: radial-gradient(circle, rgba(232, 160, 80, 0.15) 0%, transparent 70%); pointer-events: none;"></div>
+              <div style="display: flex; align-items: flex-start; gap: 20px; margin-bottom: 24px;">
+                <div style="width: 64px; height: 64px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--accent), var(--accent-deep)); border-radius: 12px; box-shadow: 0 8px 24px rgba(232, 160, 80, 0.25);">
+                  <div class="icon" style="width: 32px; height: 32px; color: var(--bg);">
+                    <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  </div>
+                </div>
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+                    <span style="font-family: var(--f-mono); font-size: 13px; color: var(--accent); background: rgba(232, 160, 80, 0.15); padding: 4px 10px; border-radius: 4px;">01</span>
+                    <div style="font-family: var(--f-serif); font-size: 28px; color: var(--fg);">响应速度</div>
+                  </div>
+                  <div style="font-family: var(--f-mono); font-size: 11px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.1em;">Response Speed</div>
+                </div>
+              </div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: rgba(26, 26, 31, 0.8); border: 1px solid var(--line-mid); border-radius: 8px; transition: all 0.2s;">
+                  <div class="icon" style="width: 22px; height: 22px; color: var(--accent);"><svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></div>
+                  <span style="font-size: 15px; color: var(--fg-soft);">内存缓存，减少输入延迟</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: rgba(26, 26, 31, 0.8); border: 1px solid var(--line-mid); border-radius: 8px; transition: all 0.2s;">
+                  <div class="icon" style="width: 22px; height: 22px; color: var(--accent);"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                  <span style="font-size: 15px; color: var(--fg-soft);">流式响应，首字延迟 <span style="color: var(--accent); font-family: var(--f-mono); font-weight: 600;">≈0.8秒</span></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 优势二：知识库 -->
+            <div class="card anim-rise" style="animation-delay: 0.1s; padding: 32px; display: flex; flex-direction: column; position: relative; overflow: hidden; transition: all 0.3s ease;">
+              <div style="position: absolute; top: 0; right: 0; width: 120px; height: 120px; background: radial-gradient(circle, rgba(96, 160, 208, 0.15) 0%, transparent 70%); pointer-events: none;"></div>
+              <div style="display: flex; align-items: flex-start; gap: 20px; margin-bottom: 24px;">
+                <div style="width: 64px; height: 64px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #60a0d0, #4080b0); border-radius: 12px; box-shadow: 0 8px 24px rgba(96, 160, 208, 0.25);">
+                  <div class="icon" style="width: 32px; height: 32px; color: var(--bg);">
+                    <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                  </div>
+                </div>
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+                    <span style="font-family: var(--f-mono); font-size: 13px; color: #60a0d0; background: rgba(96, 160, 208, 0.15); padding: 4px 10px; border-radius: 4px;">02</span>
+                    <div style="font-family: var(--f-serif); font-size: 28px; color: var(--fg);">知识库</div>
+                  </div>
+                  <div style="font-family: var(--f-mono); font-size: 11px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.1em;">Knowledge Base</div>
+                </div>
+              </div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: rgba(26, 26, 31, 0.8); border: 1px solid var(--line-mid); border-radius: 8px; transition: all 0.2s;">
+                  <div class="icon" style="width: 22px; height: 22px; color: #60a0d0;"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+                  <span style="font-size: 15px; color: var(--fg-soft);">向量检索，提高回答质量</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: rgba(26, 26, 31, 0.8); border: 1px solid var(--line-mid); border-radius: 8px; transition: all 0.2s;">
+                  <div class="icon" style="width: 22px; height: 22px; color: #60a0d0;"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                  <span style="font-size: 15px; color: var(--fg-soft);">增量更新机制，知识库持续扩展</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 优势三：用户体验 -->
+            <div class="card anim-rise" style="animation-delay: 0.2s; padding: 32px; display: flex; flex-direction: column; position: relative; overflow: hidden; transition: all 0.3s ease;">
+              <div style="position: absolute; top: 0; right: 0; width: 120px; height: 120px; background: radial-gradient(circle, rgba(80, 200, 120, 0.15) 0%, transparent 70%); pointer-events: none;"></div>
+              <div style="display: flex; align-items: flex-start; gap: 20px; margin-bottom: 24px;">
+                <div style="width: 64px; height: 64px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #50c878, #30a060); border-radius: 12px; box-shadow: 0 8px 24px rgba(80, 200, 120, 0.25);">
+                  <div class="icon" style="width: 32px; height: 32px; color: var(--bg);">
+                    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg>
+                  </div>
+                </div>
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+                    <span style="font-family: var(--f-mono); font-size: 13px; color: #50c878; background: rgba(80, 200, 120, 0.15); padding: 4px 10px; border-radius: 4px;">03</span>
+                    <div style="font-family: var(--f-serif); font-size: 28px; color: var(--fg);">用户体验</div>
+                  </div>
+                  <div style="font-family: var(--f-mono); font-size: 11px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.1em;">User Experience</div>
+                </div>
+              </div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: rgba(26, 26, 31, 0.8); border: 1px solid var(--line-mid); border-radius: 8px; transition: all 0.2s;">
+                  <div class="icon" style="width: 22px; height: 22px; color: #50c878;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+                  <span style="font-size: 15px; color: var(--fg-soft);">内置番茄钟，专注音乐播放</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: rgba(26, 26, 31, 0.8); border: 1px solid var(--line-mid); border-radius: 8px; transition: all 0.2s;">
+                  <div class="icon" style="width: 22px; height: 22px; color: #50c878;"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+                  <span style="font-size: 15px; color: var(--fg-soft);">任务标签，提高学习效率</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 优势四：学术伦理 -->
+            <div class="card anim-rise" style="animation-delay: 0.3s; padding: 32px; display: flex; flex-direction: column; position: relative; overflow: hidden; transition: all 0.3s ease;">
+              <div style="position: absolute; top: 0; right: 0; width: 120px; height: 120px; background: radial-gradient(circle, rgba(144, 128, 192, 0.15) 0%, transparent 70%); pointer-events: none;"></div>
+              <div style="display: flex; align-items: flex-start; gap: 20px; margin-bottom: 24px;">
+                <div style="width: 64px; height: 64px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #9080c0, #7060a0); border-radius: 12px; box-shadow: 0 8px 24px rgba(144, 128, 192, 0.25);">
+                  <div class="icon" style="width: 32px; height: 32px; color: var(--bg);">
+                    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  </div>
+                </div>
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+                    <span style="font-family: var(--f-mono); font-size: 13px; color: #9080c0; background: rgba(144, 128, 192, 0.15); padding: 4px 10px; border-radius: 4px;">04</span>
+                    <div style="font-family: var(--f-serif); font-size: 28px; color: var(--fg);">学术伦理</div>
+                  </div>
+                  <div style="font-family: var(--f-mono); font-size: 11px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.1em;">Academic Ethics</div>
+                </div>
+              </div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: rgba(26, 26, 31, 0.8); border: 1px solid var(--line-mid); border-radius: 8px; transition: all 0.2s;">
+                  <div class="icon" style="width: 22px; height: 22px; color: #9080c0;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+                  <span style="font-size: 15px; color: var(--fg-soft);">明确AI边界，培养独立研究能力</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: rgba(26, 26, 31, 0.8); border: 1px solid var(--line-mid); border-radius: 8px; transition: all 0.2s;">
+                  <div class="icon" style="width: 22px; height: 22px; color: #9080c0;"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg></div>
+                  <span style="font-size: 15px; color: var(--fg-soft);">贡献追踪机制，确保学术诚信</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">响应速度 · 知识库 · 用户体验 · 学术伦理</div>
+      </section>
+
+      <!-- ========== 章节 07: 结束 ========== -->
+      <section class="chapter" id="ch07">
+        <div class="grid-bg"></div>
+        <div class="glow-orb glow-orb-1"></div>
+        <div class="glow-orb glow-orb-2"></div>
+        <div class="corner corner-tl"><span></span><span></span></div>
+        <div class="corner corner-br"><span></span><span></span></div>
+
+        <div class="time-indicator">
+          <span class="time-dot"></span>
+          <span>07 / 07</span>
+        </div>
+
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+          <h1 class="title anim-blur" style="font-size: 240px; margin-bottom: 32px;">研伴</h1>
+
+          <div class="positioning anim-rise" style="animation-delay: 0.2s; margin-bottom: 48px;">
+            <span class="positioning-highlight">协作者</span>
+            <span class="positioning-muted">，而非</span>
+            <span class="positioning-line">答案生成器</span>
+          </div>
+
+          <div class="anim-fade" style="animation-delay: 0.4s; text-align: center;">
+            <div style="font-family: var(--f-serif); font-size: 44px; color: var(--fg); margin-bottom: 16px;">感谢聆听</div>
+            <div style="font-family: var(--f-mono); font-size: 14px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--fg-mute);">普通高等教育组 · 竞赛演示</div>
+          </div>
+
+          <div class="anim-rise" style="animation-delay: 0.6s; margin-top: 48px; display: flex; gap: 32px;">
+            <div style="text-align: center;">
+              <div style="font-family: var(--f-serif); font-size: 32px; color: var(--accent);">云端</div>
+              <div style="font-family: var(--f-mono); font-size: 11px; color: var(--fg-mute); text-transform: uppercase;">无需本地GPU</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-family: var(--f-serif); font-size: 32px; color: var(--accent);">低带宽</div>
+              <div style="font-family: var(--f-mono); font-size: 11px; color: var(--fg-mute); text-transform: uppercase;">随时可用</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-family: var(--f-serif); font-size: 32px; color: var(--accent);">RAG</div>
+              <div style="font-family: var(--f-mono); font-size: 11px; color: var(--fg-mute); text-transform: uppercase;">知识增强</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-family: var(--f-serif); font-size: 32px; color: var(--accent);">Word</div>
+              <div style="font-family: var(--f-mono); font-size: 11px; color: var(--fg-mute); text-transform: uppercase;">报告导出</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">智能教育数字人系统</div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 进度条 -->
+  <div class="progress-overlay">
+    <div class="progress-info">
+      <span id="progress-chapter">01 · 开场</span>
+      <div class="progress-chapters">
+        <div class="progress-dot active" data-ch="0"></div>
+        <div class="progress-dot" data-ch="1"></div>
+        <div class="progress-dot" data-ch="2"></div>
+        <div class="progress-dot" data-ch="3"></div>
+        <div class="progress-dot" data-ch="4"></div>
+        <div class="progress-dot" data-ch="5"></div>
+        <div class="progress-dot" data-ch="6"></div>
+      </div>
+      <span id="progress-step">1 / 7</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill" style="width: 14.28%;"></div>
+    </div>
+  </div>
+
+  <!-- 操作提示 -->
+  <div class="hint">Cialloヾ(≧▽≦*)o 研伴</div>
+
+  <script>
+    const chapters = [
+      { id: 'ch01', title: '开场' },
+      { id: 'ch02', title: '数字人' },
+      { id: 'ch03', title: '教育技能' },
+      { id: 'ch04', title: '成长系统' },
+      { id: 'ch05', title: '人机协作' },
+      { id: 'ch06', title: '技术架构' },
+      { id: 'ch07', title: '结束' }
+    ];
+
+    let currentChapter = 0;
+
+    function scaleStage() {
+      const stage = document.getElementById('stage');
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const scale = Math.min(vw / 1920, vh / 1080);
+      stage.style.transform = `scale(${scale})`;
+    }
+
+    function showChapter(index) {
+      if (index < 0 || index >= chapters.length) return;
+
+      document.querySelectorAll('.chapter').forEach(ch => ch.classList.remove('active'));
+      const chapter = document.getElementById(chapters[index].id);
+      chapter.classList.add('active');
+
+      chapter.querySelectorAll('[class*="anim-"]').forEach(el => {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+      });
+
+      currentChapter = index;
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const fill = document.getElementById('progress-fill');
+      const chapterEl = document.getElementById('progress-chapter');
+      const stepEl = document.getElementById('progress-step');
+      const dots = document.querySelectorAll('.progress-dot');
+
+      const progress = ((currentChapter + 1) / chapters.length) * 100;
+      fill.style.width = `${progress}%`;
+
+      chapterEl.textContent = `${String(currentChapter + 1).padStart(2, '0')} · ${chapters[currentChapter].title}`;
+      stepEl.textContent = `${currentChapter + 1} / 7`;
+
+      dots.forEach((dot, i) => {
+        dot.classList.toggle('active', i === currentChapter);
+      });
+    }
+
+    function next() {
+      if (currentChapter < chapters.length - 1) showChapter(currentChapter + 1);
+    }
+
+    function prev() {
+      if (currentChapter > 0) showChapter(currentChapter - 1);
+    }
+
+    window.addEventListener('resize', scaleStage);
+
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.progress-overlay')) return;
+      next();
+    });
+
+    document.querySelectorAll('.progress-dot').forEach(dot => {
+      dot.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showChapter(parseInt(dot.dataset.ch));
+      });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch (e.key) {
+        case ' ':
+        case 'ArrowRight':
+        case 'Enter':
+          e.preventDefault();
+          next();
+          break;
+        case 'ArrowLeft':
+        case 'Backspace':
+          e.preventDefault();
+          prev();
+          break;
+        case 'Home':
+          e.preventDefault();
+          showChapter(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          showChapter(chapters.length - 1);
+          break;
+        default:
+          const num = parseInt(e.key);
+          if (num >= 1 && num <= 7) {
+            e.preventDefault();
+            showChapter(num - 1);
+          }
+      }
+    });
+
+    scaleStage();
+    showChapter(0);
+  </script>
+</body>
+</html>
