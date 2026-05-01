@@ -314,14 +314,46 @@ shu_z_ren_/
 
 ### 1. 安装依赖
 
+#### 方式一：直接安装（推荐使用虚拟环境）
+
 ```bash
+# 创建 Python 虚拟环境
+python -m venv .venv
+
+# 激活虚拟环境
+# Windows:
+.venv\Scripts\activate
+# Linux/Mac:
+source .venv/bin/activate
+
+# 安装依赖
 pip install -r requirements.txt
+```
+
+#### 方式二：使用 uv（更快）
+
+```bash
+uv sync
+```
+
+#### Node.js 依赖（桌面端需要）
+
+```bash
+npm install
 ```
 
 ### 2. 启动服务
 
+#### 方式一：命令行启动
+
 ```bash
 python server.py
+```
+
+#### 方式二：桌面端启动
+
+```bash
+npm run dev
 ```
 
 服务将在 `http://localhost:3456` 启动
@@ -333,6 +365,114 @@ python server.py
 ### 4. 配置数字人（可选）
 
 在数字人配置面板输入魔珐星云的 App ID 和 App Secret
+
+---
+
+## 常见问题
+
+### 1. Python 虚拟环境未找到
+
+**错误信息**: `spawn .venv\Scripts\python.exe ENOENT`
+
+**原因**: 未创建 Python 虚拟环境
+
+**解决方案**:
+```bash
+# 创建虚拟环境
+python -m venv .venv
+
+# 安装 Python 依赖
+# Windows:
+.venv\Scripts\pip.exe install -r requirements.txt
+# Linux/Mac:
+.venv/bin/pip install -r requirements.txt
+```
+
+### 2. SSL 证书问题导致健康检查超时
+
+**错误信息**: `后端已启动但健康检查响应超时` 或 `Invalid HTTP request received`
+
+**原因**: 后端需要 HTTPS，但缺少 SSL 证书文件
+
+**解决方案**:
+```bash
+# 创建证书目录
+mkdir certs
+
+# 生成自签名 SSL 证书（需要安装 openssl）
+cd certs
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "//CN=localhost"
+```
+
+或者使用环境变量指定证书路径：
+```bash
+# Windows CMD
+set SSL_KEYFILE=D:\path\to\key.pem
+set SSL_CERTFILE=D:\path\to\cert.pem
+
+# Windows PowerShell
+$env:SSL_KEYFILE="D:\path\to\key.pem"
+$env:SSL_CERTFILE="D:\path\to\cert.pem"
+
+# Linux/Mac
+export SSL_KEYFILE=/path/to/key.pem
+export SSL_CERTFILE=/path/to/cert.pem
+```
+
+### 3. Electron 下载超时（国内网络）
+
+**错误信息**: `RequestError: connect ETIMEDOUT` 或 `npm install` 卡住
+
+**原因**: Electron 二进制文件下载超时
+
+**解决方案**:
+```bash
+# 使用国内镜像
+# Windows CMD
+set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+npm install
+
+# Windows PowerShell
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+npm install
+
+# Linux/Mac
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install
+```
+
+### 4. node_modules 目录被锁定
+
+**错误信息**: `EBUSY: resource busy or locked`
+
+**原因**: 有进程占用了 node_modules 目录
+
+**解决方案**:
+1. 关闭所有可能占用的程序（VS Code、其他终端、资源管理器等）
+2. 重新打开终端，删除 node_modules 后重新安装：
+```bash
+# Windows
+rmdir /s /q node_modules
+npm install
+
+# Linux/Mac
+rm -rf node_modules
+npm install
+```
+
+### 5. 端口被占用
+
+**错误信息**: `Address already in use` 或 `端口 3456 被占用`
+
+**解决方案**:
+```bash
+# Windows - 查找并结束占用端口的进程
+netstat -ano | findstr :3456
+taskkill /PID <进程ID> /F
+
+# Linux/Mac
+lsof -i :3456
+kill -9 <进程ID>
+```
 
 ---
 
