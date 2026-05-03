@@ -91,6 +91,10 @@ class ClusterOrchestrator:
         # 保存讨论记录到数据库
         await self._save_session(topic, self._session_id, summary)
 
+        # 提取角色记忆
+        if self.history:
+            await self._extract_role_memories(topic)
+
         yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
 
     async def _roundtable(
