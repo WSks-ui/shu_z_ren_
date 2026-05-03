@@ -72,6 +72,9 @@ class ClusterOrchestrator:
         # 限制最大轮次
         effective_max_rounds = min(self.max_rounds, mode_config["max_rounds"])
 
+        # 加载角色记忆
+        self._role_memories = await self._load_role_memories()
+
         if self.mode == "roundtable":
             async for event in self._roundtable(topic, user_input, effective_max_rounds):
                 yield event
