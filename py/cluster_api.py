@@ -415,3 +415,155 @@ async def delete_custom_role(role_id: str):
         raise HTTPException(status_code=404, detail="角色不存在")
 
     return {"status": "ok", "message": "角色已删除"}
+
+
+# ==================== 导出 API ====================
+
+class ClusterExportRequest(BaseModel):
+    """导出请求"""
+    session_id: str = Field(..., description="会话ID")
+    format: str = Field(default="markdown", description="导出格式: markdown | docx")
+
+
+@router.post("/export")
+async def export_cluster_session(request: ClusterExportRequest = Body(...)):
+    """导出集群讨论记录"""
+
+    await ensure_storage()
+    cache = await MemoryCache.get_instance()
+
+    session = await cache.get_cluster_session_detail(request.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="讨论记录不存在")
+
+    if request.format == "docx":
+        return await _export_cluster_docx(session)
+    else:
+        return await _export_cluster_markdown(session)
+
+
+async def _export_cluster_markdown(session: Dict[str, Any]):
+    """导出为 Markdown"""
+    from io import BytesIO
+
+    lines = []
+    lines.append("# 集群讨论记录\n")
+    lines.append(f"**话题**: {session['topic']}\n")
+
+    mode_names = {"roundtable": "圆桌讨论", "debate": "正反辩论", "consultation": "导师会诊"}
+    lines.append(f"**模式**: {mode_names.get(session['mode'], session['mode'])}\n")
+
+    # 角色名称
+    role_names = []
+    for role_id in session.get("roles", []):
+        role = CLUSTER_ROLES.get(role_id)
+        role_names.append(role["name"] if role else role_id)
+    lines.append(f"**角色**: {', '.join(role_names)}\n")
+
+    from datetime import datetime
+    created = datetime.fromtimestamp(session.get("created_at", 0))
+    lines.append(f"**时间**: {created.strftime('%Y-%m-%d %H:%M')}\n")
+    lines.append("\n---\n")
+
+    # 按轮次分组
+    messages = session.get("messages", [])
+    current_round = 0
+    for msg in messages:
+        round_num = msg.get("round", 1)
+        if round_num != current_round:
+            current_round = round_num
+            lines.append(f"\n## 第{round_num}轮\n")
+
+        role_name = msg.get("role", msg.get("role_id", "未知"))
+        content = msg.get("content", "")
+        stance = msg.get("stance", "")
+        prefix = f"[{stance}方] " if stance else ""
+        lines.append(f"\n**{prefix}{role_name}**: {content}\n")
+
+    # 总结
+    if session.get("summary"):
+        lines.append("\n---\n\n## 讨论总结\n\n")
+        lines.append(session["summary"])
+        lines.append("\n")
+
+    content = "".join(lines)
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f"attachment; filename=cluster-{session['id'][:8]}.md"
+        }
+    )
+
+
+async def _export_cluster_docx(session: Dict[str, Any]):
+    """导出为 Word 文档"""
+    try:
+        from docx import Document
+        from docx.shared import Pt, Inches
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+    except ImportError:
+        raise HTTPException(status_code=500, detail="python-docx 未安装，无法导出 Word")
+
+    from io import BytesIO
+    from datetime import datetime
+
+    doc = Document()
+
+    # 标题
+    title = doc.add_heading("集群讨论记录", 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # 元信息
+    doc.add_paragraph(f"话题：{session['topic']}")
+    mode_names = {"roundtable": "圆桌讨论", "debate": "正反辩论", "consultation": "导师会诊"}
+    doc.add_paragraph(f"模式：{mode_names.get(session['mode'], session['mode'])}")
+
+    role_names = []
+    for role_id in session.get("roles", []):
+        role = CLUSTER_ROLES.get(role_id)
+        role_names.append(role["name"] if role else role_id)
+    doc.add_paragraph(f"角色：{', '.join(role_names)}")
+
+    created = datetime.fromtimestamp(session.get("created_at", 0))
+    doc.add_paragraph(f"时间：{created.strftime('%Y-%m-%d %H:%M')}")
+
+    doc.add_paragraph("─" * 40)
+
+    # 对话内容
+    messages = session.get("messages", [])
+    current_round = 0
+    for msg in messages:
+        round_num = msg.get("round", 1)
+        if round_num != current_round:
+            current_round = round_num
+            doc.add_heading(f"第{round_num}轮", level=2)
+
+        role_name = msg.get("role", msg.get("role_id", "未知"))
+        content = msg.get("content", "")
+        stance = msg.get("stance", "")
+        prefix = f"[{stance}方] " if stance else ""
+
+        p = doc.add_paragraph()
+        run = p.add_run(f"{prefix}{role_name}：")
+        run.bold = True
+        p.add_run(content)
+
+    # 总结
+    if session.get("summary"):
+        doc.add_paragraph("─" * 40)
+        doc.add_heading("讨论总结", level=2)
+        doc.add_paragraph(session["summary"])
+
+    # 导出
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f"attachment; filename=cluster-{session['id'][:8]}.docx"
+        }
+    )
