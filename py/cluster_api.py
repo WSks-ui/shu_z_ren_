@@ -69,6 +69,21 @@ async def cluster_discuss_stream(request: ClusterDiscussRequest = Body(...)):
 
     session_id = request.session_id or f"cluster-{int(time.time())}"
 
+    # 加载历史上下文（续聊模式）
+    history = []
+    if request.continue_from:
+        await ensure_storage()
+        cache = await MemoryCache.get_instance()
+        prev_session = await cache.get_cluster_session_detail(request.continue_from)
+        if prev_session:
+            history = prev_session.get("messages", [])
+            # 续聊时继承之前的角色设置
+            if not request.roles:
+                request.roles = prev_session.get("roles", request.roles)
+            # 继承之前的模式
+            if not request.mode:
+                request.mode = prev_session.get("mode", request.mode)
+
     # 创建编排器
     orchestrator = create_orchestrator(
         session_id=session_id,
@@ -82,7 +97,7 @@ async def cluster_discuss_stream(request: ClusterDiscussRequest = Body(...)):
             async for event in orchestrator.run_discussion(
                 topic=request.topic,
                 user_input=request.user_input or "",
-                history=[],
+                history=history,
                 session_id=session_id
             ):
                 yield event
