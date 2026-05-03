@@ -441,6 +441,11 @@ class ClusterOrchestrator:
         if affection_ctx:
             cluster_instruction += affection_ctx
 
+        # 注入角色记忆
+        role_memory = getattr(self, '_role_memories', {}).get(role_id, "")
+        if role_memory:
+            cluster_instruction += f"\n\n### 你对这个用户的了解\n{role_memory}"
+
         return base_prompt + cluster_instruction
 
     def _build_debate_prompt(
