@@ -434,6 +434,30 @@ async def delete_custom_role(role_id: str):
     return {"status": "ok", "message": "角色已删除"}
 
 
+# ==================== 角色记忆 API ====================
+
+@router.get("/roles/{role_id}/memory")
+async def get_role_memory(role_id: str):
+    """获取角色记忆"""
+
+    await ensure_storage()
+    cache = await MemoryCache.get_instance()
+
+    memories = await cache.get_role_memory(role_id)
+    return {"memories": memories}
+
+
+@router.delete("/roles/{role_id}/memory")
+async def clear_role_memory(role_id: str):
+    """清除角色记忆"""
+
+    await ensure_storage()
+    cache = await MemoryCache.get_instance()
+
+    cleared = await cache.clear_role_memory(role_id)
+    return {"status": "ok", "cleared": cleared}
+
+
 # ==================== 导出 API ====================
 
 class ClusterExportRequest(BaseModel):
