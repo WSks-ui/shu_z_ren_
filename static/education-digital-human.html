@@ -905,6 +905,15 @@
               <textarea v-model="roleForm.system_prompt" rows="8"
                 placeholder="定义角色的行为准则、发言原则、专业知识等..."></textarea>
             </div>
+            <div v-if="roleMemories.length > 0" class="role-editor-row full">
+              <label>角色记忆 <button class="memory-clear-btn" @click="clearRoleMemory">清除</button></label>
+              <div class="role-memory-list">
+                <div v-for="mem in roleMemories" :key="mem.memory_type" class="role-memory-item">
+                  <span class="memory-type">{{ mem.memory_type }}</span>
+                  <span class="memory-content">{{ mem.content }}</span>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="role-editor-footer">
             <button v-if="editingRole?.is_custom" class="role-editor-btn danger" @click="deleteCustomRoleConfirm">
