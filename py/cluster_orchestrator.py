@@ -631,13 +631,11 @@ class ClusterOrchestrator:
 
         messages = [{"role": "system", "content": system_prompt}]
 
-        # 添加历史对话（最多保留最近 6 条）
-        recent_history = self.history[-6:]
-        for h in recent_history:
-            messages.append({
-                "role": "assistant",
-                "content": f"[{h['role']}]: {h['content'][:200]}"
-            })
+        # 如果有历史上下文（续聊模式），添加之前的讨论记录
+        if self.history and len(self.history) > 0:
+            continuation_context = self._build_continuation_context(topic)
+            if continuation_context:
+                messages.append({"role": "user", "content": continuation_context})
 
         # 添加当前用户输入或话题
         if user_input:
@@ -646,6 +644,33 @@ class ClusterOrchestrator:
             messages.append({"role": "user", "content": f"请就以下话题展开讨论：{topic}"})
 
         return messages
+
+    def _build_continuation_context(self, topic: str) -> str:
+        """构建续聊上下文，将之前的讨论记录格式化"""
+        if not self.history:
+            return ""
+
+        lines = ["这是之前我们讨论过的内容，请在此基础上继续深入：\n"]
+
+        # 按轮次分组
+        rounds = {}
+        for msg in self.history:
+            round_num = msg.get("round", 1)
+            if round_num not in rounds:
+                rounds[round_num] = []
+            rounds[round_num].append(msg)
+
+        for round_num in sorted(rounds.keys()):
+            lines.append(f"### 第{round_num}轮")
+            for msg in rounds[round_num]:
+                role_name = msg.get("role", msg.get("role_id", "未知"))
+                content = msg.get("content", "")
+                stance = msg.get("stance", "")
+                prefix = f"[{stance}方] " if stance else ""
+                lines.append(f"- {prefix}{role_name}：{content[:150]}{'...' if len(content) > 150 else ''}")
+            lines.append("")
+
+        return "\n".join(lines)
 
     async def _call_llm_stream(
         self,
