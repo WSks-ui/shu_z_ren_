@@ -2408,8 +2408,8 @@ createApp({
     };
 
     // 开始集群讨论
-    const startClusterDiscussion = async () => {
-      if (!canStartDiscussion.value) return;
+    const startClusterDiscussion = async (continueFrom = null) => {
+      if (!canStartDiscussion.value && !continueFrom) return;
 
       clusterStatus.value = 'discussing';
       clusterMessages.value = [];
@@ -2423,20 +2423,25 @@ createApp({
       clusterMessages.value.push({
         id: Date.now(),
         type: 'system',
-        content: `开始${modeName}：${clusterTopic.value}`
+        content: continueFrom ? `继续讨论：${clusterTopic.value}` : `开始${modeName}：${clusterTopic.value}`
       });
 
       try {
+        const payload = {
+          topic: clusterTopic.value,
+          mode: clusterMode.value,
+          roles: clusterSelectedRoles.value,
+          max_rounds: 3,
+          session_id: clusterSessionId.value,
+        };
+        if (continueFrom) {
+          payload.continue_from = continueFrom;
+        }
+
         const response = await fetch('/api/cluster/discuss/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            topic: clusterTopic.value,
-            mode: clusterMode.value,
-            roles: clusterSelectedRoles.value,
-            max_rounds: 3,
-            session_id: clusterSessionId.value,
-          })
+          body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
