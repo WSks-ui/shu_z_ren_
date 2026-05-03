@@ -893,6 +893,86 @@ class ClusterOrchestrator:
         except Exception as e:
             print(f"[集群编排] 保存讨论记录失败: {e}")
 
+    async def _extract_role_memories(self, topic: str):
+        """从讨论中提取各角色对用户的观察记忆"""
+        try:
+            from py.edu_storage import MemoryCache, ensure_storage
+
+            await ensure_storage()
+            cache = await MemoryCache.get_instance()
+
+            for role_id in self.role_ids:
+                # 收集该角色的所有发言
+                role_messages = [
+                    msg for msg in self.history
+                    if msg.get("role_id") == role_id
+                ]
+                if not role_messages:
+                    continue
+
+                # 用 LLM 提取记忆
+                role = CLUSTER_ROLES.get(role_id, {})
+                role_name = role.get("name", role_id)
+
+                extract_prompt = f"""你是一个记忆提取助手。请从以下{role_name}的发言中，提取关于用户的关键信息。
+
+要求：
+- 只提取能观察到的用户特征（偏好、互动风格、关注点）
+- 每条记忆不超过 30 字
+- 最多提取 3 条
+- 如果没有可提取的信息，返回空
+- 格式：每行一条，以"-"开头
+
+{role_name}的发言：
+"""
+                for msg in role_messages:
+                    extract_prompt += f"- {msg['content'][:100]}\n"
+
+                messages = [
+                    {"role": "system", "content": "你是一个简洁的记忆提取助手，只输出关键信息。"},
+                    {"role": "user", "content": extract_prompt}
+                ]
+
+                try:
+                    result = ""
+                    async for chunk in self._call_llm_stream(messages):
+                        if chunk:
+                            result += chunk
+
+                    if result.strip():
+                        await cache.save_role_memory(
+                            role_id=role_id,
+                            memory_type="interaction_style",
+                            content=result.strip()
+                        )
+                except Exception as e:
+                    print(f"[集群编排] 提取角色{role_id}记忆失败: {e}")
+
+        except Exception as e:
+            print(f"[集群编排] 记忆提取失败: {e}")
+
+    async def _load_role_memories(self) -> Dict[str, str]:
+        """加载各角色的记忆，返回 {role_id: memory_text}"""
+        memories = {}
+        try:
+            from py.edu_storage import MemoryCache, ensure_storage
+
+            await ensure_storage()
+            cache = await MemoryCache.get_instance()
+
+            for role_id in self.role_ids:
+                role_memories = await cache.get_role_memory(role_id)
+                if role_memories:
+                    memory_lines = []
+                    for mem in role_memories:
+                        memory_lines.append(mem["content"])
+                    memories[role_id] = "\n".join(memory_lines)
+
+        except Exception as e:
+            print(f"[集群编排] 加载角色记忆失败: {e}")
+
+        return memories
+
 
 # 全局编排器管理
 _active_orchestrators: Dict[str, ClusterOrchestrator] = {}
