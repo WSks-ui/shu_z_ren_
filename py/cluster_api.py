@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+from io import BytesIO
 
 from py.cluster_roles import get_role_list, get_mode_list, get_all_roles, get_all_role_list, CLUSTER_ROLES
 from py.cluster_orchestrator import (
