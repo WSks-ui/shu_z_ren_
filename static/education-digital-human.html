@@ -26,6 +26,8 @@
 
   <!-- 主应用 - 全新沉浸式布局 -->
   <div class="app" id="app">
+    <!-- 原单数字人页面 -->
+    <template v-if="!clusterActive">
     <!-- 灵动岛 - 学习进度 -->
     <transition name="dynamic-island">
       <div class="dynamic-island" v-if="currentSkill && skillStagesList.length">
@@ -95,6 +97,10 @@
         <button class="quick-btn" :class="{ active: activePanel === 'notes' }" @click="togglePanel('notes')" title="智能笔记">
           <i class="fa-solid fa-note-sticky"></i>
           <span>笔记</span>
+        </button>
+        <button class="quick-btn cluster-btn" :class="{ active: clusterActive }" @click="enterCluster()" title="数字人集群">
+          <i class="fa-solid fa-users"></i>
+          <span>集群</span>
         </button>
         <div class="quick-divider"></div>
         <!-- 番茄钟按钮 -->
@@ -662,6 +668,256 @@
         <span>断开数字人</span>
       </button>
     </div>
+    </template><!-- /原单数字人页面 -->
+
+    <!-- 数字人集群页面 -->
+    <template v-if="clusterActive">
+    <div class="cluster-page">
+      <!-- 顶部栏 -->
+      <div class="cluster-header">
+        <div class="cluster-title">
+          <i class="fa-solid fa-users"></i>
+          <span>数字人集群</span>
+        </div>
+        <div class="cluster-mode-selector">
+          <button v-for="m in clusterModes" :key="m.id"
+            class="cluster-mode-btn" :class="{ active: clusterMode === m.id }"
+            @click="clusterMode = m.id">
+            <i :class="m.icon"></i> {{ m.name }}
+          </button>
+        </div>
+        <div class="cluster-header-actions">
+          <button class="cluster-history-btn" @click="showClusterHistory = true" title="讨论历史">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+          </button>
+          <button class="cluster-exit-btn" @click="exitCluster()">
+            <i class="fa-solid fa-arrow-left"></i> 返回
+          </button>
+        </div>
+      </div>
+
+      <!-- 数字人展示区 -->
+      <div class="cluster-avatars">
+        <div v-for="role in clusterRoleCards" :key="role.id" class="cluster-avatar-card"
+          :class="{ speaking: clusterSpeakingRoleId === role.id }">
+          <!-- 第一个角色：数字人SDK容器（连接后显示） -->
+          <div v-if="clusterSelectedRoles.indexOf(role.id) === 0 && clusterDigitalHumanConnected"
+            :id="'cluster-sdk-' + role.id" class="cluster-sdk-container"></div>
+          <!-- 占位符：未连接或非第一个角色 -->
+          <div v-else class="cluster-avatar-placeholder" :style="{ borderColor: role.color }">
+            <i :class="role.icon" class="cluster-placeholder-icon" :style="{ color: role.color }"></i>
+            <span class="cluster-placeholder-name" :style="{ color: role.color }">{{ role.name }}</span>
+            <!-- 正在播报指示器 -->
+            <div v-if="clusterSpeakingRoleId === role.id" class="cluster-speaking-indicator">
+              <span class="speaking-dot"></span>
+              <span class="speaking-dot"></span>
+              <span class="speaking-dot"></span>
+            </div>
+          </div>
+          <div class="cluster-avatar-info">
+            <span class="cluster-avatar-name" :style="{ color: role.color }">{{ role.name }}</span>
+            <span class="cluster-avatar-status" :class="getClusterRoleStatus(role.id)">{{ getClusterRoleStatusText(role.id) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 连接数字人按钮（未连接时显示） -->
+      <div v-if="!clusterDigitalHumanConnected" class="cluster-connect-bar">
+        <button class="cluster-connect-btn" @click="connectClusterDigitalHuman()">
+          <i class="fa-solid fa-plug"></i> 连接数字人
+        </button>
+        <span class="cluster-connect-hint">连接后第一个角色将以数字人形象展示，其他角色使用语音播报</span>
+      </div>
+
+      <!-- 讨论控制区 -->
+      <div class="cluster-control">
+        <div class="cluster-topic-row">
+          <input v-model="clusterTopic" class="cluster-topic-input" placeholder="输入讨论话题..." />
+          <button class="cluster-start-btn" @click="startClusterDiscussion()" :disabled="!canStartDiscussion">
+            <i class="fa-solid fa-play"></i> 开始讨论
+          </button>
+        </div>
+        <div class="cluster-role-select">
+          <span class="cluster-role-label">参与角色：</span>
+          <button v-for="role in availableRoles" :key="role.id"
+            class="cluster-role-chip" :class="{ selected: clusterSelectedRoles.includes(role.id), custom: role.is_custom }"
+            @click="toggleClusterRole(role.id)">
+            <i :class="role.icon"></i> {{ role.name }}
+            <span v-if="role.is_custom" class="custom-badge" @click.stop="editCustomRole(role)" title="编辑">
+              <i class="fa-solid fa-pen"></i>
+            </span>
+          </button>
+          <button class="cluster-role-chip add-role" @click="showRoleEditor = true">
+            <i class="fa-solid fa-plus"></i> 自定义
+          </button>
+        </div>
+      </div>
+
+      <!-- 好感度矩阵（讨论中显示） -->
+      <div class="cluster-affection" v-if="Object.keys(clusterAffectionMatrix).length > 0">
+        <div class="cluster-affection-title"><i class="fa-solid fa-heart"></i> 角色好感度</div>
+        <div class="cluster-affection-grid">
+          <template v-for="(targets, fromId) in clusterAffectionMatrix" :key="fromId">
+            <div v-for="(value, toId) in targets" :key="fromId + '-' + toId" class="cluster-affection-cell">
+              <span class="affection-from">{{ availableRoles.find(r => r.id === fromId)?.name || fromId }}</span>
+              <span class="affection-arrow">→</span>
+              <span class="affection-to">{{ availableRoles.find(r => r.id === toId)?.name || toId }}</span>
+              <span class="affection-value" :class="{ positive: value > 55, negative: value < 45 }">{{ value }}</span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- 集群对话区 -->
+      <div class="cluster-chat">
+        <div class="cluster-messages" ref="clusterMessagesRef">
+          <div v-for="msg in clusterMessages" :key="msg.id" class="cluster-msg" :class="msg.type">
+            <template v-if="msg.type === 'role'">
+              <span class="cluster-msg-name" :style="{ color: msg.color }">{{ msg.name }}</span>
+              <span class="cluster-msg-text">{{ msg.content }}</span>
+            </template>
+            <template v-else-if="msg.type === 'user'">
+              <span class="cluster-msg-name user-name">你</span>
+              <span class="cluster-msg-text">{{ msg.content }}</span>
+            </template>
+            <template v-else-if="msg.type === 'system'">
+              <span class="cluster-msg-system">{{ msg.content }}</span>
+            </template>
+          </div>
+        </div>
+        <div class="cluster-input-row">
+          <input v-model="clusterInput" class="cluster-input" @keyup.enter="sendClusterMessage()"
+            placeholder="插话或提问..." :disabled="clusterStatus !== 'discussing'" />
+          <button class="cluster-send-btn" @click="sendClusterMessage()"
+            :disabled="!clusterInput.trim() || clusterStatus !== 'discussing'">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    </template><!-- /数字人集群页面 -->
+
+    <!-- 集群历史面板 -->
+    <transition name="slide-right">
+      <div v-if="showClusterHistory" class="cluster-history-panel">
+        <div class="cluster-history-header">
+          <h3><i class="fa-solid fa-clock-rotate-left"></i> 讨论历史</h3>
+          <button class="cluster-history-close" @click="showClusterHistory = false">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="cluster-history-list">
+          <div v-if="clusterHistoryLoading" class="cluster-history-loading">
+            <i class="fa-solid fa-spinner fa-spin"></i> 加载中...
+          </div>
+          <div v-else-if="clusterHistory.length === 0" class="cluster-history-empty">
+            暂无讨论记录
+          </div>
+          <div v-else v-for="session in clusterHistory" :key="session.id"
+            class="cluster-history-item" @click="viewClusterHistoryDetail(session.id)">
+            <div class="cluster-history-topic">{{ session.topic }}</div>
+            <div class="cluster-history-meta">
+              <span class="cluster-history-mode">{{ clusterModes.find(m => m.id === session.mode)?.name || session.mode }}</span>
+              <span class="cluster-history-roles">{{ session.role_names?.join('、') || '' }}</span>
+            </div>
+            <div class="cluster-history-time">{{ formatClusterTime(session.created_at) }}</div>
+            <div v-if="session.summary" class="cluster-history-summary">{{ session.summary.slice(0, 80) }}...</div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 集群历史详情模态框 -->
+    <transition name="fade">
+      <div v-if="showClusterHistoryDetail" class="cluster-detail-overlay" @click.self="showClusterHistoryDetail = false">
+        <div class="cluster-detail-modal">
+          <div class="cluster-detail-header">
+            <h3>{{ clusterHistoryDetail?.topic }}</h3>
+            <button class="cluster-detail-close" @click="showClusterHistoryDetail = false">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="cluster-detail-meta">
+            <span><i class="fa-solid fa-comments"></i> {{ clusterModes.find(m => m.id === clusterHistoryDetail?.mode)?.name }}</span>
+            <span><i class="fa-solid fa-users"></i> {{ clusterHistoryDetail?.role_names?.join('、') }}</span>
+            <span><i class="fa-solid fa-clock"></i> {{ formatClusterTime(clusterHistoryDetail?.created_at) }}</span>
+          </div>
+          <div class="cluster-detail-messages">
+            <div v-for="(msg, idx) in clusterHistoryDetail?.messages" :key="idx"
+              class="cluster-detail-msg" :class="msg.role_id ? 'role' : 'user'">
+              <span v-if="msg.role_id" class="msg-name" :style="{ color: msg.color }">{{ msg.role || msg.role_id }}</span>
+              <span v-else class="msg-name user">你</span>
+              <span class="msg-content">{{ msg.content }}</span>
+            </div>
+          </div>
+          <div v-if="clusterHistoryDetail?.summary" class="cluster-detail-summary">
+            <h4>讨论总结</h4>
+            <p>{{ clusterHistoryDetail.summary }}</p>
+          </div>
+          <div class="cluster-detail-actions">
+            <button class="cluster-detail-btn" @click="continueFromHistory(clusterHistoryDetail)">
+              <i class="fa-solid fa-play"></i> 继续讨论
+            </button>
+            <button class="cluster-detail-btn" @click="exportClusterHistory(clusterHistoryDetail?.id, 'markdown')">
+              <i class="fa-solid fa-file-lines"></i> 导出 Markdown
+            </button>
+            <button class="cluster-detail-btn" @click="deleteClusterHistoryItem(clusterHistoryDetail?.id)">
+              <i class="fa-solid fa-trash"></i> 删除
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 角色编辑器模态框 -->
+    <transition name="fade">
+      <div v-if="showRoleEditor" class="role-editor-overlay" @click.self="closeRoleEditor">
+        <div class="role-editor-modal">
+          <div class="role-editor-header">
+            <h3>{{ editingRole?.id ? '编辑角色' : '创建自定义角色' }}</h3>
+            <button class="role-editor-close" @click="closeRoleEditor">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="role-editor-body">
+            <div class="role-editor-row">
+              <label>角色名称</label>
+              <input v-model="roleForm.name" placeholder="例如：分析师" />
+            </div>
+            <div class="role-editor-row">
+              <label>性格描述</label>
+              <input v-model="roleForm.personality" placeholder="一句话描述角色性格" />
+            </div>
+            <div class="role-editor-row">
+              <label>专业领域（逗号分隔）</label>
+              <input v-model="roleForm.expertiseStr" placeholder="例如：数据分析, 风险评估, 决策支持" />
+            </div>
+            <div class="role-editor-row">
+              <label>说话风格</label>
+              <input v-model="roleForm.speaking_style" placeholder="例如：简洁明了，善用数据说话" />
+            </div>
+            <div class="role-editor-row">
+              <label>主题色</label>
+              <input type="color" v-model="roleForm.color" />
+            </div>
+            <div class="role-editor-row full">
+              <label>系统提示词</label>
+              <textarea v-model="roleForm.system_prompt" rows="8"
+                placeholder="定义角色的行为准则、发言原则、专业知识等..."></textarea>
+            </div>
+          </div>
+          <div class="role-editor-footer">
+            <button v-if="editingRole?.is_custom" class="role-editor-btn danger" @click="deleteCustomRoleConfirm">
+              <i class="fa-solid fa-trash"></i> 删除
+            </button>
+            <button class="role-editor-btn" @click="closeRoleEditor">取消</button>
+            <button class="role-editor-btn primary" @click="saveCustomRole" :disabled="!roleForm.name || !roleForm.system_prompt">
+              <i class="fa-solid fa-check"></i> 保存
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- ==================== 模态框 ==================== -->
 
