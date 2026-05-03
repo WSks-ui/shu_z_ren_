@@ -34,6 +34,7 @@ class ClusterDiscussRequest(BaseModel):
     user_input: Optional[str] = Field(default="", description="用户输入（可选）")
     max_rounds: Optional[int] = Field(default=3, description="最大讨论轮次")
     session_id: Optional[str] = Field(default="", description="会话ID")
+    continue_from: Optional[str] = Field(default="", description="续聊来源会话ID")
 
 
 class ClusterInterruptRequest(BaseModel):
