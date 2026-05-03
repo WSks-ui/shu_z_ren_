@@ -173,6 +173,46 @@ class MemoryCache:
 
             CREATE INDEX IF NOT EXISTS idx_collab_type ON collaboration_sessions(type);
             CREATE INDEX IF NOT EXISTS idx_collab_start ON collaboration_sessions(start_time);
+
+            -- 集群会话记录表
+            CREATE TABLE IF NOT EXISTS cluster_sessions (
+                id TEXT PRIMARY KEY,
+                topic TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                roles TEXT NOT NULL,
+                messages TEXT NOT NULL,
+                summary TEXT,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_cluster_mode ON cluster_sessions(mode);
+            CREATE INDEX IF NOT EXISTS idx_cluster_created ON cluster_sessions(created_at);
+
+            -- 自定义集群角色表
+            CREATE TABLE IF NOT EXISTS custom_cluster_roles (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                icon TEXT NOT NULL DEFAULT 'fa-solid fa-user',
+                color TEXT NOT NULL DEFAULT '#6366f1',
+                personality TEXT NOT NULL DEFAULT '',
+                expertise TEXT NOT NULL DEFAULT '[]',
+                speaking_style TEXT NOT NULL DEFAULT '',
+                system_prompt TEXT NOT NULL,
+                voice_id TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            );
+
+            -- 集群角色记忆表
+            CREATE TABLE IF NOT EXISTS cluster_role_memory (
+                role_id TEXT NOT NULL,
+                user_key TEXT NOT NULL DEFAULT 'default',
+                memory_type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                PRIMARY KEY (role_id, user_key, memory_type)
+            );
         ''')
         await self._db_conn.commit()
 
@@ -375,6 +415,197 @@ class MemoryCache:
 
         rows = await cursor.fetchall()
         return [json.loads(row[0]) for row in rows]
+
+    # ==================== 集群会话 ====================
+
+    async def add_cluster_session(self, session: Dict[str, Any]):
+        """保存集群讨论记录"""
+        async with self._lock:
+            await self._db_conn.execute('''
+                INSERT OR REPLACE INTO cluster_sessions
+                (id, topic, mode, roles, messages, summary, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                session.get("id", ""),
+                session.get("topic", ""),
+                session.get("mode", ""),
+                json.dumps(session.get("roles", []), ensure_ascii=False),
+                json.dumps(session.get("messages", []), ensure_ascii=False),
+                session.get("summary", ""),
+                session.get("created_at", time.time()),
+                session.get("updated_at", time.time())
+            ))
+            await self._db_conn.commit()
+
+    async def get_cluster_sessions(
+        self,
+        mode: str = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """获取集群讨论历史列表（摘要，不含完整 messages）"""
+        if mode:
+            cursor = await self._db_conn.execute('''
+                SELECT id, topic, mode, roles, summary, created_at, updated_at
+                FROM cluster_sessions
+                WHERE mode = ?
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            ''', (mode, limit, offset))
+        else:
+            cursor = await self._db_conn.execute('''
+                SELECT id, topic, mode, roles, summary, created_at, updated_at
+                FROM cluster_sessions
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            ''', (limit, offset))
+
+        rows = await cursor.fetchall()
+        results = []
+        for row in rows:
+            results.append({
+                "id": row[0],
+                "topic": row[1],
+                "mode": row[2],
+                "roles": json.loads(row[3]) if row[3] else [],
+                "summary": row[4] or "",
+                "created_at": row[5],
+                "updated_at": row[6]
+            })
+        return results
+
+    async def get_cluster_session_detail(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """获取单条集群讨论详情（含完整 messages）"""
+        cursor = await self._db_conn.execute('''
+            SELECT id, topic, mode, roles, messages, summary, created_at, updated_at
+            FROM cluster_sessions WHERE id = ?
+        ''', (session_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "topic": row[1],
+            "mode": row[2],
+            "roles": json.loads(row[3]) if row[3] else [],
+            "messages": json.loads(row[4]) if row[4] else [],
+            "summary": row[5] or "",
+            "created_at": row[6],
+            "updated_at": row[7]
+        }
+
+    async def delete_cluster_session(self, session_id: str) -> bool:
+        """删除集群讨论记录"""
+        async with self._lock:
+            cursor = await self._db_conn.execute(
+                'DELETE FROM cluster_sessions WHERE id = ?', (session_id,)
+            )
+            await self._db_conn.commit()
+            return cursor.rowcount > 0
+
+    # ==================== 自定义集群角色 ====================
+
+    async def add_custom_cluster_role(self, role: Dict[str, Any]):
+        """添加自定义集群角色"""
+        async with self._lock:
+            await self._db_conn.execute('''
+                INSERT OR REPLACE INTO custom_cluster_roles
+                (id, name, icon, color, personality, expertise, speaking_style, system_prompt, voice_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                role.get("id", ""),
+                role.get("name", ""),
+                role.get("icon", "fa-solid fa-user"),
+                role.get("color", "#6366f1"),
+                role.get("personality", ""),
+                json.dumps(role.get("expertise", []), ensure_ascii=False),
+                role.get("speaking_style", ""),
+                role.get("system_prompt", ""),
+                role.get("voice_id", ""),
+                role.get("created_at", time.time()),
+                role.get("updated_at", time.time())
+            ))
+            await self._db_conn.commit()
+
+    async def get_custom_cluster_roles(self) -> List[Dict[str, Any]]:
+        """获取所有自定义集群角色"""
+        cursor = await self._db_conn.execute('''
+            SELECT id, name, icon, color, personality, expertise, speaking_style, system_prompt, voice_id, created_at, updated_at
+            FROM custom_cluster_roles ORDER BY created_at DESC
+        ''')
+        rows = await cursor.fetchall()
+        results = []
+        for row in rows:
+            results.append({
+                "id": row[0],
+                "name": row[1],
+                "icon": row[2],
+                "color": row[3],
+                "personality": row[4],
+                "expertise": json.loads(row[5]) if row[5] else [],
+                "speaking_style": row[6],
+                "system_prompt": row[7],
+                "voice_id": row[8],
+                "created_at": row[9],
+                "updated_at": row[10]
+            })
+        return results
+
+    async def get_custom_cluster_role(self, role_id: str) -> Optional[Dict[str, Any]]:
+        """获取单个自定义集群角色"""
+        cursor = await self._db_conn.execute('''
+            SELECT id, name, icon, color, personality, expertise, speaking_style, system_prompt, voice_id, created_at, updated_at
+            FROM custom_cluster_roles WHERE id = ?
+        ''', (role_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "name": row[1],
+            "icon": row[2],
+            "color": row[3],
+            "personality": row[4],
+            "expertise": json.loads(row[5]) if row[5] else [],
+            "speaking_style": row[6],
+            "system_prompt": row[7],
+            "voice_id": row[8],
+            "created_at": row[9],
+            "updated_at": row[10]
+        }
+
+    async def update_custom_cluster_role(self, role_id: str, updates: Dict[str, Any]) -> bool:
+        """更新自定义集群角色"""
+        async with self._lock:
+            existing = await self.get_custom_cluster_role(role_id)
+            if not existing:
+                return False
+
+            merged = {**existing, **updates, "updated_at": time.time()}
+            if "expertise" in merged:
+                merged["expertise"] = json.dumps(merged["expertise"], ensure_ascii=False)
+
+            await self._db_conn.execute('''
+                INSERT OR REPLACE INTO custom_cluster_roles
+                (id, name, icon, color, personality, expertise, speaking_style, system_prompt, voice_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                merged["id"], merged["name"], merged["icon"], merged["color"],
+                merged["personality"], merged["expertise"], merged["speaking_style"],
+                merged["system_prompt"], merged["voice_id"],
+                merged["created_at"], merged["updated_at"]
+            ))
+            await self._db_conn.commit()
+            return True
+
+    async def delete_custom_cluster_role(self, role_id: str) -> bool:
+        """删除自定义集群角色"""
+        async with self._lock:
+            cursor = await self._db_conn.execute(
+                'DELETE FROM custom_cluster_roles WHERE id = ?', (role_id,)
+            )
+            await self._db_conn.commit()
+            return cursor.rowcount > 0
 
     # ==================== 持久化 ====================
 
