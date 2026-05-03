@@ -2186,6 +2186,7 @@ createApp({
       color: '#6366f1',
       system_prompt: ''
     });
+    const roleMemories = ref([]);  // 当前编辑角色的记忆
 
     const clusterModes = [
       { id: 'roundtable', name: '圆桌讨论', icon: 'fa-solid fa-comments' },
@@ -2675,7 +2676,7 @@ createApp({
         color: role.color || '#6366f1',
         system_prompt: ''
       };
-      // 加载完整角色信息（含 system_prompt）
+      // 加载完整角色信息（含 system_prompt）和记忆
       if (role.is_custom) {
         fetch(`/api/cluster/roles/custom/${role.id}`)
           .then(res => res.json())
@@ -2684,6 +2685,13 @@ createApp({
           })
           .catch(e => console.error('加载角色详情失败:', e));
       }
+      // 加载角色记忆
+      fetch(`/api/cluster/roles/${role.id}/memory`)
+        .then(res => res.json())
+        .then(data => {
+          roleMemories.value = data.memories || [];
+        })
+        .catch(() => { roleMemories.value = []; });
       showRoleEditor.value = true;
     };
 
