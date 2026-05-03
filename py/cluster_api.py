@@ -1,0 +1,417 @@
+# -*- coding: utf-8 -*-
+"""
+数字人集群 API 端点
+提供集群角色查询、讨论流式响应、用户插话等接口
+"""
+
+import json
+import time
+import uuid
+from fastapi import APIRouter, Body, HTTPException
+from fastapi.responses import StreamingResponse, Response
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+
+from py.cluster_roles import get_role_list, get_mode_list, get_all_roles, get_all_role_list, CLUSTER_ROLES
+from py.cluster_orchestrator import (
+    create_orchestrator,
+    get_orchestrator,
+    remove_orchestrator
+)
+from py.edu_storage import MemoryCache, ensure_storage
+
+router = APIRouter(prefix="/api/cluster", tags=["Digital Human Cluster"])
+
+
+# ==================== 数据模型 ====================
+
+class ClusterDiscussRequest(BaseModel):
+    """集群讨论请求"""
+    topic: str = Field(..., description="讨论话题")
+    mode: str = Field(default="roundtable", description="讨论模式: roundtable | debate | consultation")
+    roles: List[str] = Field(..., description="参与角色ID列表")
+    user_input: Optional[str] = Field(default="", description="用户输入（可选）")
+    max_rounds: Optional[int] = Field(default=3, description="最大讨论轮次")
+    session_id: Optional[str] = Field(default="", description="会话ID")
+
+
+class ClusterInterruptRequest(BaseModel):
+    """用户插话请求"""
+    session_id: str = Field(..., description="会话ID")
+    message: str = Field(..., description="用户消息")
+
+
+class ClusterTTSRequest(BaseModel):
+    """集群 TTS 请求"""
+    text: str = Field(..., description="要合成的文本")
+    role_id: Optional[str] = Field(default="", description="角色ID（用于选择音色）")
+
+
+# ==================== API 端点 ====================
+
+@router.get("/roles")
+async def get_roles():
+    """获取可用角色列表（含自定义角色）"""
+    return await get_all_role_list()
+
+
+@router.get("/modes")
+async def get_modes():
+    """获取可用讨论模式"""
+    return get_mode_list()
+
+
+@router.post("/discuss/stream")
+async def cluster_discuss_stream(request: ClusterDiscussRequest = Body(...)):
+    """SSE 流式集群讨论"""
+
+    session_id = request.session_id or f"cluster-{int(time.time())}"
+
+    # 创建编排器
+    orchestrator = create_orchestrator(
+        session_id=session_id,
+        mode=request.mode,
+        role_ids=request.roles,
+        max_rounds=request.max_rounds
+    )
+
+    async def generate_stream():
+        try:
+            async for event in orchestrator.run_discussion(
+                topic=request.topic,
+                user_input=request.user_input or "",
+                history=[],
+                session_id=session_id
+            ):
+                yield event
+        except Exception as e:
+            print(f"[集群讨论] 错误: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+        finally:
+            # 讨论结束后保留编排器一段时间（供插话使用），5分钟后清理
+            pass
+
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@router.post("/interrupt")
+async def cluster_interrupt(request: ClusterInterruptRequest = Body(...)):
+    """用户插话中断当前讨论"""
+
+    orchestrator = get_orchestrator(request.session_id)
+    if not orchestrator:
+        raise HTTPException(status_code=404, detail="会话不存在或已结束")
+
+    orchestrator.interrupt(request.message)
+    return {"status": "ok", "message": "已插入用户消息"}
+
+
+@router.get("/affection/{session_id}")
+async def get_cluster_affection(session_id: str):
+    """获取集群会话的好感度矩阵"""
+
+    orchestrator = get_orchestrator(session_id)
+    if not orchestrator:
+        raise HTTPException(status_code=404, detail="会话不存在或已结束")
+
+    return {"matrix": orchestrator.get_affection_matrix()}
+
+
+@router.delete("/session/{session_id}")
+async def end_cluster_session(session_id: str):
+    """结束集群会话"""
+
+    removed = remove_orchestrator(session_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    return {"status": "ok", "message": "会话已结束"}
+
+
+@router.post("/tts")
+async def cluster_tts(request: ClusterTTSRequest = Body(...)):
+    """集群语音合成 - 使用火山引擎 TTS（回退到 EdgeTTS）"""
+
+    try:
+        from py.get_setting import load_settings
+
+        settings = await load_settings()
+        tts_settings = settings.get("ttsSettings", {})
+        tts_engine = tts_settings.get("engine", "edgetts")
+
+        # 优先使用火山引擎，如果未配置则回退到 EdgeTTS
+        if tts_engine == "volcengine" or tts_settings.get("volcAppId"):
+            return await _volcengine_tts(request, tts_settings)
+        else:
+            return await _edgetts_fallback(request, tts_settings)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[集群TTS] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _volcengine_tts(request: ClusterTTSRequest, tts_settings: dict):
+    """火山引擎 TTS 合成"""
+    import httpx
+    import base64
+
+    volc_app_id = tts_settings.get("volcAppId", "")
+    volc_access_key = tts_settings.get("volcAccessKey", "")
+    volc_resource_id = tts_settings.get("volcResourceId", "volc_tts_release")
+
+    if not volc_app_id or not volc_access_key:
+        # 回退到 EdgeTTS
+        return await _edgetts_fallback(request, tts_settings)
+
+    # 根据角色选择音色
+    voice = _get_role_voice(request.role_id, tts_settings)
+
+    url = "https://openspeech.bytedance.com/api/v3/tts/unidirectional"
+    headers = {
+        "X-Api-App-Id": volc_app_id,
+        "X-Api-Access-Key": volc_access_key,
+        "X-Api-Resource-Id": volc_resource_id,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "user": {"uid": "cluster-user"},
+        "req_params": {
+            "text": request.text,
+            "speaker": voice,
+            "speed_ratio": 1.0,
+            "audio_params": {"format": "mp3", "sample_rate": 24000},
+            "additions": json.dumps({"disable_markdown_filter": True})
+        }
+    }
+
+    collected_audio = bytearray()
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        async with client.stream("POST", url, headers=headers, json=payload) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    if data.get("code", 0) not in [0, 20000000]:
+                        continue
+                    if "data" in data and data["data"]:
+                        chunk_audio = base64.b64decode(data["data"])
+                        collected_audio.extend(chunk_audio)
+                except json.JSONDecodeError:
+                    continue
+
+    if not collected_audio:
+        raise HTTPException(status_code=500, detail="火山引擎TTS合成失败")
+
+    return Response(
+        content=bytes(collected_audio),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-cache"}
+    )
+
+
+async def _edgetts_fallback(request: ClusterTTSRequest, tts_settings: dict):
+    """EdgeTTS 回退方案"""
+    import edge_tts
+
+    voice = _get_role_voice(request.role_id, tts_settings)
+    # 如果 voice 不是 edge tts 格式，使用默认音色
+    if not voice.startswith("zh-") and not voice.startswith("en-"):
+        voice = "zh-CN-YunxiNeural"
+
+    communicate = edge_tts.Communicate(request.text, voice)
+    audio_chunks = []
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_chunks.append(chunk["data"])
+
+    if not audio_chunks:
+        raise HTTPException(status_code=500, detail="EdgeTTS合成失败")
+
+    return Response(
+        content=b"".join(audio_chunks),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-cache"}
+    )
+
+
+def _get_role_voice(role_id: str, tts_settings: dict = None) -> str:
+    """根据角色ID返回对应的音色"""
+
+    # 角色音色映射
+    role_voices = {
+        "innovator": "BV001_streaming",      # 热情男声
+        "skeptic": "BV002_streaming",        # 冷静男声
+        "integrator": "BV700_streaming",     # 温和女声
+        "practitioner": "BV406_streaming",   # 沉稳男声
+    }
+
+    # 如果有用户自定义的火山引擎音色配置，优先使用
+    if tts_settings:
+        volc_voice = tts_settings.get("volcVoice", "")
+        if volc_voice:
+            return volc_voice
+
+    return role_voices.get(role_id, "BV001_streaming")
+
+
+# ==================== 历史记录 API ====================
+
+@router.get("/history")
+async def get_cluster_history(mode: str = None, limit: int = 50, offset: int = 0):
+    """获取集群讨论历史列表"""
+
+    await ensure_storage()
+    cache = await MemoryCache.get_instance()
+
+    sessions = await cache.get_cluster_sessions(mode=mode, limit=limit, offset=offset)
+
+    # 补充角色名称
+    for session in sessions:
+        role_names = []
+        for role_id in session.get("roles", []):
+            role = CLUSTER_ROLES.get(role_id)
+            if role:
+                role_names.append(role["name"])
+            else:
+                role_names.append(role_id)
+        session["role_names"] = role_names
+
+    return {"sessions": sessions, "total": len(sessions)}
+
+
+@router.get("/history/{session_id}")
+async def get_cluster_history_detail(session_id: str):
+    """获取单条集群讨论详情"""
+
+    await ensure_storage()
+    cache = await MemoryCache.get_instance()
+
+    session = await cache.get_cluster_session_detail(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="讨论记录不存在")
+
+    # 补充角色名称和消息中的颜色信息
+    role_names = {}
+    for role_id in session.get("roles", []):
+        role = CLUSTER_ROLES.get(role_id)
+        if role:
+            role_names[role_id] = {"name": role["name"], "color": role["color"]}
+        else:
+            role_names[role_id] = {"name": role_id, "color": "#6366f1"}
+
+    session["role_info"] = role_names
+
+    # 为消息添加颜色
+    for msg in session.get("messages", []):
+        role_id = msg.get("role_id", "")
+        if role_id in role_names:
+            msg["color"] = role_names[role_id]["color"]
+
+    return session
+
+
+@router.delete("/history/{session_id}")
+async def delete_cluster_history(session_id: str):
+    """删除集群讨论记录"""
+
+    await ensure_storage()
+    cache = await MemoryCache.get_instance()
+
+    deleted = await cache.delete_cluster_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="讨论记录不存在")
+
+    return {"status": "ok", "message": "讨论记录已删除"}
+
+
+# ==================== 自定义角色 API ====================
+
+class CustomRoleRequest(BaseModel):
+    """自定义角色请求"""
+    name: str = Field(..., description="角色名称")
+    icon: Optional[str] = Field(default="fa-solid fa-user", description="图标")
+    color: Optional[str] = Field(default="#6366f1", description="主题色")
+    personality: Optional[str] = Field(default="", description="性格描述")
+    expertise: Optional[List[str]] = Field(default=[], description="专业领域")
+    speaking_style: Optional[str] = Field(default="", description="说话风格")
+    system_prompt: str = Field(..., description="系统提示词")
+    voice_id: Optional[str] = Field(default="", description="音色ID")
+
+
+@router.post("/roles/custom")
+async def create_custom_role(request: CustomRoleRequest = Body(...)):
+    """创建自定义角色"""
+
+    import uuid
+    await ensure_storage()
+    cache = await MemoryCache.get_instance()
+
+    role_id = f"custom-{uuid.uuid4().hex[:8]}"
+    role_data = {
+        "id": role_id,
+        "name": request.name,
+        "icon": request.icon or "fa-solid fa-user",
+        "color": request.color or "#6366f1",
+        "personality": request.personality or "",
+        "expertise": request.expertise or [],
+        "speaking_style": request.speaking_style or "",
+        "system_prompt": request.system_prompt,
+        "voice_id": request.voice_id or "",
+        "created_at": time.time(),
+        "updated_at": time.time()
+    }
+
+    await cache.add_custom_cluster_role(role_data)
+    return {"status": "ok", "role": role_data}
+
+
+@router.put("/roles/custom/{role_id}")
+async def update_custom_role(role_id: str, request: CustomRoleRequest = Body(...)):
+    """更新自定义角色"""
+
+    await ensure_storage()
+    cache = await MemoryCache.get_instance()
+
+    updates = {
+        "name": request.name,
+        "icon": request.icon or "fa-solid fa-user",
+        "color": request.color or "#6366f1",
+        "personality": request.personality or "",
+        "expertise": request.expertise or [],
+        "speaking_style": request.speaking_style or "",
+        "system_prompt": request.system_prompt,
+        "voice_id": request.voice_id or ""
+    }
+
+    success = await cache.update_custom_cluster_role(role_id, updates)
+    if not success:
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    return {"status": "ok", "message": "角色已更新"}
+
+
+@router.delete("/roles/custom/{role_id}")
+async def delete_custom_role(role_id: str):
+    """删除自定义角色"""
+
+    await ensure_storage()
+    cache = await MemoryCache.get_instance()
+
+    deleted = await cache.delete_custom_cluster_role(role_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    return {"status": "ok", "message": "角色已删除"}
