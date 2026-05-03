@@ -607,6 +607,47 @@ class MemoryCache:
             await self._db_conn.commit()
             return cursor.rowcount > 0
 
+    # ==================== 集群角色记忆 ====================
+
+    async def save_role_memory(self, role_id: str, memory_type: str, content: str, user_key: str = "default"):
+        """保存角色记忆"""
+        async with self._lock:
+            await self._db_conn.execute('''
+                INSERT OR REPLACE INTO cluster_role_memory (role_id, user_key, memory_type, content, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (role_id, user_key, memory_type, content, time.time()))
+            await self._db_conn.commit()
+
+    async def get_role_memory(self, role_id: str, user_key: str = "default") -> List[Dict[str, Any]]:
+        """获取角色的所有记忆"""
+        cursor = await self._db_conn.execute('''
+            SELECT role_id, user_key, memory_type, content, updated_at
+            FROM cluster_role_memory
+            WHERE role_id = ? AND user_key = ?
+            ORDER BY updated_at DESC
+        ''', (role_id, user_key))
+        rows = await cursor.fetchall()
+        return [
+            {
+                "role_id": row[0],
+                "user_key": row[1],
+                "memory_type": row[2],
+                "content": row[3],
+                "updated_at": row[4]
+            }
+            for row in rows
+        ]
+
+    async def clear_role_memory(self, role_id: str, user_key: str = "default") -> bool:
+        """清除角色的所有记忆"""
+        async with self._lock:
+            cursor = await self._db_conn.execute(
+                'DELETE FROM cluster_role_memory WHERE role_id = ? AND user_key = ?',
+                (role_id, user_key)
+            )
+            await self._db_conn.commit()
+            return cursor.rowcount > 0
+
     # ==================== 持久化 ====================
 
     async def _periodic_flush(self):
