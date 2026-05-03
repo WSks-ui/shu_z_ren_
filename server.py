@@ -10761,6 +10761,9 @@ app.include_router(tencent_digital_human_router)
 from py.xingyun_digital_human import router as xingyun_digital_human_router
 app.include_router(xingyun_digital_human_router)
 
+from py.cluster_api import router as cluster_router
+app.include_router(cluster_router)
+
 mcp = FastApiMCP(
     app,
     name="Agent party MCP - chat with multiple agents",
