@@ -2631,6 +2631,10 @@ createApp({
       showClusterHistoryDetail.value = false;
       showClusterHistory.value = false;
       updateClusterRoleCards();
+      // 延迟启动，确保状态更新
+      nextTick(() => {
+        startClusterDiscussion(session.id);
+      });
     };
 
     const exportClusterHistory = async (sessionId, format) => {
