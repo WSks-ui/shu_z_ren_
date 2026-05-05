@@ -749,6 +749,9 @@ class ClusterOrchestrator:
                     timeout=60.0
                 ) as response:
                     async for line in response.aiter_lines():
+                        # 用户插话时立即停止读取当前角色的流式输出
+                        if self._interrupted:
+                            break
                         if not line or line == "data: [DONE]":
                             continue
                         if line.startswith("data: "):
@@ -772,6 +775,9 @@ class ClusterOrchestrator:
                         json=request_body
                     ) as response:
                         async for line in response.aiter_lines():
+                            # 用户插话时立即停止读取当前角色的流式输出
+                            if self._interrupted:
+                                break
                             if not line or line == "data: [DONE]":
                                 continue
                             if line.startswith("data: "):
@@ -807,9 +813,20 @@ class ClusterOrchestrator:
             prefix = f"[{stance}方] " if stance else ""
             summary_content += f"- {prefix}{name}：{content[:150]}...\n"
 
+        system_prompt = """你是一个学术讨论总结助手。请将以下多角色讨论内容汇总为简洁的结构化总结。
+你必须严格用 JSON 格式输出，不要包含任何其他文字：
+
+{
+  "consensus": "共识点（1-2句话，概括所有角色达成一致的核心观点）",
+  "divergence": "分歧点（1-2句话，概括角色间的主要争议或不同看法）",
+  "suggestions": "建议（1-2句话，基于讨论给出的具体可操作建议）"
+}
+
+如果某项确实没有内容，请填写"无"。用中文回答。"""
+
         messages = [
-            {"role": "system", "content": "你是一个学术讨论总结助手。请将以下多角色讨论内容汇总为简洁的结构化总结，包括：共识点、分歧点、建议。用中文回答。"},
-            {"role": "user", "content": f"讨论话题：{topic}\n\n{summary_content}\n请生成总结。"}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"讨论话题：{topic}\n\n{summary_content}\n请用JSON格式输出总结。"}
         ]
 
         # 非流式调用
@@ -884,10 +901,9 @@ class ClusterOrchestrator:
     async def _save_session(self, topic: str, session_id: str, summary: str = ""):
         """保存讨论记录到数据库"""
         try:
-            from py.edu_storage import MemoryCache, ensure_storage
+            from py.edu_storage import get_cache
 
-            await ensure_storage()
-            cache = await MemoryCache.get_instance()
+            cache = await get_cache()
 
             session_data = {
                 "id": session_id,
@@ -908,10 +924,9 @@ class ClusterOrchestrator:
     async def _extract_role_memories(self, topic: str):
         """从讨论中提取各角色对用户的观察记忆"""
         try:
-            from py.edu_storage import MemoryCache, ensure_storage
+            from py.edu_storage import get_cache
 
-            await ensure_storage()
-            cache = await MemoryCache.get_instance()
+            cache = await get_cache()
 
             for role_id in self.role_ids:
                 # 收集该角色的所有发言
@@ -967,10 +982,9 @@ class ClusterOrchestrator:
         """加载各角色的记忆，返回 {role_id: memory_text}"""
         memories = {}
         try:
-            from py.edu_storage import MemoryCache, ensure_storage
+            from py.edu_storage import get_cache
 
-            await ensure_storage()
-            cache = await MemoryCache.get_instance()
+            cache = await get_cache()
 
             for role_id in self.role_ids:
                 role_memories = await cache.get_role_memory(role_id)
