@@ -77,6 +77,8 @@
   --text-secondary: rgba(255, 255, 255, 0.7);
   --text-tertiary: rgba(255, 255, 255, 0.5);
   --text-disabled: rgba(255, 255, 255, 0.3);
+  --text-inverse: #ffffff;
+  --text-on-primary: #ffffff;
 
   /* 间距系统 */
   --space-1: 0.25rem;
@@ -104,6 +106,17 @@
   --duration-normal: 250ms;
   --duration-slow: 400ms;
   --duration-slower: 600ms;
+
+  /* z-index 层级系统 */
+  --z-base: 1;
+  --z-ring: 5;
+  --z-setup: 8;
+  --z-function: 10;
+  --z-panel: 15;
+  --z-chat: 20;
+  --z-float: 30;
+  --z-overlay: 100;
+  --z-modal: 200;
 
   /* 缓动函数 */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
