@@ -84,7 +84,7 @@ async def cluster_discuss_stream(request: ClusterDiscussRequest = Body(...)):
                 request.mode = prev_session.get("mode", request.mode)
 
     # 创建编排器
-    orchestrator = create_orchestrator(
+    orchestrator = await create_orchestrator(
         session_id=session_id,
         mode=request.mode,
         role_ids=request.roles,
@@ -390,6 +390,20 @@ async def create_custom_role(request: CustomRoleRequest = Body(...)):
     return {"status": "ok", "role": role_data}
 
 
+@router.get("/roles/custom/{role_id}")
+async def get_custom_role(role_id: str):
+    """获取单个自定义角色详情"""
+
+    cache = await get_cache()
+    custom_roles = await cache.get_custom_cluster_roles()
+
+    for role in custom_roles:
+        if role.get("id") == role_id:
+            return {"status": "ok", "role": role}
+
+    raise HTTPException(status_code=404, detail="角色不存在")
+
+
 @router.put("/roles/custom/{role_id}")
 async def update_custom_role(role_id: str, request: CustomRoleRequest = Body(...)):
     """更新自定义角色"""
@@ -466,7 +480,7 @@ class ClusterRecommendRequest(BaseModel):
 @router.post("/roles/recommend")
 async def get_role_recommendation(request: ClusterRecommendRequest = Body(...)):
     """根据话题推荐角色组合"""
-    return recommend_roles(request.topic, request.mode or "roundtable")
+    return await recommend_roles(request.topic, request.mode or "roundtable")
 
 
 @router.post("/export")
