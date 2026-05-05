@@ -2166,12 +2166,15 @@ createApp({
     const clusterSpeakingRoleId = ref('');  // 当前正在播报的角色ID
     const clusterAffectionMatrix = ref({});  // 好感度矩阵
     const clusterPanel = ref(null);  // 当前浮动面板: 'mode' | 'roles' | 'affection' | null
-    const clusterChatExpanded = ref(false);  // 对话栏是否展开
+    const clusterChatExpanded = ref(true);  // 对话栏默认展开
+    const clusterChatMode = ref(localStorage.getItem('cluster-chat-mode') || 'bottom');  // 'bottom' | 'sidebar'
+    const clusterChatHeight = ref(parseInt(localStorage.getItem('cluster-chat-height')) || 450);  // 底部模式高度
     const clusterAbortController = ref(null);  // SSE 中断控制器
     const clusterCurrentRound = ref(0);  // 当前讨论轮次
     const clusterTotalRounds = ref(3);  // 总轮次
     const clusterCurrentSpeaker = ref('');  // 当前发言角色名称
     const clusterInterruptPending = ref(false);  // 等待角色回应插话
+    const clusterThinkingRole = ref(null);  // { roleId, name, color } — 当前正在思考的角色
 
     // 历史面板状态
     const showClusterHistory = ref(false);
@@ -2240,10 +2243,68 @@ createApp({
       clusterTotalRounds.value = 3;
       clusterCurrentSpeaker.value = '';
       clusterInterruptPending.value = false;
+      clusterThinkingRole.value = null;
       // 2. 恢复原页面 SDK
       await nextTick();
       await createXingYunSession();
     };
+
+    const closeClusterChat = () => {
+      // 讨论中不允许关闭
+      if (clusterStatus.value === 'discussing') return;
+      clusterChatExpanded.value = false;
+    };
+
+    // 模式切换 (底部 ↔ 侧边栏)
+    const toggleClusterChatMode = () => {
+      const oldMode = clusterChatMode.value;
+      const newMode = oldMode === 'bottom' ? 'sidebar' : 'bottom';
+      clusterChatMode.value = newMode;
+      localStorage.setItem('cluster-chat-mode', newMode);
+
+      const chatBar = document.querySelector('.cluster-chat-bar');
+      if (chatBar) {
+        chatBar.classList.remove('from-sidebar');
+        if (oldMode === 'sidebar' && newMode === 'bottom') {
+          chatBar.classList.add('from-sidebar');
+          setTimeout(() => chatBar.classList.remove('from-sidebar'), 400);
+        }
+      }
+    };
+
+    // 高度拖拽
+    let clusterDragStartY = 0;
+    let clusterDragStartHeight = 0;
+
+    const startClusterResize = (e) => {
+      if (clusterChatMode.value !== 'bottom') return;
+      clusterDragStartY = e.clientY;
+      clusterDragStartHeight = clusterChatHeight.value;
+      document.addEventListener('mousemove', onClusterResize);
+      document.addEventListener('mouseup', stopClusterResize);
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+    };
+
+    const onClusterResize = (e) => {
+      const delta = clusterDragStartY - e.clientY;
+      const newHeight = Math.max(300, Math.min(600, clusterDragStartHeight + delta));
+      clusterChatHeight.value = newHeight;
+      document.documentElement.style.setProperty('--cluster-chat-height', newHeight + 'px');
+    };
+
+    const stopClusterResize = () => {
+      document.removeEventListener('mousemove', onClusterResize);
+      document.removeEventListener('mouseup', stopClusterResize);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem('cluster-chat-height', clusterChatHeight.value.toString());
+    };
+
+    // 初始化CSS变量
+    if (typeof window !== 'undefined') {
+      document.documentElement.style.setProperty('--cluster-chat-height', clusterChatHeight.value + 'px');
+    }
 
     // 导出当前讨论记录
     const exportCurrentSession = async () => {
@@ -2263,6 +2324,15 @@ createApp({
             lines.push(`\n**你**: ${msg.content}\n`);
           } else if (msg.type === 'system') {
             lines.push(`\n*${msg.content}*\n`);
+          } else if (msg.type === 'summary') {
+            lines.push('\n## 讨论总结\n');
+            if (typeof msg.content === 'object') {
+              if (msg.content.consensus) lines.push(`- **共识**: ${msg.content.consensus}\n`);
+              if (msg.content.divergence) lines.push(`- **分歧**: ${msg.content.divergence}\n`);
+              if (msg.content.suggestions) lines.push(`- **建议**: ${msg.content.suggestions}\n`);
+            } else {
+              lines.push(`${msg.content}\n`);
+            }
           }
         }
         const blob = new Blob([lines.join('')], { type: 'text/markdown' });
@@ -2376,9 +2446,13 @@ createApp({
       if (!canStartDiscussion.value && !continueFrom) return;
 
       clusterStatus.value = 'discussing';
+      clusterChatExpanded.value = true;
       clusterMessages.value = [];
       clusterSessionId.value = 'cluster-' + Date.now();
-      clusterChatExpanded.value = true;  // 自动展开对话栏
+      clusterCurrentRound.value = 0;
+      clusterTotalRounds.value = 3;
+      clusterCurrentSpeaker.value = '';
+      clusterThinkingRole.value = null;
 
       // 更新角色卡片
       updateClusterRoleCards();
@@ -2401,7 +2475,7 @@ createApp({
           abortController.abort();
           clusterCurrentSpeaker.value = '';
           clusterSpeakingRoleId.value = '';
-          clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+          clusterThinkingRole.value = null;
           clusterMessages.value.push({
             id: Date.now(),
             type: 'system',
@@ -2461,16 +2535,12 @@ createApp({
                 currentRoleName = data.role_name;
                 currentColor = data.color || '#a5b4fc';
                 currentContent = '';
-                // 移除之前的 thinking 指示器
-                clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
-                // 添加 thinking 指示器
-                clusterMessages.value.push({
-                  id: Date.now() + Math.random(),
-                  type: 'thinking',
+                // 设置 thinking 指示器
+                clusterThinkingRole.value = {
                   roleId: currentRoleId,
                   name: currentRoleName,
                   color: currentColor
-                });
+                };
                 // 更新角色环高亮和进度信息
                 clusterSpeakingRoleId.value = currentRoleId;
                 if (!data.interrupt_response) {
@@ -2483,9 +2553,9 @@ createApp({
               } else if (data.type === 'role_chunk') {
                 currentContent += data.content;
                 const lastMsg = clusterMessages.value[clusterMessages.value.length - 1];
-                // 首次收到内容时，将 thinking 替换为实际角色消息
-                if (lastMsg?.type === 'thinking' && lastMsg.roleId === currentRoleId) {
-                  clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+                // 首次收到内容时，清除 thinking 并添加实际角色消息
+                if (clusterThinkingRole.value && clusterThinkingRole.value.roleId === currentRoleId) {
+                  clusterThinkingRole.value = null;
                   clusterMessages.value.push({
                     id: Date.now() + Math.random(),
                     type: 'role',
@@ -2523,6 +2593,13 @@ createApp({
                 }
               } else if (data.type === 'round_start') {
                 clusterCurrentRound.value = data.round;
+              } else if (data.type === 'round_end') {
+                // 轮次结束，添加分隔线
+                clusterMessages.value.push({
+                  id: Date.now() + Math.random(),
+                  type: 'system',
+                  content: `第 ${data.round} 轮讨论结束`
+                });
               } else if (data.type === 'summary') {
                 // 尝试解析结构化 JSON 总结，否则作为纯文本
                 let summaryContent = data.content;
@@ -2570,7 +2647,7 @@ createApp({
                 clusterCurrentSpeaker.value = '';
                 clusterSpeakingRoleId.value = '';
                 clusterInterruptPending.value = false;
-                clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+                clusterThinkingRole.value = null;
                 clusterMessages.value.push({
                   id: Date.now(),
                   type: 'system',
@@ -2589,11 +2666,12 @@ createApp({
           console.error('集群讨论失败:', e);
           clusterCurrentSpeaker.value = '';
           clusterSpeakingRoleId.value = '';
-          clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+          clusterThinkingRole.value = null;
           clusterMessages.value.push({
             id: Date.now(),
             type: 'system',
-            content: `❌ 讨论失败: ${e.message || '未知错误'}`
+            content: `❌ 讨论失败: ${e.message || '未知错误'}`,
+            retryable: true
           });
         }
       } finally {
@@ -2650,7 +2728,7 @@ createApp({
       clusterCurrentSpeaker.value = '';
       clusterSpeakingRoleId.value = '';
       clusterInterruptPending.value = false;
-      clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+      clusterThinkingRole.value = null;
       clusterMessages.value.push({
         id: Date.now(),
         type: 'system',
@@ -2658,14 +2736,14 @@ createApp({
       });
     };
 
-    // 好感度浮动提示
+    // 好感度浮动提示（缓存 DOM 查询）
+    let _affectionRingCache = null;
     const triggerAffectionFloat = (fromId, toId, delta) => {
-      // 在目标角色环项上显示浮动数值
-      const roleRingEl = document.querySelector('.cluster-role-ring-item');
-      if (!roleRingEl) return;
-      const targetItem = roleRingEl.parentElement?.querySelector(
-        `.cluster-role-ring-item[data-role-id="${toId}"]`
-      );
+      if (!_affectionRingCache || !_affectionRingCache.isConnected) {
+        _affectionRingCache = document.querySelector('.cluster-role-ring');
+      }
+      if (!_affectionRingCache) return;
+      const targetItem = _affectionRingCache.querySelector(`[data-role-id="${toId}"]`);
       if (!targetItem) return;
 
       const float = document.createElement('span');
@@ -2673,7 +2751,6 @@ createApp({
       float.textContent = (delta >= 0 ? '+' : '') + delta;
       targetItem.appendChild(float);
 
-      // 动画结束后自动移除
       float.addEventListener('animationend', () => float.remove());
       setTimeout(() => { if (float.parentElement) float.remove(); }, 2500);
     };
@@ -5103,6 +5180,7 @@ createApp({
       clusterTotalRounds,
       clusterCurrentSpeaker,
       clusterInterruptPending,
+      clusterThinkingRole,
       // 历史面板
       showClusterHistory,
       clusterHistory,
@@ -5131,6 +5209,11 @@ createApp({
       applyRecommendation,
       enterCluster,
       exitCluster,
+      closeClusterChat,
+      clusterChatMode,
+      clusterChatHeight,
+      toggleClusterChatMode,
+      startClusterResize,
       exportCurrentSession,
       onRoleStripClick,
       stopClusterDiscussion,
