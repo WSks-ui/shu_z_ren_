@@ -2160,13 +2160,18 @@ createApp({
     const clusterStatus = ref('idle');  // idle | connecting | discussing | paused
     const clusterSelectedRoles = ref(['innovator', 'skeptic']);
     const availableRoles = ref([]);
-    const clusterSessions = ref({});  // roleId -> { sdk, status }
     const clusterMessagesRef = ref(null);
     const clusterSessionId = ref('');
     const clusterRoleCards = ref([]);  // 当前参与角色的展示信息
-    const clusterDigitalHumanConnected = ref(false);  // 数字人是否已连接
     const clusterSpeakingRoleId = ref('');  // 当前正在播报的角色ID
     const clusterAffectionMatrix = ref({});  // 好感度矩阵
+    const clusterPanel = ref(null);  // 当前浮动面板: 'mode' | 'roles' | 'affection' | null
+    const clusterChatExpanded = ref(false);  // 对话栏是否展开
+    const clusterAbortController = ref(null);  // SSE 中断控制器
+    const clusterCurrentRound = ref(0);  // 当前讨论轮次
+    const clusterTotalRounds = ref(3);  // 总轮次
+    const clusterCurrentSpeaker = ref('');  // 当前发言角色名称
+    const clusterInterruptPending = ref(false);  // 等待角色回应插话
 
     // 历史面板状态
     const showClusterHistory = ref(false);
@@ -2187,12 +2192,20 @@ createApp({
       system_prompt: ''
     });
     const roleMemories = ref([]);  // 当前编辑角色的记忆
+    const roleRecommendation = ref(null);  // 角色推荐结果
 
     const clusterModes = [
-      { id: 'roundtable', name: '圆桌讨论', icon: 'fa-solid fa-comments' },
-      { id: 'debate', name: '正反辩论', icon: 'fa-solid fa-scale-balanced' },
-      { id: 'consultation', name: '导师会诊', icon: 'fa-solid fa-stethoscope' },
+      { id: 'roundtable', name: '圆桌讨论', icon: 'fa-solid fa-comments',
+        description: '各角色按顺序发言，可引用前人观点，共同探讨话题' },
+      { id: 'debate', name: '正反辩论', icon: 'fa-solid fa-scale-balanced',
+        description: '正反方交替发言，互相反驳，引导用户思考' },
+      { id: 'consultation', name: '导师会诊', icon: 'fa-solid fa-stethoscope',
+        description: '各角色独立回答同一问题，最后汇总差异点' },
     ];
+
+    const currentModeInfo = computed(() =>
+      clusterModes.find(m => m.id === clusterMode.value)
+    );
 
     const canStartDiscussion = computed(() =>
       clusterTopic.value.trim() &&
@@ -2200,13 +2213,12 @@ createApp({
       clusterStatus.value === 'idle'
     );
 
-    // 进入集群页面（不自动连接数字人）
+    // 进入集群页面
     const enterCluster = async () => {
-      // 1. 销毁原页面 SDK
+      // 1. 销毁原页面 SDK（集群页面不使用数字人SDK）
       await closeXingYunSession();
       // 2. 激活集群页面
       clusterActive.value = true;
-      clusterDigitalHumanConnected.value = false;
       // 3. 加载可用角色
       await loadClusterRoles();
       // 4. 更新参与角色的展示信息
@@ -2215,26 +2227,71 @@ createApp({
 
     // 退出集群页面
     const exitCluster = async () => {
-      // 1. 销毁所有集群 SDK 实例
-      await destroyClusterSessions();
-      // 2. 关闭集群页面
+      // 1. 关闭集群页面
       clusterActive.value = false;
-      clusterDigitalHumanConnected.value = false;
       clusterMessages.value = [];
       clusterStatus.value = 'idle';
       clusterTopic.value = '';
       clusterInput.value = '';
       clusterAffectionMatrix.value = {};
-      // 3. 恢复原页面 SDK
+      clusterPanel.value = null;
+      clusterChatExpanded.value = false;
+      clusterCurrentRound.value = 0;
+      clusterTotalRounds.value = 3;
+      clusterCurrentSpeaker.value = '';
+      clusterInterruptPending.value = false;
+      // 2. 恢复原页面 SDK
       await nextTick();
       await createXingYunSession();
     };
 
-    // 手动连接集群数字人
-    const connectClusterDigitalHuman = async () => {
-      if (clusterDigitalHumanConnected.value) return;
-      await nextTick();
-      await createClusterSessions();
+    // 导出当前讨论记录
+    const exportCurrentSession = async () => {
+      if (!clusterSessionId.value) {
+        // 如果没有 sessionId，从消息构建导出
+        const lines = [];
+        lines.push('# 集群讨论记录\n');
+        lines.push(`**话题**: ${clusterTopic.value}\n`);
+        const modeName = clusterModes.find(m => m.id === clusterMode.value)?.name || clusterMode.value;
+        lines.push(`**模式**: ${modeName}\n`);
+        const roleNames = clusterSelectedRoles.value.map(id => availableRoles.value.find(r => r.id === id)?.name || id);
+        lines.push(`**角色**: ${roleNames.join('、')}\n\n---\n`);
+        for (const msg of clusterMessages.value) {
+          if (msg.type === 'role') {
+            lines.push(`\n**${msg.name}**: ${msg.content}\n`);
+          } else if (msg.type === 'user') {
+            lines.push(`\n**你**: ${msg.content}\n`);
+          } else if (msg.type === 'system') {
+            lines.push(`\n*${msg.content}*\n`);
+          }
+        }
+        const blob = new Blob([lines.join('')], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cluster-discussion.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+      // 有 sessionId 时调用后端导出 API
+      try {
+        const res = await fetch('/api/cluster/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: clusterSessionId.value, format: 'markdown' })
+        });
+        if (!res.ok) throw new Error('导出失败');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cluster-${clusterSessionId.value.slice(0, 8)}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error('[集群导出] 错误:', e);
+      }
     };
 
     // 加载可用角色列表
@@ -2249,112 +2306,18 @@ createApp({
 
     // 更新参与角色的展示卡片
     const updateClusterRoleCards = () => {
+      if (!availableRoles.value.length) return;
       clusterRoleCards.value = availableRoles.value.filter(
         r => clusterSelectedRoles.value.includes(r.id)
       );
     };
 
-    // 获取角色连接状态
-    const getClusterRoleStatus = (roleId) => {
-      if (!clusterDigitalHumanConnected.value) return 'disconnected';
-      const session = clusterSessions.value[roleId];
-      if (!session) return 'disconnected';
-      return session.status || 'disconnected';
+    // 角色条点击处理 — 打开角色面板
+    const onRoleStripClick = (role) => {
+      clusterPanel.value = clusterPanel.value === 'roles' ? null : 'roles';
     };
 
-    const getClusterRoleStatusText = (roleId) => {
-      if (!clusterDigitalHumanConnected.value) return '未连接';
-      const status = getClusterRoleStatus(roleId);
-      const map = {
-        connected: '在线',
-        connecting: '连接中',
-        disconnected: '离线'
-      };
-      return map[status] || '离线';
-    };
-
-    // 创建集群 SDK 实例（仅第一个角色使用数字人，其余用占位符）
-    const createClusterSessions = async () => {
-      clusterStatus.value = 'connecting';
-      const XmovAvatarClass = window.XmovAvatar || self.XmovAvatar || XmovAvatar;
-      if (typeof XmovAvatarClass === 'undefined') {
-        console.error('魔珐星云 SDK 未加载，将使用纯语音模式');
-        clusterDigitalHumanConnected.value = false;
-        clusterStatus.value = 'idle';
-        return;
-      }
-
-      if (!xingyunConfig.value.appId) {
-        await loadXingYunConfig();
-      }
-
-      // 只为第一个角色创建 SDK 实例（数字人），其余角色用占位符
-      const firstRoleId = clusterSelectedRoles.value[0];
-      try {
-        const containerId = `cluster-sdk-${firstRoleId}`;
-        const container = document.querySelector(`#${containerId}`);
-        if (container) {
-          const sdk = new XmovAvatarClass({
-            containerId: `#${containerId}`,
-            appId: xingyunConfig.value.appId,
-            appSecret: xingyunConfig.value.appSecret,
-            gatewayServer: xingyunConfig.value.gatewayServer,
-            hardwareAcceleration: "prefer-hardware",
-            onMessage(message) {
-              console.log(`[集群-${firstRoleId}] SDK消息:`, message);
-            },
-            onStateChange(state) {
-              console.log(`[集群-${firstRoleId}] 状态变化:`, state);
-              if (clusterSessions.value[firstRoleId]) {
-                if (state === 'speak' || state === 'idle' || state === 'listen') {
-                  clusterSessions.value[firstRoleId].status = 'connected';
-                }
-              }
-            },
-            onStatusChange(status) {
-              console.log(`[集群-${firstRoleId}] 状态码:`, status);
-              if (status === 0 && clusterSessions.value[firstRoleId]) {
-                clusterSessions.value[firstRoleId].status = 'connected';
-              }
-            },
-            onVoiceStateChange(status) {
-              console.log(`[集群-${firstRoleId}] 语音状态:`, status);
-            },
-            enableLogger: true
-          });
-
-          await sdk.init({ initModel: 'normal' });
-          clusterSessions.value[firstRoleId] = { sdk, status: 'connected', isDigitalHuman: true };
-          console.log(`[集群] SDK实例创建成功: ${firstRoleId}`);
-        }
-      } catch (e) {
-        console.error(`创建集群SDK失败[${firstRoleId}]:`, e);
-        clusterSessions.value[firstRoleId] = { sdk: null, status: 'disconnected', isDigitalHuman: false };
-      }
-
-      // 其余角色标记为占位符模式
-      for (let i = 1; i < clusterSelectedRoles.value.length; i++) {
-        const roleId = clusterSelectedRoles.value[i];
-        clusterSessions.value[roleId] = { sdk: null, status: 'placeholder', isDigitalHuman: false };
-      }
-
-      clusterDigitalHumanConnected.value = true;
-      clusterStatus.value = 'idle';
-    };
-
-    // 销毁所有集群 SDK 实例
-    const destroyClusterSessions = async () => {
-      for (const [roleId, session] of Object.entries(clusterSessions.value)) {
-        try {
-          if (session.sdk) session.sdk.destroy();
-        } catch (e) {
-          console.error(`销毁集群SDK失败[${roleId}]:`, e);
-        }
-      }
-      clusterSessions.value = {};
-    };
-
-    // 集群语音播报（优先火山引擎TTS，数字人仅用于第一个角色）
+    // 集群语音播报（使用火山引擎 TTS，不使用数字人SDK）
     const clusterSpeak = async (roleId, text) => {
       const clean = cleanTextForSpeak(text);
       if (!clean) return;
@@ -2415,6 +2378,7 @@ createApp({
       clusterStatus.value = 'discussing';
       clusterMessages.value = [];
       clusterSessionId.value = 'cluster-' + Date.now();
+      clusterChatExpanded.value = true;  // 自动展开对话栏
 
       // 更新角色卡片
       updateClusterRoleCards();
@@ -2426,6 +2390,27 @@ createApp({
         type: 'system',
         content: continueFrom ? `继续讨论：${clusterTopic.value}` : `开始${modeName}：${clusterTopic.value}`
       });
+
+      // 创建 AbortController 用于超时和手动停止
+      const abortController = new AbortController();
+      clusterAbortController.value = abortController;
+
+      // 2分钟超时保护
+      const timeoutId = setTimeout(() => {
+        if (clusterStatus.value === 'discussing') {
+          abortController.abort();
+          clusterCurrentSpeaker.value = '';
+          clusterSpeakingRoleId.value = '';
+          clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+          clusterMessages.value.push({
+            id: Date.now(),
+            type: 'system',
+            content: '讨论超时（2分钟），已自动结束'
+          });
+        }
+      }, 120000);
+
+      let _scrollThrottle = null;
 
       try {
         const payload = {
@@ -2442,7 +2427,8 @@ createApp({
         const response = await fetch('/api/cluster/discuss/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: abortController.signal
         });
 
         if (!response.ok) {
@@ -2475,49 +2461,116 @@ createApp({
                 currentRoleName = data.role_name;
                 currentColor = data.color || '#a5b4fc';
                 currentContent = '';
-                // 添加新消息占位
+                // 移除之前的 thinking 指示器
+                clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+                // 添加 thinking 指示器
                 clusterMessages.value.push({
                   id: Date.now() + Math.random(),
-                  type: 'role',
+                  type: 'thinking',
                   roleId: currentRoleId,
                   name: currentRoleName,
-                  color: currentColor,
-                  content: ''
+                  color: currentColor
                 });
-              } else if (data.type === 'role_chunk') {
-                currentContent += data.content;
-                // 实时更新最后一条消息
-                const lastMsg = clusterMessages.value[clusterMessages.value.length - 1];
-                if (lastMsg?.roleId === currentRoleId) {
-                  lastMsg.content = currentContent;
+                // 更新角色环高亮和进度信息
+                clusterSpeakingRoleId.value = currentRoleId;
+                if (!data.interrupt_response) {
+                  clusterCurrentSpeaker.value = currentRoleName;
                 }
-              } else if (data.type === 'role_end') {
-                // 触发语音播报
-                await clusterSpeak(currentRoleId, currentContent);
-                currentRoleId = '';
-                currentContent = '';
-                // 自动滚动到底部
                 await nextTick();
                 if (clusterMessagesRef.value) {
                   clusterMessagesRef.value.scrollTop = clusterMessagesRef.value.scrollHeight;
                 }
+              } else if (data.type === 'role_chunk') {
+                currentContent += data.content;
+                const lastMsg = clusterMessages.value[clusterMessages.value.length - 1];
+                // 首次收到内容时，将 thinking 替换为实际角色消息
+                if (lastMsg?.type === 'thinking' && lastMsg.roleId === currentRoleId) {
+                  clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+                  clusterMessages.value.push({
+                    id: Date.now() + Math.random(),
+                    type: 'role',
+                    roleId: currentRoleId,
+                    name: currentRoleName,
+                    color: currentColor,
+                    content: currentContent
+                  });
+                } else if (lastMsg?.roleId === currentRoleId) {
+                  lastMsg.content = currentContent;
+                }
+                // 节流滚动（每 300ms 一次，不阻塞数据接收）
+                if (!_scrollThrottle) {
+                  _scrollThrottle = setTimeout(() => {
+                    _scrollThrottle = null;
+                    if (clusterMessagesRef.value) {
+                      clusterMessagesRef.value.scrollTop = clusterMessagesRef.value.scrollHeight;
+                    }
+                  }, 300);
+                }
+              } else if (data.type === 'role_end') {
+                // 清除节流，立即滚动
+                if (_scrollThrottle) {
+                  clearTimeout(_scrollThrottle);
+                  _scrollThrottle = null;
+                }
+                // 播报异步执行，不阻塞 SSE 读取
+                clusterSpeak(currentRoleId, currentContent);
+                currentRoleId = '';
+                currentContent = '';
+                clusterSpeakingRoleId.value = '';
+                await nextTick();
+                if (clusterMessagesRef.value) {
+                  clusterMessagesRef.value.scrollTop = clusterMessagesRef.value.scrollHeight;
+                }
+              } else if (data.type === 'round_start') {
+                clusterCurrentRound.value = data.round;
               } else if (data.type === 'summary') {
+                // 尝试解析结构化 JSON 总结，否则作为纯文本
+                let summaryContent = data.content;
+                try {
+                  const parsed = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+                  if (parsed && typeof parsed === 'object') {
+                    summaryContent = parsed;
+                  }
+                } catch (e) {
+                  // 不是 JSON，保持原样
+                }
                 clusterMessages.value.push({
                   id: Date.now(),
-                  type: 'system',
-                  content: `📝 讨论总结：${data.content}`
+                  type: 'summary',
+                  content: summaryContent
                 });
               } else if (data.type === 'affection_update') {
-                // 更新好感度矩阵
-                clusterAffectionMatrix.value = data.matrix || {};
+                const oldMatrix = clusterAffectionMatrix.value;
+                const newMatrix = data.matrix || {};
+                // 比较差异，触发浮动动画
+                for (const [fromId, targets] of Object.entries(newMatrix)) {
+                  for (const [toId, newVal] of Object.entries(targets)) {
+                    const oldVal = (oldMatrix[fromId] && oldMatrix[fromId][toId]) || 50;
+                    const delta = newVal - oldVal;
+                    if (Math.abs(delta) >= 2) {
+                      triggerAffectionFloat(fromId, toId, delta);
+                    }
+                  }
+                }
+                clusterAffectionMatrix.value = newMatrix;
               } else if (data.type === 'error') {
                 clusterMessages.value.push({
                   id: Date.now(),
                   type: 'system',
                   content: `❌ 错误：${data.message}`
                 });
+              } else if (data.type === 'interrupt') {
+                clusterInterruptPending.value = false;
+                clusterMessages.value.push({
+                  id: Date.now(),
+                  type: 'system',
+                  content: `💬 角色正在回应你的插话：${data.message}`
+                });
               } else if (data.type === 'done') {
-                clusterStatus.value = 'idle';
+                clusterCurrentSpeaker.value = '';
+                clusterSpeakingRoleId.value = '';
+                clusterInterruptPending.value = false;
+                clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
                 clusterMessages.value.push({
                   id: Date.now(),
                   type: 'system',
@@ -2530,22 +2583,34 @@ createApp({
           }
         }
       } catch (e) {
-        console.error('集群讨论失败:', e);
-        clusterMessages.value.push({
-          id: Date.now(),
-          type: 'system',
-          content: `❌ 讨论失败: ${e.message || '未知错误'}`
-        });
+        if (e.name === 'AbortError') {
+          console.log('[集群讨论] 已中止');
+        } else {
+          console.error('集群讨论失败:', e);
+          clusterCurrentSpeaker.value = '';
+          clusterSpeakingRoleId.value = '';
+          clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+          clusterMessages.value.push({
+            id: Date.now(),
+            type: 'system',
+            content: `❌ 讨论失败: ${e.message || '未知错误'}`
+          });
+        }
+      } finally {
+        clearTimeout(timeoutId);
+        if (_scrollThrottle) clearTimeout(_scrollThrottle);
+        clusterAbortController.value = null;
         clusterStatus.value = 'idle';
       }
     };
 
     // 用户插话
     const sendClusterMessage = async () => {
-      if (!clusterInput.value.trim()) return;
+      if (!clusterInput.value.trim() || clusterStatus.value !== 'discussing' || clusterInterruptPending.value) return;
       const msg = clusterInput.value.trim();
       clusterInput.value = '';
 
+      clusterInterruptPending.value = true;
       clusterMessages.value.push({
         id: Date.now(),
         type: 'user',
@@ -2553,7 +2618,7 @@ createApp({
       });
 
       try {
-        await fetch('/api/cluster/interrupt', {
+        const res = await fetch('/api/cluster/interrupt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2561,9 +2626,56 @@ createApp({
             message: msg
           })
         });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
       } catch (e) {
         console.error('插话失败:', e);
+        clusterInterruptPending.value = false;
+        clusterMessages.value.push({
+          id: Date.now(),
+          type: 'system',
+          content: '插话发送失败: ' + (e.message || '网络错误')
+        });
       }
+    };
+
+    // 停止集群讨论
+    const stopClusterDiscussion = () => {
+      if (clusterAbortController.value) {
+        clusterAbortController.value.abort();
+        clusterAbortController.value = null;
+      }
+      clusterStatus.value = 'idle';
+      clusterCurrentSpeaker.value = '';
+      clusterSpeakingRoleId.value = '';
+      clusterInterruptPending.value = false;
+      clusterMessages.value = clusterMessages.value.filter(m => m.type !== 'thinking');
+      clusterMessages.value.push({
+        id: Date.now(),
+        type: 'system',
+        content: '讨论已手动停止'
+      });
+    };
+
+    // 好感度浮动提示
+    const triggerAffectionFloat = (fromId, toId, delta) => {
+      // 在目标角色环项上显示浮动数值
+      const roleRingEl = document.querySelector('.cluster-role-ring-item');
+      if (!roleRingEl) return;
+      const targetItem = roleRingEl.parentElement?.querySelector(
+        `.cluster-role-ring-item[data-role-id="${toId}"]`
+      );
+      if (!targetItem) return;
+
+      const float = document.createElement('span');
+      float.className = 'cluster-affection-float ' + (delta >= 0 ? 'positive' : 'negative');
+      float.textContent = (delta >= 0 ? '+' : '') + delta;
+      targetItem.appendChild(float);
+
+      // 动画结束后自动移除
+      float.addEventListener('animationend', () => float.remove());
+      setTimeout(() => { if (float.parentElement) float.remove(); }, 2500);
     };
 
     // 切换角色选择
@@ -2762,6 +2874,52 @@ createApp({
         console.error('删除角色失败:', e);
         alert('删除失败: ' + e.message);
       }
+    };
+
+    const clearRoleMemory = async () => {
+      if (!editingRole.value?.id) return;
+      if (!confirm('确定要清除该角色的所有记忆吗？')) return;
+      try {
+        await fetch(`/api/cluster/roles/${editingRole.value.id}/memory`, { method: 'DELETE' });
+        roleMemories.value = [];
+      } catch (e) {
+        console.error('清除记忆失败:', e);
+      }
+    };
+
+    // ==================== 角色推荐 ====================
+
+    const recommendClusterRoles = async () => {
+      if (!clusterTopic.value.trim()) return;
+      try {
+        const res = await fetch('/api/cluster/roles/recommend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: clusterTopic.value, mode: clusterMode.value })
+        });
+        const data = await res.json();
+        roleRecommendation.value = data;
+        // 自动选中推荐的角色
+        if (data.recommended && data.recommended.length > 0) {
+          clusterSelectedRoles.value = data.recommended.map(r => r.id);
+          updateClusterRoleCards();
+        }
+      } catch (e) {
+        console.error('获取角色推荐失败:', e);
+      }
+    };
+
+    const applyRecommendation = (roleId) => {
+      if (!clusterSelectedRoles.value.includes(roleId)) {
+        if (clusterSelectedRoles.value.length < 4) {
+          clusterSelectedRoles.value.push(roleId);
+        }
+      } else {
+        if (clusterSelectedRoles.value.length > 2) {
+          clusterSelectedRoles.value = clusterSelectedRoles.value.filter(id => id !== roleId);
+        }
+      }
+      updateClusterRoleCards();
     };
 
     const sendQuickText = async () => {
@@ -4931,15 +5089,20 @@ createApp({
       clusterStatus,
       clusterSelectedRoles,
       availableRoles,
-      clusterSessions,
       clusterMessagesRef,
       clusterSessionId,
       clusterRoleCards,
       clusterModes,
+      currentModeInfo,
       canStartDiscussion,
-      clusterDigitalHumanConnected,
       clusterSpeakingRoleId,
       clusterAffectionMatrix,
+      clusterPanel,
+      clusterChatExpanded,
+      clusterCurrentRound,
+      clusterTotalRounds,
+      clusterCurrentSpeaker,
+      clusterInterruptPending,
       // 历史面板
       showClusterHistory,
       clusterHistory,
@@ -4956,16 +5119,23 @@ createApp({
       showRoleEditor,
       editingRole,
       roleForm,
+      roleMemories,
       editCustomRole,
       closeRoleEditor,
       saveCustomRole,
       deleteCustomRoleConfirm,
+      clearRoleMemory,
+      // 角色推荐
+      roleRecommendation,
+      recommendClusterRoles,
+      applyRecommendation,
       enterCluster,
       exitCluster,
-      connectClusterDigitalHuman,
+      exportCurrentSession,
+      onRoleStripClick,
+      stopClusterDiscussion,
+      clusterAbortController,
       loadClusterRoles,
-      getClusterRoleStatus,
-      getClusterRoleStatusText,
       startClusterDiscussion,
       sendClusterMessage,
       toggleClusterRole
