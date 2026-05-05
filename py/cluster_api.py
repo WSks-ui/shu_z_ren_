@@ -13,13 +13,13 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from io import BytesIO
 
-from py.cluster_roles import get_role_list, get_mode_list, get_all_roles, get_all_role_list, CLUSTER_ROLES
+from py.cluster_roles import get_role_list, get_mode_list, get_all_roles, get_all_role_list, CLUSTER_ROLES, recommend_roles
 from py.cluster_orchestrator import (
     create_orchestrator,
     get_orchestrator,
     remove_orchestrator
 )
-from py.edu_storage import MemoryCache, ensure_storage
+from py.edu_storage import get_cache
 
 router = APIRouter(prefix="/api/cluster", tags=["Digital Human Cluster"])
 
@@ -72,8 +72,7 @@ async def cluster_discuss_stream(request: ClusterDiscussRequest = Body(...)):
     # 加载历史上下文（续聊模式）
     history = []
     if request.continue_from:
-        await ensure_storage()
-        cache = await MemoryCache.get_instance()
+        cache = await get_cache()
         prev_session = await cache.get_cluster_session_detail(request.continue_from)
         if prev_session:
             history = prev_session.get("messages", [])
@@ -290,8 +289,7 @@ def _get_role_voice(role_id: str, tts_settings: dict = None) -> str:
 async def get_cluster_history(mode: str = None, limit: int = 50, offset: int = 0):
     """获取集群讨论历史列表"""
 
-    await ensure_storage()
-    cache = await MemoryCache.get_instance()
+    cache = await get_cache()
 
     sessions = await cache.get_cluster_sessions(mode=mode, limit=limit, offset=offset)
 
@@ -313,8 +311,7 @@ async def get_cluster_history(mode: str = None, limit: int = 50, offset: int = 0
 async def get_cluster_history_detail(session_id: str):
     """获取单条集群讨论详情"""
 
-    await ensure_storage()
-    cache = await MemoryCache.get_instance()
+    cache = await get_cache()
 
     session = await cache.get_cluster_session_detail(session_id)
     if not session:
@@ -344,8 +341,7 @@ async def get_cluster_history_detail(session_id: str):
 async def delete_cluster_history(session_id: str):
     """删除集群讨论记录"""
 
-    await ensure_storage()
-    cache = await MemoryCache.get_instance()
+    cache = await get_cache()
 
     deleted = await cache.delete_cluster_session(session_id)
     if not deleted:
@@ -373,8 +369,7 @@ async def create_custom_role(request: CustomRoleRequest = Body(...)):
     """创建自定义角色"""
 
     import uuid
-    await ensure_storage()
-    cache = await MemoryCache.get_instance()
+    cache = await get_cache()
 
     role_id = f"custom-{uuid.uuid4().hex[:8]}"
     role_data = {
@@ -399,8 +394,7 @@ async def create_custom_role(request: CustomRoleRequest = Body(...)):
 async def update_custom_role(role_id: str, request: CustomRoleRequest = Body(...)):
     """更新自定义角色"""
 
-    await ensure_storage()
-    cache = await MemoryCache.get_instance()
+    cache = await get_cache()
 
     updates = {
         "name": request.name,
@@ -424,8 +418,7 @@ async def update_custom_role(role_id: str, request: CustomRoleRequest = Body(...
 async def delete_custom_role(role_id: str):
     """删除自定义角色"""
 
-    await ensure_storage()
-    cache = await MemoryCache.get_instance()
+    cache = await get_cache()
 
     deleted = await cache.delete_custom_cluster_role(role_id)
     if not deleted:
@@ -440,8 +433,7 @@ async def delete_custom_role(role_id: str):
 async def get_role_memory(role_id: str):
     """获取角色记忆"""
 
-    await ensure_storage()
-    cache = await MemoryCache.get_instance()
+    cache = await get_cache()
 
     memories = await cache.get_role_memory(role_id)
     return {"memories": memories}
@@ -451,8 +443,7 @@ async def get_role_memory(role_id: str):
 async def clear_role_memory(role_id: str):
     """清除角色记忆"""
 
-    await ensure_storage()
-    cache = await MemoryCache.get_instance()
+    cache = await get_cache()
 
     cleared = await cache.clear_role_memory(role_id)
     return {"status": "ok", "cleared": cleared}
@@ -466,12 +457,23 @@ class ClusterExportRequest(BaseModel):
     format: str = Field(default="markdown", description="导出格式: markdown | docx")
 
 
+class ClusterRecommendRequest(BaseModel):
+    """角色推荐请求"""
+    topic: str = Field(..., description="讨论话题")
+    mode: Optional[str] = Field(default="roundtable", description="讨论模式")
+
+
+@router.post("/roles/recommend")
+async def get_role_recommendation(request: ClusterRecommendRequest = Body(...)):
+    """根据话题推荐角色组合"""
+    return recommend_roles(request.topic, request.mode or "roundtable")
+
+
 @router.post("/export")
 async def export_cluster_session(request: ClusterExportRequest = Body(...)):
     """导出集群讨论记录"""
 
-    await ensure_storage()
-    cache = await MemoryCache.get_instance()
+    cache = await get_cache()
 
     session = await cache.get_cluster_session_detail(request.session_id)
     if not session:
