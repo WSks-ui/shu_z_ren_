@@ -673,125 +673,290 @@
     <!-- 数字人集群页面 -->
     <template v-if="clusterActive">
     <div class="cluster-page">
-      <!-- 顶部栏 -->
-      <div class="cluster-header">
-        <div class="cluster-title">
-          <i class="fa-solid fa-users"></i>
-          <span>数字人集群</span>
+      <!-- 背景层 — 角色条 + 品牌标识 -->
+      <div class="cluster-avatar-layer">
+        <!-- 半透明遮罩 -->
+        <div class="cluster-avatar-overlay"></div>
+        <!-- 品牌标识 -->
+        <div class="cluster-brand-mark">
+          <div class="cluster-brand-icon"><i class="fa-solid fa-users"></i></div>
+          <div class="cluster-brand-text">
+            <h1>集群讨论</h1>
+            <p>Cluster Discussion</p>
+          </div>
         </div>
-        <div class="cluster-mode-selector">
-          <button v-for="m in clusterModes" :key="m.id"
-            class="cluster-mode-btn" :class="{ active: clusterMode === m.id }"
-            @click="clusterMode = m.id">
-            <i :class="m.icon"></i> {{ m.name }}
-          </button>
-        </div>
-        <div class="cluster-header-actions">
-          <button class="cluster-history-btn" @click="showClusterHistory = true" title="讨论历史">
-            <i class="fa-solid fa-clock-rotate-left"></i>
-          </button>
-          <button class="cluster-exit-btn" @click="exitCluster()">
-            <i class="fa-solid fa-arrow-left"></i> 返回
-          </button>
-        </div>
-      </div>
-
-      <!-- 数字人展示区 -->
-      <div class="cluster-avatars">
-        <div v-for="role in clusterRoleCards" :key="role.id" class="cluster-avatar-card"
-          :class="{ speaking: clusterSpeakingRoleId === role.id }">
-          <!-- 第一个角色：数字人SDK容器（连接后显示） -->
-          <div v-if="clusterSelectedRoles.indexOf(role.id) === 0 && clusterDigitalHumanConnected"
-            :id="'cluster-sdk-' + role.id" class="cluster-sdk-container"></div>
-          <!-- 占位符：未连接或非第一个角色 -->
-          <div v-else class="cluster-avatar-placeholder" :style="{ borderColor: role.color }">
-            <i :class="role.icon" class="cluster-placeholder-icon" :style="{ color: role.color }"></i>
-            <span class="cluster-placeholder-name" :style="{ color: role.color }">{{ role.name }}</span>
-            <!-- 正在播报指示器 -->
-            <div v-if="clusterSpeakingRoleId === role.id" class="cluster-speaking-indicator">
-              <span class="speaking-dot"></span>
-              <span class="speaking-dot"></span>
-              <span class="speaking-dot"></span>
+        <!-- 角色环 -->
+        <div class="cluster-role-ring">
+          <div v-for="role in clusterRoleCards" :key="role.id"
+            class="cluster-role-ring-item"
+            :class="{ speaking: clusterSpeakingRoleId === role.id }"
+            :data-role-id="role.id"
+            @click="onRoleStripClick(role)"
+            :title="role.personality">
+            <div class="cluster-role-ring-avatar" :style="{ '--role-color': role.color }">
+              <i :class="role.icon"></i>
             </div>
+            <span class="cluster-role-ring-name">{{ role.name }}</span>
           </div>
-          <div class="cluster-avatar-info">
-            <span class="cluster-avatar-name" :style="{ color: role.color }">{{ role.name }}</span>
-            <span class="cluster-avatar-status" :class="getClusterRoleStatus(role.id)">{{ getClusterRoleStatusText(role.id) }}</span>
+        </div>
+        <!-- 进度指示 -->
+        <div class="cluster-progress" v-if="clusterStatus === 'discussing'">
+          <div class="cluster-progress-bar">
+            <div class="cluster-progress-fill" :style="{ width: (clusterCurrentRound / clusterTotalRounds * 100) + '%' }"></div>
+          </div>
+          <div class="cluster-progress-text">
+            <span>第 {{ clusterCurrentRound }}/{{ clusterTotalRounds }} 轮</span>
+            <span v-if="clusterCurrentSpeaker">· {{ clusterCurrentSpeaker }} 正在发言</span>
           </div>
         </div>
       </div>
 
-      <!-- 连接数字人按钮（未连接时显示） -->
-      <div v-if="!clusterDigitalHumanConnected" class="cluster-connect-bar">
-        <button class="cluster-connect-btn" @click="connectClusterDigitalHuman()">
-          <i class="fa-solid fa-plug"></i> 连接数字人
-        </button>
-        <span class="cluster-connect-hint">连接后第一个角色将以数字人形象展示，其他角色使用语音播报</span>
+      <!-- 功能层 — 左侧快捷栏 + 浮动面板 -->
+      <div class="cluster-function-layer">
+        <aside class="cluster-quick-bar">
+          <button class="quick-btn" :class="{ active: clusterPanel === 'mode' }" @click="clusterPanel = clusterPanel === 'mode' ? null : 'mode'" title="讨论模式">
+            <i class="fa-solid fa-comments"></i><span>模式</span>
+          </button>
+          <button class="quick-btn" :class="{ active: clusterPanel === 'roles' }" @click="clusterPanel = clusterPanel === 'roles' ? null : 'roles'" title="参与角色">
+            <i class="fa-solid fa-users"></i><span>角色</span>
+          </button>
+          <button class="quick-btn" :class="{ active: clusterPanel === 'affection' }" @click="clusterPanel = clusterPanel === 'affection' ? null : 'affection'" title="好感度" v-if="Object.keys(clusterAffectionMatrix).length > 0">
+            <i class="fa-solid fa-heart"></i><span>好感</span>
+          </button>
+          <button class="quick-btn" @click="showClusterHistory = true" title="讨论历史">
+            <i class="fa-solid fa-clock-rotate-left"></i><span>历史</span>
+          </button>
+          <button class="quick-btn" @click="exportCurrentSession" title="导出记录" v-if="clusterMessages.length > 0">
+            <i class="fa-solid fa-download"></i><span>导出</span>
+          </button>
+          <div class="quick-divider"></div>
+          <button class="quick-btn" @click="exitCluster()" title="返回首页">
+            <i class="fa-solid fa-arrow-left"></i><span>返回</span>
+          </button>
+        </aside>
+
+        <!-- 浮动面板 -->
+        <transition name="panel-slide">
+          <div v-if="clusterPanel" class="cluster-panel">
+            <!-- 模式面板 -->
+            <template v-if="clusterPanel === 'mode'">
+              <div class="cluster-panel-header">
+                <h3>讨论模式</h3>
+                <button class="cluster-panel-close" @click="clusterPanel = null"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <div class="cluster-mode-list">
+                <div v-for="m in clusterModes" :key="m.id" class="cluster-mode-option"
+                  :class="{ active: clusterMode === m.id }"
+                  @click="clusterMode = m.id">
+                  <div class="cmo-icon"><i :class="m.icon"></i></div>
+                  <div class="cmo-info">
+                    <span class="cmo-name">{{ m.name }}</span>
+                    <span class="cmo-desc">{{ m.description }}</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <!-- 角色面板 -->
+            <template v-if="clusterPanel === 'roles'">
+              <div class="cluster-panel-header">
+                <h3>参与角色</h3>
+                <button class="cluster-panel-close" @click="clusterPanel = null"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <!-- 智能推荐 -->
+              <div class="cluster-role-recommend">
+                <div class="cluster-topic-mini">
+                  <input v-model="clusterTopic" placeholder="输入话题以推荐角色..." class="cluster-topic-mini-input" />
+                  <button class="cluster-recommend-btn" @click="recommendClusterRoles()" :disabled="!clusterTopic.trim()">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                  </button>
+                </div>
+                <div v-if="roleRecommendation" class="cluster-recommendation">
+                  <span class="recommendation-label"><i class="fa-solid fa-lightbulb"></i> 推荐</span>
+                  <span v-for="r in roleRecommendation.recommended" :key="r.id" class="recommendation-chip" @click="applyRecommendation(r.id)">
+                    {{ r.name }}
+                  </span>
+                </div>
+              </div>
+              <!-- 角色列表 -->
+              <div class="cluster-role-list">
+                <div v-for="role in availableRoles" :key="role.id" class="cluster-role-select-item"
+                  :class="{ selected: clusterSelectedRoles.includes(role.id), custom: role.is_custom }"
+                  @click="toggleClusterRole(role.id)">
+                  <div class="crsi-avatar" :style="{ '--role-color': role.color }">
+                    <i :class="role.icon"></i>
+                  </div>
+                  <div class="crsi-info">
+                    <span class="crsi-name">{{ role.name }}</span>
+                    <span class="crsi-personality">{{ role.personality }}</span>
+                  </div>
+                  <div class="crsi-check" v-if="clusterSelectedRoles.includes(role.id)">
+                    <i class="fa-solid fa-check"></i>
+                  </div>
+                  <span v-if="role.is_custom" class="crsi-edit" @click.stop="editCustomRole(role)">
+                    <i class="fa-solid fa-pen"></i>
+                  </span>
+                </div>
+                <button class="cluster-role-add" @click="showRoleEditor = true">
+                  <i class="fa-solid fa-plus"></i> 创建自定义角色
+                </button>
+              </div>
+            </template>
+            <!-- 好感度面板 -->
+            <template v-if="clusterPanel === 'affection'">
+              <div class="cluster-panel-header">
+                <h3>角色好感度</h3>
+                <button class="cluster-panel-close" @click="clusterPanel = null"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <div class="cluster-affection-matrix">
+                <div class="matrix-header">
+                  <span class="matrix-corner"></span>
+                  <span v-for="role in clusterRoleCards" :key="'h-' + role.id" class="matrix-col-label">{{ role.name }}</span>
+                </div>
+                <div v-for="fromRole in clusterRoleCards" :key="'r-' + fromRole.id" class="matrix-row">
+                  <span class="matrix-row-label">{{ fromRole.name }}</span>
+                  <span v-for="toRole in clusterRoleCards" :key="'c-' + fromRole.id + '-' + toRole.id" class="matrix-cell"
+                    :class="{ positive: (clusterAffectionMatrix[fromRole.id]?.[toRole.id] || 50) > 55, negative: (clusterAffectionMatrix[fromRole.id]?.[toRole.id] || 50) < 45 }"
+                    :style="{ '--cell-value': clusterAffectionMatrix[fromRole.id]?.[toRole.id] || 50 }">
+                    {{ clusterAffectionMatrix[fromRole.id]?.[toRole.id] || '-' }}
+                  </span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </transition>
       </div>
 
-      <!-- 讨论控制区 -->
-      <div class="cluster-control">
-        <div class="cluster-topic-row">
+      <!-- 准备阶段：全屏居中设置（讨论前） -->
+      <div class="cluster-setup-full" v-if="clusterStatus === 'idle' && !clusterChatExpanded && clusterMessages.length === 0">
+        <div class="cluster-setup-center">
+          <h2>开始集群讨论</h2>
           <input v-model="clusterTopic" class="cluster-topic-input" placeholder="输入讨论话题..." />
-          <button class="cluster-start-btn" @click="startClusterDiscussion()" :disabled="!canStartDiscussion">
+          <div class="cluster-setup-roles">
+            <button v-for="role in availableRoles" :key="role.id"
+              class="cluster-role-chip" :class="{ selected: clusterSelectedRoles.includes(role.id) }"
+              @click="toggleClusterRole(role.id)">
+              <i :class="role.icon"></i> {{ role.name }}
+            </button>
+          </div>
+          <button class="cluster-setup-start-btn" @click="startClusterDiscussion()" :disabled="!canStartDiscussion">
             <i class="fa-solid fa-play"></i> 开始讨论
           </button>
         </div>
-        <div class="cluster-role-select">
-          <span class="cluster-role-label">参与角色：</span>
-          <button v-for="role in availableRoles" :key="role.id"
-            class="cluster-role-chip" :class="{ selected: clusterSelectedRoles.includes(role.id), custom: role.is_custom }"
-            @click="toggleClusterRole(role.id)">
-            <i :class="role.icon"></i> {{ role.name }}
-            <span v-if="role.is_custom" class="custom-badge" @click.stop="editCustomRole(role)" title="编辑">
-              <i class="fa-solid fa-pen"></i>
-            </span>
-          </button>
-          <button class="cluster-role-chip add-role" @click="showRoleEditor = true">
-            <i class="fa-solid fa-plus"></i> 自定义
-          </button>
-        </div>
       </div>
 
-      <!-- 好感度矩阵（讨论中显示） -->
-      <div class="cluster-affection" v-if="Object.keys(clusterAffectionMatrix).length > 0">
-        <div class="cluster-affection-title"><i class="fa-solid fa-heart"></i> 角色好感度</div>
-        <div class="cluster-affection-grid">
-          <template v-for="(targets, fromId) in clusterAffectionMatrix" :key="fromId">
-            <div v-for="(value, toId) in targets" :key="fromId + '-' + toId" class="cluster-affection-cell">
-              <span class="affection-from">{{ availableRoles.find(r => r.id === fromId)?.name || fromId }}</span>
-              <span class="affection-arrow">→</span>
-              <span class="affection-to">{{ availableRoles.find(r => r.id === toId)?.name || toId }}</span>
-              <span class="affection-value" :class="{ positive: value > 55, negative: value < 45 }">{{ value }}</span>
+      <!-- 底部对话栏 -->
+      <div class="cluster-chat-bar" :class="{ expanded: clusterChatExpanded }">
+        <!-- 折叠态：讨论结束后可折叠查看 -->
+        <div class="cluster-chat-collapsed" v-if="!clusterChatExpanded" @click="clusterChatExpanded = true">
+          <div class="cluster-chat-trigger">
+            <div class="cluster-trigger-icon"><i class="fa-solid fa-comments"></i></div>
+            <div class="cluster-trigger-text">
+              <span class="cluster-trigger-title">{{ clusterTopic || '开始集群讨论' }}</span>
+              <span class="cluster-trigger-hint">点击查看讨论记录</span>
             </div>
-          </template>
-        </div>
-      </div>
-
-      <!-- 集群对话区 -->
-      <div class="cluster-chat">
-        <div class="cluster-messages" ref="clusterMessagesRef">
-          <div v-for="msg in clusterMessages" :key="msg.id" class="cluster-msg" :class="msg.type">
-            <template v-if="msg.type === 'role'">
-              <span class="cluster-msg-name" :style="{ color: msg.color }">{{ msg.name }}</span>
-              <span class="cluster-msg-text">{{ msg.content }}</span>
-            </template>
-            <template v-else-if="msg.type === 'user'">
-              <span class="cluster-msg-name user-name">你</span>
-              <span class="cluster-msg-text">{{ msg.content }}</span>
-            </template>
-            <template v-else-if="msg.type === 'system'">
-              <span class="cluster-msg-system">{{ msg.content }}</span>
-            </template>
+          </div>
+          <div class="cluster-trigger-roles" v-if="clusterSelectedRoles.length > 0">
+            <span v-for="roleId in clusterSelectedRoles.slice(0, 3)" :key="roleId" class="cluster-trigger-chip">
+              {{ availableRoles.find(r => r.id === roleId)?.name || roleId }}
+            </span>
           </div>
         </div>
-        <div class="cluster-input-row">
-          <input v-model="clusterInput" class="cluster-input" @keyup.enter="sendClusterMessage()"
-            placeholder="插话或提问..." :disabled="clusterStatus !== 'discussing'" />
-          <button class="cluster-send-btn" @click="sendClusterMessage()"
-            :disabled="!clusterInput.trim() || clusterStatus !== 'discussing'">
-            <i class="fa-solid fa-paper-plane"></i>
-          </button>
+        <!-- 展开态 -->
+        <div class="cluster-chat-expanded" v-else>
+          <div class="cluster-chat-header">
+            <div class="cluster-chat-mode">
+              <i :class="currentModeInfo?.icon"></i>
+              {{ currentModeInfo?.name }}
+            </div>
+            <div class="cluster-chat-tools">
+              <button class="cluster-tool-btn" @click="startClusterDiscussion()" :disabled="!canStartDiscussion" v-if="clusterStatus !== 'discussing'" title="开始讨论">
+                <i class="fa-solid fa-play"></i>
+              </button>
+              <button class="cluster-tool-btn" @click="stopClusterDiscussion()" v-if="clusterStatus === 'discussing'" title="停止讨论">
+                <i class="fa-solid fa-stop"></i>
+              </button>
+              <button class="cluster-tool-btn collapse-btn" @click="clusterChatExpanded = false" v-if="clusterStatus !== 'discussing'" title="收起">
+                <i class="fa-solid fa-chevron-down"></i>
+              </button>
+            </div>
+          </div>
+          <!-- 讨论前设置区（已展开但未开始讨论时） -->
+          <div class="cluster-chat-setup" v-if="clusterStatus !== 'discussing' && clusterMessages.length === 0">
+            <input v-model="clusterTopic" class="cluster-topic-input" placeholder="输入讨论话题..." />
+            <div class="cluster-setup-roles">
+              <button v-for="role in availableRoles" :key="role.id"
+                class="cluster-role-chip" :class="{ selected: clusterSelectedRoles.includes(role.id) }"
+                @click="toggleClusterRole(role.id)">
+                <i :class="role.icon"></i> {{ role.name }}
+              </button>
+            </div>
+          </div>
+          <!-- 讨论前设置区（讨论已结束，可重新开始） -->
+          <div class="cluster-chat-setup" v-if="clusterStatus !== 'discussing' && clusterMessages.length > 0">
+            <input v-model="clusterTopic" class="cluster-topic-input" placeholder="输入新话题..." />
+            <div class="cluster-setup-roles">
+              <button v-for="role in availableRoles" :key="role.id"
+                class="cluster-role-chip" :class="{ selected: clusterSelectedRoles.includes(role.id) }"
+                @click="toggleClusterRole(role.id)">
+                <i :class="role.icon"></i> {{ role.name }}
+              </button>
+            </div>
+          </div>
+          <!-- 消息列表 -->
+          <div class="cluster-messages" ref="clusterMessagesRef">
+            <div v-for="msg in clusterMessages" :key="msg.id" class="cluster-msg" :class="msg.type">
+              <template v-if="msg.type === 'role'">
+                <div class="cluster-msg-bubble role-bubble" :style="{ '--msg-role-color': msg.color }">
+                  <span class="cluster-msg-name" :style="{ color: msg.color }">{{ msg.name }}</span>
+                  <span class="cluster-msg-text">{{ msg.content }}</span>
+                </div>
+              </template>
+              <template v-else-if="msg.type === 'user'">
+                <div class="cluster-msg-bubble user-bubble">
+                  <span class="cluster-msg-name">你</span>
+                  <span class="cluster-msg-text">{{ msg.content }}</span>
+                </div>
+              </template>
+              <template v-else-if="msg.type === 'system'">
+                <span class="cluster-msg-system">{{ msg.content }}</span>
+              </template>
+              <template v-else-if="msg.type === 'summary'">
+                <div class="cluster-summary-card" v-if="typeof msg.content === 'object'">
+                  <div class="summary-section" v-if="msg.content.consensus">
+                    <h4><i class="fa-solid fa-handshake"></i> 共识</h4>
+                    <p>{{ msg.content.consensus }}</p>
+                  </div>
+                  <div class="summary-section" v-if="msg.content.divergence">
+                    <h4><i class="fa-solid fa-code-branch"></i> 分歧</h4>
+                    <p>{{ msg.content.divergence }}</p>
+                  </div>
+                  <div class="summary-section" v-if="msg.content.suggestions">
+                    <h4><i class="fa-solid fa-lightbulb"></i> 建议</h4>
+                    <p>{{ msg.content.suggestions }}</p>
+                  </div>
+                </div>
+                <span class="cluster-msg-system" v-else-if="typeof msg.content === 'string'">📝 讨论总结：{{ msg.content }}</span>
+              </template>
+              <template v-else-if="msg.type === 'thinking'">
+                <div class="cluster-msg-bubble thinking-bubble" :style="{ '--msg-role-color': msg.color }">
+                  <span class="cluster-msg-name" :style="{ color: msg.color }">{{ msg.name }}</span>
+                  <span class="cluster-thinking-dots">
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                  </span>
+                </div>
+              </template>
+            </div>
+          </div>
+          <!-- 输入行 -->
+          <div class="cluster-input-row">
+            <input v-model="clusterInput" class="cluster-input" @keyup.enter="sendClusterMessage()"
+              :placeholder="clusterInterruptPending ? '等待角色回应...' : (clusterStatus === 'discussing' ? '插话或提问...' : '开始讨论后可插话...')"
+              :disabled="clusterStatus !== 'discussing' || clusterInterruptPending" />
+            <button class="cluster-send-btn" @click="sendClusterMessage()"
+              :disabled="!clusterInput.trim() || clusterStatus !== 'discussing' || clusterInterruptPending">
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
