@@ -618,6 +618,23 @@ body {
   box-shadow: var(--shadow-md);
 }
 
+.quick-btn:active:not(:disabled) {
+  transform: translateX(4px) scale(0.95);
+  opacity: 0.85;
+}
+
+.quick-btn-exit {
+  color: var(--danger-400);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.quick-btn-exit:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--danger-400);
+  color: var(--danger-300);
+  transform: translateX(4px);
+}
+
 .quick-btn.active {
   background: linear-gradient(135deg, var(--primary-500), var(--accent-500));
   border-color: transparent;
@@ -8347,7 +8364,7 @@ body {
 .cluster-page {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--z-overlay);
   background: var(--bg-gradient);
   overflow: hidden;
   color: var(--text-primary);
@@ -8358,7 +8375,12 @@ body {
 .cluster-avatar-layer {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: var(--z-base);
+  pointer-events: none;
+}
+
+.cluster-avatar-layer > * {
+  pointer-events: auto;
 }
 
 .cluster-avatar-overlay {
@@ -8379,8 +8401,13 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  z-index: 5;
+  z-index: var(--z-ring);
   pointer-events: none;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.cluster-brand-mark.hidden {
+  opacity: 0;
 }
 
 .cluster-brand-icon {
@@ -8477,7 +8504,7 @@ body {
   border-color: var(--primary-400);
   box-shadow: 0 0 0 4px var(--primary-500), var(--shadow-glow-primary);
   transform: scale(1.12);
-  animation: rolePulse 1.5s ease-in-out infinite;
+  animation: rolePulse 1s ease-in-out infinite;
 }
 
 .cluster-role-ring-name {
@@ -8549,8 +8576,8 @@ body {
 /* 好感度浮动提示 */
 .cluster-affection-float {
   position: absolute;
-  z-index: 30;
-  animation: affectionFloatUp 2.2s ease-out forwards;
+  z-index: var(--z-float);
+  animation: affectionFloatUp 1.5s ease-out forwards;
   font-size: var(--text-xs);
   font-weight: 700;
   pointer-events: none;
@@ -8570,7 +8597,7 @@ body {
 .cluster-function-layer {
   position: absolute;
   inset: 0;
-  z-index: 10;
+  z-index: var(--z-function);
   pointer-events: none;
 }
 
@@ -8610,7 +8637,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  z-index: 15;
+  z-index: var(--z-panel);
 }
 
 .cluster-panel-header {
@@ -8628,9 +8655,10 @@ body {
   margin: 0;
 }
 
-.cluster-panel-close {
-  width: 28px;
-  height: 28px;
+/* 关闭按钮基类 */
+.cluster-close-btn {
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-sm);
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
@@ -8643,9 +8671,46 @@ body {
   transition: all var(--duration-fast) var(--ease-out);
 }
 
-.cluster-panel-close:hover {
+.cluster-close-btn:hover {
   background: var(--glass-bg-heavy);
   color: var(--text-primary);
+}
+
+.cluster-close-btn:active {
+  transform: scale(0.92);
+}
+
+.cluster-panel-close,
+.cluster-history-close,
+.cluster-detail-close,
+.role-editor-close {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.cluster-panel-close:hover,
+.cluster-history-close:hover,
+.cluster-detail-close:hover,
+.role-editor-close:hover {
+  background: var(--glass-bg-heavy);
+  color: var(--text-primary);
+}
+
+.cluster-panel-close:active,
+.cluster-history-close:active,
+.cluster-detail-close:active,
+.role-editor-close:active {
+  transform: scale(0.92);
 }
 
 /* 模式选项列表 */
@@ -8676,7 +8741,7 @@ body {
 .cluster-mode-option.active {
   background: var(--primary-500);
   border-color: transparent;
-  color: #fff;
+  color: var(--text-on-primary);
 }
 
 .cluster-mode-option.active .cmo-desc {
@@ -8788,7 +8853,7 @@ body {
 
 .recommendation-chip:hover {
   background: var(--primary-500);
-  color: #fff;
+  color: var(--text-on-primary);
 }
 
 /* 角色选择列表 */
@@ -8820,7 +8885,7 @@ body {
 .cluster-role-select-item.selected {
   background: var(--primary-500);
   border-color: transparent;
-  color: #fff;
+  color: var(--text-on-primary);
 }
 
 .cluster-role-select-item.selected .crsi-personality {
@@ -8845,7 +8910,7 @@ body {
 
 .cluster-role-select-item.selected .crsi-avatar {
   background: rgba(255,255,255,0.15);
-  color: #fff;
+  color: var(--text-on-primary);
 }
 
 .crsi-info {
@@ -8861,7 +8926,7 @@ body {
 
 .crsi-personality {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8869,14 +8934,14 @@ body {
 }
 
 .crsi-check {
-  color: #fff;
+  color: var(--text-on-primary);
   font-size: var(--text-xs);
 }
 
 .crsi-edit {
   padding: 2px var(--space-1);
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-tertiary);
   cursor: pointer;
 }
@@ -8925,7 +8990,7 @@ body {
 .matrix-col-label {
   width: 48px;
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8941,7 +9006,7 @@ body {
 .matrix-row-label {
   width: 48px;
   text-align: right;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8984,94 +9049,28 @@ body {
 }
 
 /* ---------- 准备阶段全屏设置 ---------- */
-.cluster-setup-full {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 8;
-  pointer-events: none;
-}
-
-.cluster-setup-full > * {
-  pointer-events: auto;
-}
-
-.cluster-setup-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-8);
-  background: var(--solid-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  backdrop-filter: var(--glass-blur-heavy);
-  box-shadow: var(--shadow-lg);
-}
-
-.cluster-setup-center h2 {
-  font-size: var(--text-xl);
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.cluster-setup-center .cluster-topic-input {
-  width: 360px;
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-base);
-}
-
-.cluster-setup-start-btn {
-  padding: var(--space-3) var(--space-8);
-  border-radius: var(--radius-md);
-  border: none;
-  background: var(--primary-500);
-  color: #fff;
-  font-size: var(--text-base);
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  transition: all var(--duration-normal) var(--ease-out);
-  box-shadow: var(--shadow-md);
-}
-
-.cluster-setup-start-btn:hover:not(:disabled) {
-  background: var(--primary-600);
-  box-shadow: var(--shadow-glow-primary);
-  transform: translateY(-1px);
-}
-
-.cluster-setup-start-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* ---------- 底部对话栏 ---------- */
+/* ---------- 集群浮动对话栏 ---------- */
 .cluster-chat-bar {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  background: var(--solid-bg);
-  border-top: 1px solid var(--glass-border);
-  backdrop-filter: var(--glass-blur-heavy);
-  transition: height var(--duration-slow) var(--ease-smooth);
-}
-
-.cluster-chat-bar:not(.expanded) {
-  height: auto;
-}
-
-.cluster-chat-bar.expanded {
-  height: 60vh;
-  display: flex;
-  flex-direction: column;
+  bottom: var(--space-5);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 160px);
+  max-width: 900px;
+  z-index: var(--z-chat);
+  pointer-events: auto;
+  transition:
+    position 0s var(--duration-slower),
+    left var(--duration-slower) var(--ease-smooth),
+    right var(--duration-slower) var(--ease-smooth),
+    top var(--duration-slower) var(--ease-smooth),
+    bottom var(--duration-slower) var(--ease-smooth),
+    width var(--duration-slower) var(--ease-smooth),
+    height var(--duration-slower) var(--ease-smooth),
+    max-width var(--duration-slower) var(--ease-smooth),
+    max-height var(--duration-slower) var(--ease-smooth),
+    transform var(--duration-slower) var(--ease-smooth),
+    border-radius var(--duration-slower) var(--ease-smooth);
 }
 
 /* 折叠态 */
@@ -9079,37 +9078,41 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-3) var(--space-5);
+  background: var(--solid-bg);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border-light);
   cursor: pointer;
-  transition: background var(--duration-normal) var(--ease-out);
+  transition: all var(--duration-normal) var(--ease-smooth);
 }
 
 .cluster-chat-collapsed:hover {
-  background: var(--glass-bg-light);
+  border-color: var(--primary-400);
+  box-shadow: var(--shadow-glow-primary);
 }
 
 .cluster-chat-trigger {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
-.cluster-trigger-icon {
-  width: 36px;
-  height: 36px;
+.cluster-trigger-avatar {
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-md);
-  background: var(--primary-500);
+  background: linear-gradient(135deg, var(--primary-500), var(--accent-500));
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: var(--text-sm);
+  color: var(--text-on-primary);
+  font-size: 18px;
 }
 
 .cluster-trigger-title {
   display: block;
-  font-size: var(--text-sm);
   font-weight: 600;
+  font-size: var(--text-base);
   color: var(--text-primary);
 }
 
@@ -9121,24 +9124,112 @@ body {
 
 .cluster-trigger-roles {
   display: flex;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .cluster-trigger-chip {
   padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--glass-bg-light);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
 /* 展开态 */
 .cluster-chat-expanded {
+  background: var(--solid-bg);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border-light);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   height: 100%;
+  opacity: 1;
+  transition: opacity var(--duration-normal) var(--ease-smooth);
 }
 
+/* ==================== 底部模式 - 动态高度 ==================== */
+.cluster-chat-bar.expanded:not(.sidebar-mode) {
+  height: var(--cluster-chat-height, 450px);
+  max-height: 600px;
+}
+
+.cluster-chat-bar.expanded:not(.sidebar-mode) .cluster-chat-expanded {
+  height: 100%;
+}
+
+/* 高度拖拽手柄 */
+.cluster-chat-resize-handle {
+  height: 12px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background var(--duration-fast) var(--ease-smooth);
+}
+
+.cluster-chat-resize-handle:hover {
+  background: oklch(0.72 0.15 160 / 0.1);
+}
+
+.cluster-chat-resize-handle:hover .cluster-resize-bar {
+  background: var(--primary-400);
+  width: 50px;
+}
+
+.cluster-resize-bar {
+  width: 40px;
+  height: 4px;
+  background: var(--glass-border-light);
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+
+/* ==================== 侧边栏模式 ==================== */
+.cluster-chat-bar.expanded.sidebar-mode {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  left: auto;
+  width: 480px;
+  max-width: none;
+  transform: none;
+  border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+  height: 100vh !important;
+  background: var(--solid-bg);
+  border: 1px solid var(--glass-border-light);
+  border-right: none;
+  box-shadow: var(--shadow-xl);
+  animation: clusterSlideInFromRight var(--duration-slower) var(--ease-smooth) forwards;
+}
+
+@keyframes clusterSlideInFromRight {
+  0% { opacity: 0; transform: translateX(100%); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+.cluster-chat-bar:not(.sidebar-mode).from-sidebar {
+  animation: clusterSlideToBottom var(--duration-slower) var(--ease-smooth) forwards;
+}
+
+@keyframes clusterSlideToBottom {
+  0% { opacity: 0; transform: translateX(-50%) scale(0.95); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+.cluster-chat-bar.expanded.sidebar-mode .cluster-chat-expanded {
+  height: 100%;
+  border-radius: 0;
+}
+
+.cluster-chat-bar.expanded.sidebar-mode .cluster-messages {
+  flex: 1;
+}
+
+/* 头部 */
 .cluster-chat-header {
   display: flex;
   align-items: center;
@@ -9147,26 +9238,36 @@ body {
   border-bottom: 1px solid var(--glass-border);
 }
 
-.cluster-chat-mode {
+.cluster-chat-title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   font-size: var(--text-sm);
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
 }
 
-.cluster-chat-mode i {
+.cluster-chat-title i {
   color: var(--primary-400);
+  flex-shrink: 0;
+}
+
+.cluster-chat-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cluster-chat-tools {
   display: flex;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  flex-shrink: 0;
 }
 
 .cluster-tool-btn {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-sm);
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
@@ -9182,6 +9283,11 @@ body {
 .cluster-tool-btn:hover:not(:disabled) {
   background: var(--glass-bg-light);
   color: var(--text-primary);
+}
+
+.cluster-tool-btn:active:not(:disabled) {
+  transform: scale(0.92);
+  opacity: 0.8;
 }
 
 .cluster-tool-btn:disabled {
@@ -9218,11 +9324,11 @@ body {
 .cluster-setup-roles {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .cluster-role-chip {
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
@@ -9232,6 +9338,7 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-height: 44px;
   transition: all var(--duration-fast) var(--ease-out);
 }
 
@@ -9242,7 +9349,7 @@ body {
 .cluster-role-chip.selected {
   background: var(--primary-500);
   border-color: transparent;
-  color: #fff;
+  color: var(--text-on-primary);
 }
 
 /* 消息列表 */
@@ -9305,7 +9412,7 @@ body {
 .user-bubble {
   background: var(--primary-500);
   border-top-right-radius: var(--radius-sm);
-  color: #fff;
+  color: var(--text-on-primary);
 }
 
 .user-bubble .cluster-msg-name {
@@ -9313,7 +9420,7 @@ body {
 }
 
 .user-bubble .cluster-msg-text {
-  color: #fff;
+  color: var(--text-on-primary);
 }
 
 .cluster-msg-name {
@@ -9336,6 +9443,29 @@ body {
   padding: var(--space-1) var(--space-3);
   background: var(--glass-bg);
   border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cluster-retry-btn {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-light);
+  color: var(--primary-400);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.cluster-retry-btn:hover {
+  background: var(--primary-500);
+  color: var(--text-on-primary);
+  border-color: transparent;
 }
 
 /* 输入指示器（thinking dots） */
@@ -9449,7 +9579,7 @@ body {
   border-radius: var(--radius-md);
   border: none;
   background: var(--primary-500);
-  color: #fff;
+  color: var(--text-on-primary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -9470,7 +9600,7 @@ body {
 /* 快捷栏集群按钮 */
 .quick-btn.cluster-btn.active {
   background: var(--primary-500);
-  color: #fff;
+  color: var(--text-on-primary);
   box-shadow: var(--shadow-glow-primary);
 }
 
@@ -9483,22 +9613,88 @@ body {
 .panel-slide-enter-from,
 .panel-slide-leave-to {
   opacity: 0;
-  transform: translateY(-50%) translateX(-20px);
+  transform: translateY(-50%) translateX(-40px);
+}
+
+/* ---------- Reduced Motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .cluster-role-ring-item.speaking .cluster-role-ring-avatar {
+    animation: none;
+  }
+  .cluster-affection-float {
+    animation: none;
+    opacity: 0;
+  }
+  .cluster-msg {
+    animation: none;
+  }
+  .cluster-thinking-dots .dot {
+    animation: none;
+    opacity: 0.6;
+  }
+  .panel-slide-enter-active,
+  .panel-slide-leave-active {
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .panel-slide-enter-from,
+  .panel-slide-leave-to {
+    transform: translateY(-50%);
+  }
+
+  .cluster-chat-bar.expanded.sidebar-mode {
+    animation: none;
+  }
+
+  .cluster-chat-bar:not(.sidebar-mode).from-sidebar {
+    animation: none;
+  }
+}
+
+/* ---------- Focus Visible ---------- */
+.cluster-tool-btn:focus-visible,
+.quick-btn:focus-visible,
+.cluster-role-chip:focus-visible,
+.cluster-mode-option:focus-visible,
+.cluster-role-select-item:focus-visible,
+.cluster-panel-close:focus-visible,
+.cluster-history-close:focus-visible,
+.cluster-detail-close:focus-visible,
+.role-editor-close:focus-visible,
+.cluster-send-btn:focus-visible,
+.cluster-recommend-btn:focus-visible,
+.cluster-role-add:focus-visible {
+  outline: 3px solid var(--primary-400);
+  outline-offset: 2px;
+}
+
+/* ---------- Matrix Trend Icons ---------- */
+.matrix-trend {
+  font-size: 8px;
+  margin-right: 2px;
+}
+
+.matrix-cell.positive .matrix-trend {
+  color: var(--success-400);
+}
+
+.matrix-cell.negative .matrix-trend {
+  color: var(--danger-400);
 }
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 768px) {
-  .cluster-role-strip {
-    right: var(--space-2);
+  .cluster-role-ring {
+    width: 240px;
+    height: 240px;
   }
 
-  .cluster-role-avatar {
-    width: 36px;
-    height: 36px;
-    font-size: var(--text-sm);
+  .cluster-role-ring-avatar {
+    width: 48px;
+    height: 48px;
   }
 
-  .cluster-role-name {
+  .cluster-role-ring-name {
     display: none;
   }
 
@@ -9507,8 +9703,13 @@ body {
     width: 280px;
   }
 
-  .cluster-chat-bar.expanded {
-    height: 70vh;
+  .cluster-chat-bar.expanded:not(.sidebar-mode) {
+    width: calc(100% - var(--space-8));
+    max-width: 600px;
+  }
+
+  .cluster-chat-bar.expanded.sidebar-mode {
+    width: 360px;
   }
 
   .cluster-brand-mark {
@@ -9522,12 +9723,14 @@ body {
 }
 
 @media (max-width: 600px) {
-  .cluster-role-strip {
-    top: auto;
-    bottom: 80px;
-    right: var(--space-2);
-    transform: none;
-    flex-direction: row;
+  .cluster-role-ring {
+    width: 180px;
+    height: 180px;
+  }
+
+  .cluster-role-ring-avatar {
+    width: 40px;
+    height: 40px;
   }
 
   .cluster-panel {
@@ -9544,8 +9747,14 @@ body {
     transform: translateX(-20px);
   }
 
-  .cluster-chat-bar.expanded {
-    height: 80vh;
+  .cluster-chat-bar.expanded:not(.sidebar-mode) {
+    width: 95vw;
+    max-width: none;
+  }
+
+  .cluster-chat-bar.expanded.sidebar-mode {
+    width: 100vw;
+    border-radius: 0;
   }
 }
 
@@ -9916,7 +10125,7 @@ body {
 .role-editor-btn.primary {
   background: var(--primary-500);
   border-color: transparent;
-  color: #fff;
+  color: var(--text-on-primary);
 }
 .role-editor-btn.primary:hover {
   background: var(--primary-600);
