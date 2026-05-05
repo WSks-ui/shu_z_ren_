@@ -199,15 +199,14 @@ def get_role_list():
 async def get_all_roles():
     """获取所有角色（内置 + 自定义），用于编排器"""
     import asyncio
-    from py.edu_storage import MemoryCache, ensure_storage
+    from py.edu_storage import get_cache
 
     # 内置角色
     all_roles = dict(CLUSTER_ROLES)
 
     # 加载自定义角色
     try:
-        await ensure_storage()
-        cache = await MemoryCache.get_instance()
+        cache = await get_cache()
         custom_roles = await cache.get_custom_cluster_roles()
 
         for role in custom_roles:
@@ -260,3 +259,78 @@ def get_mode_list():
         }
         for mode_id, mode in CLUSTER_MODES.items()
     ]
+
+
+def recommend_roles(topic: str, mode: str = "roundtable") -> Dict[str, Any]:
+    """根据话题推荐角色组合"""
+
+    # 话题关键词与角色的匹配规则
+    keyword_role_map = {
+        "innovator": ["创新", "新思路", "突破", "创意", "头脑风暴", "想法", "革新", "尝试"],
+        "skeptic": ["问题", "风险", "质疑", "验证", "批判", "分析", "评估", "检查"],
+        "integrator": ["综合", "总结", "整合", "归纳", "框架", "体系", "对比", "综合"],
+        "practitioner": ["实践", "落地", "执行", "实施", "方案", "步骤", "资源", "可行性"]
+    }
+
+    # 基于关键词匹配
+    topic_lower = topic.lower()
+    matched_roles = {}
+
+    for role_id, keywords in keyword_role_map.items():
+        score = sum(1 for kw in keywords if kw in topic_lower)
+        if score > 0:
+            matched_roles[role_id] = score
+
+    # 如果没有匹配，使用默认组合
+    if not matched_roles:
+        matched_roles = {"innovator": 1, "skeptic": 1}
+
+    # 按分数排序
+    sorted_roles = sorted(matched_roles.items(), key=lambda x: x[1], reverse=True)
+
+    # 根据模式确定推荐数量
+    mode_config = CLUSTER_MODES.get(mode, CLUSTER_MODES["roundtable"])
+    min_roles = mode_config["min_roles"]
+    max_roles = mode_config["max_roles"]
+
+    # 构建推荐列表
+    all_role_ids = list(CLUSTER_ROLES.keys())
+    recommended = []
+    recommended_ids = set()
+
+    # 添加匹配的角色
+    for role_id, score in sorted_roles[:max_roles]:
+        role = CLUSTER_ROLES.get(role_id)
+        if role:
+            recommended.append({
+                "id": role_id,
+                "name": role["name"],
+                "reason": f"话题涉及{', '.join(role['expertise'][:2])}相关内容"
+            })
+            recommended_ids.add(role_id)
+
+    # 如果推荐角色不足，补充其他角色
+    for role_id in all_role_ids:
+        if len(recommended) >= min_roles:
+            break
+        if role_id not in recommended_ids:
+            role = CLUSTER_ROLES.get(role_id)
+            if role:
+                recommended.append({
+                    "id": role_id,
+                    "name": role["name"],
+                    "reason": "补充不同思维视角"
+                })
+                recommended_ids.add(role_id)
+
+    # 备选角色
+    alternative = [
+        {"id": role_id, "name": CLUSTER_ROLES[role_id]["name"]}
+        for role_id in all_role_ids
+        if role_id not in recommended_ids and role_id in CLUSTER_ROLES
+    ]
+
+    return {
+        "recommended": recommended[:max_roles],
+        "alternative": alternative
+    }
