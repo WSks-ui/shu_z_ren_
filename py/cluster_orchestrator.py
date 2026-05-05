@@ -19,10 +19,11 @@ from py.get_setting import load_settings, USER_DATA_DIR
 class ClusterOrchestrator:
     """集群对话编排器"""
 
-    def __init__(self, mode: str, role_ids: List[str], max_rounds: int = 3):
+    def __init__(self, mode: str, role_ids: List[str], max_rounds: int = 3, roles: Dict[str, Any] = None):
         self.mode = mode
         self.role_ids = role_ids
         self.max_rounds = max_rounds
+        self.roles = roles or dict(CLUSTER_ROLES)
         self.history: List[Dict[str, Any]] = []
         self.current_round = 0
         self._interrupted = False
@@ -121,7 +122,7 @@ class ClusterOrchestrator:
 
                 # 所有角色依次回应用户插话
                 for role_id in self.role_ids:
-                    role = CLUSTER_ROLES.get(role_id)
+                    role = self.roles.get(role_id)
                     if not role:
                         continue
 
@@ -155,7 +156,7 @@ class ClusterOrchestrator:
             round_responses = []
 
             for role_id in self.role_ids:
-                role = CLUSTER_ROLES.get(role_id)
+                role = self.roles.get(role_id)
                 if not role:
                     continue
 
@@ -225,7 +226,7 @@ class ClusterOrchestrator:
 
                 # 正反方依次回应用户插话
                 for role_id, stance in [(pro_role_id, "正方"), (con_role_id, "反方")]:
-                    role = CLUSTER_ROLES.get(role_id)
+                    role = self.roles.get(role_id)
                     if not role:
                         continue
 
@@ -288,7 +289,7 @@ class ClusterOrchestrator:
     ) -> AsyncGenerator[str, None]:
         """辩论中单个角色的发言回合"""
 
-        role = CLUSTER_ROLES.get(role_id)
+        role = self.roles.get(role_id)
         if not role:
             return
 
@@ -338,7 +339,7 @@ class ClusterOrchestrator:
         # 并行调用各角色（会诊模式下角色互不可见）
         tasks = []
         for role_id in self.role_ids:
-            role = CLUSTER_ROLES.get(role_id)
+            role = self.roles.get(role_id)
             if not role:
                 continue
             tasks.append((role_id, role))
@@ -408,7 +409,7 @@ class ClusterOrchestrator:
     ) -> str:
         """构建圆桌讨论的角色提示词"""
 
-        role = CLUSTER_ROLES.get(role_id)
+        role = self.roles.get(role_id)
         base_prompt = role["system_prompt"]
 
         # 集群讨论的额外指令
@@ -457,7 +458,7 @@ class ClusterOrchestrator:
     ) -> str:
         """构建辩论模式的角色提示词"""
 
-        role = CLUSTER_ROLES.get(role_id)
+        role = self.roles.get(role_id)
         base_prompt = role["system_prompt"]
 
         stance_instruction = {
@@ -499,7 +500,7 @@ class ClusterOrchestrator:
     ) -> str:
         """构建会诊模式的角色提示词"""
 
-        role = CLUSTER_ROLES.get(role_id)
+        role = self.roles.get(role_id)
         base_prompt = role["system_prompt"]
 
         consultation_instruction = f"""
@@ -524,7 +525,7 @@ class ClusterOrchestrator:
     ) -> str:
         """构建用户插话时各角色的响应提示词"""
 
-        role = CLUSTER_ROLES.get(role_id)
+        role = self.roles.get(role_id)
         base_prompt = role["system_prompt"]
 
         interrupt_instruction = f"""
@@ -569,7 +570,7 @@ class ClusterOrchestrator:
             if other_id == speaker_id:
                 continue
 
-            other_role = CLUSTER_ROLES.get(other_id)
+            other_role = self.roles.get(other_id)
             if not other_role:
                 continue
 
@@ -615,7 +616,7 @@ class ClusterOrchestrator:
 
         lines = []
         for other_id, value in affections.items():
-            other_role = CLUSTER_ROLES.get(other_id)
+            other_role = self.roles.get(other_id)
             if not other_role:
                 continue
             if value >= 70:
@@ -938,7 +939,7 @@ class ClusterOrchestrator:
                     continue
 
                 # 用 LLM 提取记忆
-                role = CLUSTER_ROLES.get(role_id, {})
+                role = self.roles.get(role_id, {})
                 role_name = role.get("name", role_id)
 
                 extract_prompt = f"""你是一个记忆提取助手。请从以下{role_name}的发言中，提取关于用户的关键信息。
@@ -1004,9 +1005,11 @@ class ClusterOrchestrator:
 _active_orchestrators: Dict[str, ClusterOrchestrator] = {}
 
 
-def create_orchestrator(session_id: str, mode: str, role_ids: List[str], max_rounds: int = 3) -> ClusterOrchestrator:
-    """创建编排器实例"""
-    orchestrator = ClusterOrchestrator(mode=mode, role_ids=role_ids, max_rounds=max_rounds)
+async def create_orchestrator(session_id: str, mode: str, role_ids: List[str], max_rounds: int = 3) -> ClusterOrchestrator:
+    """创建编排器实例，加载内置+自定义角色"""
+    from py.cluster_roles import get_all_roles
+    roles = await get_all_roles()
+    orchestrator = ClusterOrchestrator(mode=mode, role_ids=role_ids, max_rounds=max_rounds, roles=roles)
     _active_orchestrators[session_id] = orchestrator
     return orchestrator
 
