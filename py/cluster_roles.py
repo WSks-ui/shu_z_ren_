@@ -261,10 +261,13 @@ def get_mode_list():
     ]
 
 
-def recommend_roles(topic: str, mode: str = "roundtable") -> Dict[str, Any]:
-    """根据话题推荐角色组合"""
+async def recommend_roles(topic: str, mode: str = "roundtable") -> Dict[str, Any]:
+    """根据话题推荐角色组合（含自定义角色）"""
 
-    # 话题关键词与角色的匹配规则
+    # 获取完整角色列表（内置+自定义）
+    all_roles = await get_all_roles()
+
+    # 话题关键词与内置角色的匹配规则
     keyword_role_map = {
         "innovator": ["创新", "新思路", "突破", "创意", "头脑风暴", "想法", "革新", "尝试"],
         "skeptic": ["问题", "风险", "质疑", "验证", "批判", "分析", "评估", "检查"],
@@ -294,40 +297,40 @@ def recommend_roles(topic: str, mode: str = "roundtable") -> Dict[str, Any]:
     max_roles = mode_config["max_roles"]
 
     # 构建推荐列表
-    all_role_ids = list(CLUSTER_ROLES.keys())
+    all_role_ids = list(all_roles.keys())
     recommended = []
     recommended_ids = set()
 
     # 添加匹配的角色
     for role_id, score in sorted_roles[:max_roles]:
-        role = CLUSTER_ROLES.get(role_id)
+        role = all_roles.get(role_id)
         if role:
             recommended.append({
                 "id": role_id,
                 "name": role["name"],
-                "reason": f"话题涉及{', '.join(role['expertise'][:2])}相关内容"
+                "reason": f"话题涉及{', '.join(role['expertise'][:2])}相关内容" if role.get('expertise') else "话题匹配"
             })
             recommended_ids.add(role_id)
 
-    # 如果推荐角色不足，补充其他角色
+    # 如果推荐角色不足，补充其他角色（含自定义角色）
     for role_id in all_role_ids:
         if len(recommended) >= min_roles:
             break
         if role_id not in recommended_ids:
-            role = CLUSTER_ROLES.get(role_id)
+            role = all_roles.get(role_id)
             if role:
                 recommended.append({
                     "id": role_id,
                     "name": role["name"],
-                    "reason": "补充不同思维视角"
+                    "reason": "补充不同思维视角" if not role.get("is_custom") else "自定义角色补充视角"
                 })
                 recommended_ids.add(role_id)
 
     # 备选角色
     alternative = [
-        {"id": role_id, "name": CLUSTER_ROLES[role_id]["name"]}
+        {"id": role_id, "name": all_roles[role_id]["name"]}
         for role_id in all_role_ids
-        if role_id not in recommended_ids and role_id in CLUSTER_ROLES
+        if role_id not in recommended_ids and role_id in all_roles
     ]
 
     return {
