@@ -678,7 +678,7 @@
         <!-- 半透明遮罩 -->
         <div class="cluster-avatar-overlay"></div>
         <!-- 品牌标识 -->
-        <div class="cluster-brand-mark">
+        <div class="cluster-brand-mark" :class="{ hidden: clusterChatExpanded }">
           <div class="cluster-brand-icon"><i class="fa-solid fa-users"></i></div>
           <div class="cluster-brand-text">
             <h1>集群讨论</h1>
@@ -714,6 +714,9 @@
       <!-- 功能层 — 左侧快捷栏 + 浮动面板 -->
       <div class="cluster-function-layer">
         <aside class="cluster-quick-bar">
+          <button class="quick-btn" :class="{ active: clusterChatExpanded }" @click="clusterChatExpanded = !clusterChatExpanded" title="对话" aria-label="打开对话">
+            <i class="fa-solid fa-message"></i><span>对话</span>
+          </button>
           <button class="quick-btn" :class="{ active: clusterPanel === 'mode' }" @click="clusterPanel = clusterPanel === 'mode' ? null : 'mode'" title="讨论模式">
             <i class="fa-solid fa-comments"></i><span>模式</span>
           </button>
@@ -730,7 +733,7 @@
             <i class="fa-solid fa-download"></i><span>导出</span>
           </button>
           <div class="quick-divider"></div>
-          <button class="quick-btn" @click="exitCluster()" title="返回首页">
+          <button class="quick-btn quick-btn-exit" @click="exitCluster()" title="返回首页" aria-label="返回首页">
             <i class="fa-solid fa-arrow-left"></i><span>返回</span>
           </button>
         </aside>
@@ -742,7 +745,7 @@
             <template v-if="clusterPanel === 'mode'">
               <div class="cluster-panel-header">
                 <h3>讨论模式</h3>
-                <button class="cluster-panel-close" @click="clusterPanel = null"><i class="fa-solid fa-xmark"></i></button>
+                <button class="cluster-close-btn cluster-panel-close" @click="clusterPanel = null" aria-label="关闭面板"><i class="fa-solid fa-xmark"></i></button>
               </div>
               <div class="cluster-mode-list">
                 <div v-for="m in clusterModes" :key="m.id" class="cluster-mode-option"
@@ -760,12 +763,12 @@
             <template v-if="clusterPanel === 'roles'">
               <div class="cluster-panel-header">
                 <h3>参与角色</h3>
-                <button class="cluster-panel-close" @click="clusterPanel = null"><i class="fa-solid fa-xmark"></i></button>
+                <button class="cluster-close-btn cluster-panel-close" @click="clusterPanel = null" aria-label="关闭面板"><i class="fa-solid fa-xmark"></i></button>
               </div>
               <!-- 智能推荐 -->
               <div class="cluster-role-recommend">
                 <div class="cluster-topic-mini">
-                  <input v-model="clusterTopic" placeholder="输入话题以推荐角色..." class="cluster-topic-mini-input" />
+                  <input v-model="clusterTopic" placeholder="输入话题以推荐角色..." class="cluster-topic-mini-input" aria-label="话题关键词" />
                   <button class="cluster-recommend-btn" @click="recommendClusterRoles()" :disabled="!clusterTopic.trim()">
                     <i class="fa-solid fa-wand-magic-sparkles"></i>
                   </button>
@@ -805,7 +808,7 @@
             <template v-if="clusterPanel === 'affection'">
               <div class="cluster-panel-header">
                 <h3>角色好感度</h3>
-                <button class="cluster-panel-close" @click="clusterPanel = null"><i class="fa-solid fa-xmark"></i></button>
+                <button class="cluster-close-btn cluster-panel-close" @click="clusterPanel = null" aria-label="关闭面板"><i class="fa-solid fa-xmark"></i></button>
               </div>
               <div class="cluster-affection-matrix">
                 <div class="matrix-header">
@@ -826,33 +829,18 @@
         </transition>
       </div>
 
-      <!-- 准备阶段：全屏居中设置（讨论前） -->
-      <div class="cluster-setup-full" v-if="clusterStatus === 'idle' && !clusterChatExpanded && clusterMessages.length === 0">
-        <div class="cluster-setup-center">
-          <h2>开始集群讨论</h2>
-          <input v-model="clusterTopic" class="cluster-topic-input" placeholder="输入讨论话题..." />
-          <div class="cluster-setup-roles">
-            <button v-for="role in availableRoles" :key="role.id"
-              class="cluster-role-chip" :class="{ selected: clusterSelectedRoles.includes(role.id) }"
-              @click="toggleClusterRole(role.id)">
-              <i :class="role.icon"></i> {{ role.name }}
-            </button>
-          </div>
-          <button class="cluster-setup-start-btn" @click="startClusterDiscussion()" :disabled="!canStartDiscussion">
-            <i class="fa-solid fa-play"></i> 开始讨论
-          </button>
-        </div>
-      </div>
-
-      <!-- 底部对话栏 -->
-      <div class="cluster-chat-bar" :class="{ expanded: clusterChatExpanded }">
-        <!-- 折叠态：讨论结束后可折叠查看 -->
+      <!-- 准备阶段：全屏居中设置 -->
+      <!-- 集群浮动对话栏 -->
+      <div class="cluster-chat-bar" :class="{ expanded: clusterChatExpanded, 'sidebar-mode': clusterChatMode === 'sidebar' }" :style="clusterChatExpanded && clusterChatMode === 'bottom' ? { '--cluster-chat-height': clusterChatHeight + 'px' } : {}">
+        <!-- 折叠态 -->
         <div class="cluster-chat-collapsed" v-if="!clusterChatExpanded" @click="clusterChatExpanded = true">
           <div class="cluster-chat-trigger">
-            <div class="cluster-trigger-icon"><i class="fa-solid fa-comments"></i></div>
+            <div class="cluster-trigger-avatar">
+              <i class="fa-solid fa-comments"></i>
+            </div>
             <div class="cluster-trigger-text">
               <span class="cluster-trigger-title">{{ clusterTopic || '开始集群讨论' }}</span>
-              <span class="cluster-trigger-hint">点击查看讨论记录</span>
+              <span class="cluster-trigger-hint">点击展开对话</span>
             </div>
           </div>
           <div class="cluster-trigger-roles" v-if="clusterSelectedRoles.length > 0">
@@ -861,39 +849,39 @@
             </span>
           </div>
         </div>
+
         <!-- 展开态 -->
         <div class="cluster-chat-expanded" v-else>
+          <!-- 拖拽手柄 (仅底部模式) -->
+          <div class="cluster-chat-resize-handle" @mousedown="startClusterResize" v-if="clusterChatMode === 'bottom'">
+            <div class="cluster-resize-bar"></div>
+          </div>
+          <!-- 头部 -->
           <div class="cluster-chat-header">
-            <div class="cluster-chat-mode">
+            <div class="cluster-chat-title">
               <i :class="currentModeInfo?.icon"></i>
-              {{ currentModeInfo?.name }}
+              <span>{{ clusterTopic || '集群讨论' }}</span>
             </div>
             <div class="cluster-chat-tools">
-              <button class="cluster-tool-btn" @click="startClusterDiscussion()" :disabled="!canStartDiscussion" v-if="clusterStatus !== 'discussing'" title="开始讨论">
+              <button class="cluster-tool-btn" @click="startClusterDiscussion()" :disabled="!canStartDiscussion" v-if="clusterStatus !== 'discussing'" title="开始讨论" aria-label="开始讨论">
                 <i class="fa-solid fa-play"></i>
               </button>
-              <button class="cluster-tool-btn" @click="stopClusterDiscussion()" v-if="clusterStatus === 'discussing'" title="停止讨论">
+              <button class="cluster-tool-btn" @click="stopClusterDiscussion()" v-if="clusterStatus === 'discussing'" title="停止讨论" aria-label="停止讨论">
                 <i class="fa-solid fa-stop"></i>
               </button>
-              <button class="cluster-tool-btn collapse-btn" @click="clusterChatExpanded = false" v-if="clusterStatus !== 'discussing'" title="收起">
+              <button class="cluster-tool-btn" @click="toggleClusterChatMode" :title="clusterChatMode === 'bottom' ? '切换为侧边栏' : '切换为底部栏'" aria-label="切换布局">
+                <i :class="clusterChatMode === 'bottom' ? 'fa-solid fa-table-columns' : 'fa-solid fa-window-maximize'"></i>
+              </button>
+              <button class="cluster-tool-btn collapse-btn" @click="clusterChatExpanded = false" title="收起" aria-label="收起对话栏">
                 <i class="fa-solid fa-chevron-down"></i>
               </button>
             </div>
           </div>
-          <!-- 讨论前设置区（已展开但未开始讨论时） -->
-          <div class="cluster-chat-setup" v-if="clusterStatus !== 'discussing' && clusterMessages.length === 0">
-            <input v-model="clusterTopic" class="cluster-topic-input" placeholder="输入讨论话题..." />
-            <div class="cluster-setup-roles">
-              <button v-for="role in availableRoles" :key="role.id"
-                class="cluster-role-chip" :class="{ selected: clusterSelectedRoles.includes(role.id) }"
-                @click="toggleClusterRole(role.id)">
-                <i :class="role.icon"></i> {{ role.name }}
-              </button>
-            </div>
-          </div>
-          <!-- 讨论前设置区（讨论已结束，可重新开始） -->
-          <div class="cluster-chat-setup" v-if="clusterStatus !== 'discussing' && clusterMessages.length > 0">
-            <input v-model="clusterTopic" class="cluster-topic-input" placeholder="输入新话题..." />
+          <!-- 讨论设置区（未讨论中） -->
+          <div class="cluster-chat-setup" v-if="clusterStatus !== 'discussing'">
+            <input v-model="clusterTopic" class="cluster-topic-input"
+              :placeholder="clusterMessages.length > 0 ? '输入新话题...' : '输入讨论话题...'"
+              :aria-label="clusterMessages.length > 0 ? '新讨论话题' : '讨论话题'" />
             <div class="cluster-setup-roles">
               <button v-for="role in availableRoles" :key="role.id"
                 class="cluster-role-chip" :class="{ selected: clusterSelectedRoles.includes(role.id) }"
@@ -918,7 +906,12 @@
                 </div>
               </template>
               <template v-else-if="msg.type === 'system'">
-                <span class="cluster-msg-system">{{ msg.content }}</span>
+                <span class="cluster-msg-system">
+                  {{ msg.content }}
+                  <button v-if="msg.retryable" class="cluster-retry-btn" @click="startClusterDiscussion()" aria-label="重试讨论">
+                    <i class="fa-solid fa-rotate-right"></i> 重试
+                  </button>
+                </span>
               </template>
               <template v-else-if="msg.type === 'summary'">
                 <div class="cluster-summary-card" v-if="typeof msg.content === 'object'">
@@ -937,21 +930,22 @@
                 </div>
                 <span class="cluster-msg-system" v-else-if="typeof msg.content === 'string'">📝 讨论总结：{{ msg.content }}</span>
               </template>
-              <template v-else-if="msg.type === 'thinking'">
-                <div class="cluster-msg-bubble thinking-bubble" :style="{ '--msg-role-color': msg.color }">
-                  <span class="cluster-msg-name" :style="{ color: msg.color }">{{ msg.name }}</span>
-                  <span class="cluster-thinking-dots">
-                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-                  </span>
-                </div>
-              </template>
+            </div>
+            <!-- Thinking 指示器 -->
+            <div v-if="clusterThinkingRole" class="cluster-msg thinking">
+              <div class="cluster-msg-bubble thinking-bubble" :style="{ '--msg-role-color': clusterThinkingRole.color }">
+                <span class="cluster-msg-name" :style="{ color: clusterThinkingRole.color }">{{ clusterThinkingRole.name }}</span>
+                <span class="cluster-thinking-dots">
+                  <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </span>
+              </div>
             </div>
           </div>
           <!-- 输入行 -->
           <div class="cluster-input-row">
             <input v-model="clusterInput" class="cluster-input" @keyup.enter="sendClusterMessage()"
               :placeholder="clusterInterruptPending ? '等待角色回应...' : (clusterStatus === 'discussing' ? '插话或提问...' : '开始讨论后可插话...')"
-              :disabled="clusterStatus !== 'discussing' || clusterInterruptPending" />
+              :disabled="clusterStatus !== 'discussing' || clusterInterruptPending" aria-label="输入消息" />
             <button class="cluster-send-btn" @click="sendClusterMessage()"
               :disabled="!clusterInput.trim() || clusterStatus !== 'discussing' || clusterInterruptPending">
               <i class="fa-solid fa-paper-plane"></i>
@@ -967,7 +961,7 @@
       <div v-if="showClusterHistory" class="cluster-history-panel">
         <div class="cluster-history-header">
           <h3><i class="fa-solid fa-clock-rotate-left"></i> 讨论历史</h3>
-          <button class="cluster-history-close" @click="showClusterHistory = false">
+          <button class="cluster-close-btn cluster-history-close" @click="showClusterHistory = false" aria-label="关闭历史面板">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -998,7 +992,7 @@
         <div class="cluster-detail-modal">
           <div class="cluster-detail-header">
             <h3>{{ clusterHistoryDetail?.topic }}</h3>
-            <button class="cluster-detail-close" @click="showClusterHistoryDetail = false">
+            <button class="cluster-close-btn cluster-detail-close" @click="showClusterHistoryDetail = false" aria-label="关闭详情面板">
               <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
@@ -1040,7 +1034,7 @@
         <div class="role-editor-modal">
           <div class="role-editor-header">
             <h3>{{ editingRole?.id ? '编辑角色' : '创建自定义角色' }}</h3>
-            <button class="role-editor-close" @click="closeRoleEditor">
+            <button class="cluster-close-btn role-editor-close" @click="closeRoleEditor" aria-label="关闭角色编辑器">
               <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
