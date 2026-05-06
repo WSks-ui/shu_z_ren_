@@ -155,7 +155,7 @@ CLUSTER_MODES = {
         "description": "各角色按顺序发言，可引用前人观点，共同探讨话题",
         "icon": "fa-solid fa-comments",
         "min_roles": 2,
-        "max_roles": 4,
+        "max_roles": 6,
         "max_rounds": 3
     },
     "debate": {
@@ -171,7 +171,7 @@ CLUSTER_MODES = {
         "description": "各角色独立回答同一问题，最后汇总差异点",
         "icon": "fa-solid fa-stethoscope",
         "min_roles": 2,
-        "max_roles": 4,
+        "max_roles": 6,
         "max_rounds": 1
     }
 }
