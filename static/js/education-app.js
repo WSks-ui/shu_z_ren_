@@ -2199,11 +2199,14 @@ createApp({
 
     const clusterModes = [
       { id: 'roundtable', name: '圆桌讨论', icon: 'fa-solid fa-comments',
-        description: '各角色按顺序发言，可引用前人观点，共同探讨话题' },
+        description: '各角色按顺序发言，可引用前人观点，共同探讨话题',
+        min_roles: 2, max_roles: 6 },
       { id: 'debate', name: '正反辩论', icon: 'fa-solid fa-scale-balanced',
-        description: '正反方交替发言，互相反驳，引导用户思考' },
+        description: '正反方交替发言，互相反驳，引导用户思考',
+        min_roles: 2, max_roles: 2 },
       { id: 'consultation', name: '导师会诊', icon: 'fa-solid fa-stethoscope',
-        description: '各角色独立回答同一问题，最后汇总差异点' },
+        description: '各角色独立回答同一问题，最后汇总差异点',
+        min_roles: 2, max_roles: 6 },
     ];
 
     const currentModeInfo = computed(() =>
@@ -2212,7 +2215,7 @@ createApp({
 
     const canStartDiscussion = computed(() =>
       clusterTopic.value.trim() &&
-      clusterSelectedRoles.value.length >= 2 &&
+      clusterSelectedRoles.value.length >= (currentModeInfo.value?.min_roles || 2) &&
       clusterStatus.value === 'idle'
     );
 
@@ -2766,13 +2769,15 @@ createApp({
 
     // 切换角色选择
     const toggleClusterRole = (roleId) => {
+      const maxRoles = currentModeInfo.value?.max_roles || 6;
+      const minRoles = currentModeInfo.value?.min_roles || 2;
       const idx = clusterSelectedRoles.value.indexOf(roleId);
       if (idx >= 0) {
-        if (clusterSelectedRoles.value.length > 2) {
+        if (clusterSelectedRoles.value.length > minRoles) {
           clusterSelectedRoles.value.splice(idx, 1);
         }
       } else {
-        if (clusterSelectedRoles.value.length < 4) {
+        if (clusterSelectedRoles.value.length < maxRoles) {
           clusterSelectedRoles.value.push(roleId);
         }
       }
@@ -2996,12 +3001,14 @@ createApp({
     };
 
     const applyRecommendation = (roleId) => {
+      const maxRoles = currentModeInfo.value?.max_roles || 6;
+      const minRoles = currentModeInfo.value?.min_roles || 2;
       if (!clusterSelectedRoles.value.includes(roleId)) {
-        if (clusterSelectedRoles.value.length < 4) {
+        if (clusterSelectedRoles.value.length < maxRoles) {
           clusterSelectedRoles.value.push(roleId);
         }
       } else {
-        if (clusterSelectedRoles.value.length > 2) {
+        if (clusterSelectedRoles.value.length > minRoles) {
           clusterSelectedRoles.value = clusterSelectedRoles.value.filter(id => id !== roleId);
         }
       }
