@@ -8383,6 +8383,10 @@ body {
   pointer-events: auto;
 }
 
+.cluster-avatar-layer > * {
+  pointer-events: auto;
+}
+
 .cluster-avatar-overlay {
   position: absolute;
   inset: 0;
@@ -8393,17 +8397,28 @@ body {
   pointer-events: none;
 }
 
+/* ---------- 顶部栏 ---------- */
+.cluster-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-ring);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-6);
+  gap: var(--space-4);
+}
+
 /* 品牌标识 */
 .cluster-brand-mark {
-  position: absolute;
-  bottom: var(--space-8);
-  left: var(--space-8);
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  z-index: var(--z-ring);
   pointer-events: none;
   transition: opacity var(--duration-normal) var(--ease-out);
+  flex-shrink: 0;
 }
 
 .cluster-brand-mark.hidden {
@@ -8439,44 +8454,41 @@ body {
   text-transform: uppercase;
 }
 
-/* ---------- 角色环 ---------- */
+/* ---------- 角色栏 ---------- */
 .cluster-role-ring {
-  position: absolute;
-  top: 42%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 340px;
-  height: 340px;
-  z-index: 5;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-5);
+  flex: 1;
+  min-width: 0;
 }
 
 .cluster-role-ring-item {
-  position: absolute;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   transition: all var(--duration-normal) var(--ease-out);
   cursor: pointer;
 }
 
-/* 4个角色: 上、右、下、左 */
-.cluster-role-ring-item:nth-child(1):nth-last-child(4) { top: 0; left: 50%; transform: translateX(-50%); }
-.cluster-role-ring-item:nth-child(2):nth-last-child(3) { top: 50%; right: 0; transform: translateY(-50%); }
-.cluster-role-ring-item:nth-child(3):nth-last-child(2) { bottom: 0; left: 50%; transform: translateX(-50%); }
-.cluster-role-ring-item:nth-child(4):nth-last-child(1) { top: 50%; left: 0; transform: translateY(-50%); }
+.cluster-role-ring-item.unselected {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+}
 
-/* 3个角色: 上、右下、左下 */
-.cluster-role-ring-item:nth-child(1):nth-last-child(3) { top: 0; left: 50%; transform: translateX(-50%); }
-.cluster-role-ring-item:nth-child(2):nth-last-child(2) { bottom: 0; right: 0; }
-.cluster-role-ring-item:nth-child(3):nth-last-child(1) { bottom: 0; left: 0; }
+.cluster-role-ring-item.unselected:hover {
+  opacity: 0.7;
+  filter: grayscale(0.3);
+  transform: scale(1.05);
+}
 
-/* 2个角色: 左、右 */
-.cluster-role-ring-item:nth-child(1):nth-last-child(2) { top: 50%; left: 0; transform: translateY(-50%); }
-.cluster-role-ring-item:nth-child(2):nth-last-child(1) { top: 50%; right: 0; transform: translateY(-50%); }
-
-/* 1个角色: 居中 */
-.cluster-role-ring-item:only-child { top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.cluster-role-ring-item.selected .cluster-role-ring-avatar {
+  box-shadow: 0 0 0 3px var(--glass-bg), 0 0 16px 2px var(--role-color);
+}
 
 /* 角色环头像 */
 .cluster-role-ring-avatar {
@@ -8534,15 +8546,11 @@ body {
 
 /* ---------- 讨论进度指示 ---------- */
 .cluster-progress {
-  position: absolute;
-  bottom: var(--space-20);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
+  align-items: flex-end;
+  gap: var(--space-1);
+  flex-shrink: 0;
 }
 
 .cluster-progress-bar {
@@ -8730,6 +8738,7 @@ body {
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
   cursor: pointer;
+  min-height: 44px;
   transition: all var(--duration-normal) var(--ease-out);
 }
 
@@ -8811,6 +8820,11 @@ body {
   color: var(--accent-400);
   cursor: pointer;
   font-size: var(--text-sm);
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all var(--duration-normal) var(--ease-out);
 }
 
@@ -8842,12 +8856,15 @@ body {
 }
 
 .recommendation-chip {
-  padding: 2px var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--glass-bg-light);
   font-size: var(--text-xs);
   color: var(--text-secondary);
   cursor: pointer;
+  min-height: 44px;
   transition: all var(--duration-fast) var(--ease-out);
 }
 
@@ -8875,6 +8892,7 @@ body {
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
   cursor: pointer;
+  min-height: 44px;
   transition: all var(--duration-normal) var(--ease-out);
 }
 
@@ -8926,7 +8944,7 @@ body {
 
 .crsi-personality {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8939,11 +8957,16 @@ body {
 }
 
 .crsi-edit {
-  padding: 2px var(--space-1);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
   cursor: pointer;
+  min-width: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .crsi-edit:hover {
@@ -9048,7 +9071,93 @@ body {
   );
 }
 
-/* ---------- 准备阶段全屏设置 ---------- */
+/* ---------- 准备阶段居中设置卡片 ---------- */
+.cluster-setup-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 90vw);
+  padding: var(--space-6);
+  background: var(--solid-bg);
+  border: 1px solid var(--glass-border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: var(--glass-blur-heavy);
+  z-index: var(--z-setup);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: setupFadeIn var(--duration-normal) var(--ease-smooth) forwards;
+}
+
+@keyframes setupFadeIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.setup-fade-enter-active { transition: all var(--duration-normal) var(--ease-smooth); }
+.setup-fade-leave-active { transition: all var(--duration-fast) var(--ease-in); }
+.setup-fade-enter-from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+.setup-fade-leave-to { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+
+.cluster-setup-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-primary);
+}
+
+.cluster-setup-card-header i {
+  font-size: 24px;
+  color: var(--primary-400);
+}
+
+.cluster-setup-card-header h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0;
+}
+
+.cluster-setup-hint {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+  margin: 0 0 var(--space-3) 0;
+}
+
+.cluster-setup-start-btn {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--primary-500);
+  color: var(--text-on-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.cluster-setup-start-btn:hover:not(:disabled) {
+  background: var(--primary-600);
+  box-shadow: var(--shadow-glow-primary);
+}
+
+.cluster-setup-start-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.cluster-setup-start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ---------- 集群浮动对话栏 ---------- */
 .cluster-chat-bar {
   position: absolute;
@@ -9131,7 +9240,7 @@ body {
   padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--glass-bg-light);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
@@ -9449,7 +9558,7 @@ body {
 }
 
 .cluster-retry-btn {
-  padding: 2px var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-light);
@@ -9459,6 +9568,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-height: 44px;
   transition: all var(--duration-fast) var(--ease-out);
 }
 
@@ -9584,6 +9694,8 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-height: 44px;
+  min-width: 44px;
   transition: all var(--duration-normal) var(--ease-out);
 }
 
@@ -9670,7 +9782,7 @@ body {
 
 /* ---------- Matrix Trend Icons ---------- */
 .matrix-trend {
-  font-size: 8px;
+  font-size: var(--text-xs);
   margin-right: 2px;
 }
 
@@ -9684,14 +9796,18 @@ body {
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 768px) {
+  .cluster-top-bar {
+    padding: var(--space-3) var(--space-4);
+  }
+
   .cluster-role-ring {
-    width: 240px;
-    height: 240px;
+    gap: var(--space-3);
   }
 
   .cluster-role-ring-avatar {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
+    font-size: var(--text-md);
   }
 
   .cluster-role-ring-name {
@@ -9712,25 +9828,25 @@ body {
     width: 360px;
   }
 
-  .cluster-brand-mark {
-    bottom: var(--space-4);
-    left: var(--space-4);
-  }
-
   .cluster-brand-text h1 {
     font-size: var(--text-lg);
   }
 }
 
 @media (max-width: 600px) {
+  .cluster-top-bar {
+    padding: var(--space-2) var(--space-3);
+    gap: var(--space-2);
+  }
+
   .cluster-role-ring {
-    width: 180px;
-    height: 180px;
+    gap: var(--space-2);
   }
 
   .cluster-role-ring-avatar {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
+    font-size: var(--text-sm);
   }
 
   .cluster-panel {
@@ -9769,7 +9885,7 @@ body {
   background: var(--solid-bg);
   border-left: 1px solid var(--glass-border);
   backdrop-filter: var(--glass-blur-heavy);
-  z-index: 200;
+  z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
 }
@@ -9794,8 +9910,8 @@ body {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   color: var(--text-tertiary);
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
@@ -9850,7 +9966,7 @@ body {
   border-radius: var(--radius-sm);
 }
 .cluster-history-time {
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
   margin-top: var(--space-1);
 }
@@ -9866,7 +9982,7 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 300;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9901,8 +10017,8 @@ body {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   color: var(--text-tertiary);
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
@@ -9979,6 +10095,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  min-height: 44px;
   transition: all var(--duration-fast) var(--ease-out);
 }
 .cluster-detail-btn:hover {
@@ -9987,7 +10104,7 @@ body {
   border-color: var(--glass-border-light);
 }
 .cluster-detail-btn i {
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 /* 过渡动画 */
@@ -10005,7 +10122,7 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 300;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -10040,8 +10157,8 @@ body {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   color: var(--text-tertiary);
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
@@ -10115,6 +10232,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  min-height: 44px;
   transition: all var(--duration-fast) var(--ease-out);
 }
 .role-editor-btn:hover {
@@ -10162,7 +10280,7 @@ body {
   border-bottom: none;
 }
 .memory-type {
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--primary-300);
   margin-right: var(--space-2);
 }
@@ -10174,13 +10292,59 @@ body {
   background: oklch(0.72 0.20 25 / 0.15);
   border: 1px solid oklch(0.72 0.20 25 / 0.2);
   color: var(--danger-400);
-  padding: 2px var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: var(--text-xs);
   cursor: pointer;
   margin-left: var(--space-2);
+  min-height: 28px;
   transition: all var(--duration-fast) var(--ease-out);
 }
 .memory-clear-btn:hover {
   background: oklch(0.72 0.20 25 / 0.25);
+}
+
+/* ---------- 集群补充 Focus-Visible ---------- */
+.cluster-setup-start-btn:focus-visible,
+.cluster-topic-input:focus-visible,
+.cluster-input:focus-visible,
+.cluster-topic-mini-input:focus-visible,
+.cluster-retry-btn:focus-visible,
+.cluster-detail-btn:focus-visible,
+.cluster-role-ring-item:focus-visible,
+.recommendation-chip:focus-visible,
+.crsi-edit:focus-visible,
+.role-editor-btn:focus-visible,
+.role-editor-row input:focus-visible,
+.role-editor-row textarea:focus-visible,
+.memory-clear-btn:focus-visible {
+  outline: 3px solid var(--primary-400);
+  outline-offset: 2px;
+}
+
+/* ---------- 集群补充 Reduced Motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .cluster-setup-card {
+    animation: none;
+  }
+  .setup-fade-enter-active {
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+  .setup-fade-leave-active {
+    transition: opacity var(--duration-fast) var(--ease-in);
+  }
+  .setup-fade-enter-from,
+  .setup-fade-leave-to {
+    transform: translate(-50%, -50%);
+  }
+  .cluster-role-ring-item {
+    transition: none;
+  }
+  .cluster-role-ring-avatar {
+    transition: none;
+  }
+  .cluster-affection-float {
+    animation: none;
+    opacity: 0;
+  }
 }
