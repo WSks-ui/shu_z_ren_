@@ -2166,7 +2166,7 @@ createApp({
     const clusterSpeakingRoleId = ref('');  // 当前正在播报的角色ID
     const clusterAffectionMatrix = ref({});  // 好感度矩阵
     const clusterPanel = ref(null);  // 当前浮动面板: 'mode' | 'roles' | 'affection' | null
-    const clusterChatExpanded = ref(true);  // 对话栏默认展开
+    const clusterChatExpanded = ref(false);  // 对话栏默认展开
     const clusterChatMode = ref(localStorage.getItem('cluster-chat-mode') || 'bottom');  // 'bottom' | 'sidebar'
     const clusterChatHeight = ref(parseInt(localStorage.getItem('cluster-chat-height')) || 450);  // 底部模式高度
     const clusterAbortController = ref(null);  // SSE 中断控制器
@@ -2385,6 +2385,15 @@ createApp({
     // 角色条点击处理 — 打开角色面板
     const onRoleStripClick = (role) => {
       clusterPanel.value = clusterPanel.value === 'roles' ? null : 'roles';
+    };
+
+    // 角色环点击处理 — idle时toggle选中，讨论中时打开角色面板
+    const onRoleRingClick = (role) => {
+      if (clusterStatus.value === 'idle') {
+        toggleClusterRole(role.id);
+      } else {
+        clusterPanel.value = clusterPanel.value === 'roles' ? null : 'roles';
+      }
     };
 
     // 集群语音播报（使用火山引擎 TTS，不使用数字人SDK）
@@ -5216,6 +5225,7 @@ createApp({
       startClusterResize,
       exportCurrentSession,
       onRoleStripClick,
+      onRoleRingClick,
       stopClusterDiscussion,
       clusterAbortController,
       loadClusterRoles,
