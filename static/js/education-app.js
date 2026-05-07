@@ -2213,9 +2213,12 @@ createApp({
       clusterModes.find(m => m.id === clusterMode.value)
     );
 
+    const clusterMaxRoles = computed(() => currentModeInfo.value?.max_roles ?? 6);
+    const clusterMinRoles = computed(() => currentModeInfo.value?.min_roles ?? 2);
+
     const canStartDiscussion = computed(() =>
       clusterTopic.value.trim() &&
-      clusterSelectedRoles.value.length >= (currentModeInfo.value?.min_roles || 2) &&
+      clusterSelectedRoles.value.length >= clusterMinRoles.value &&
       clusterStatus.value === 'idle'
     );
 
@@ -2383,11 +2386,6 @@ createApp({
       clusterRoleCards.value = availableRoles.value.filter(
         r => clusterSelectedRoles.value.includes(r.id)
       );
-    };
-
-    // 角色条点击处理 — 打开角色面板
-    const onRoleStripClick = (role) => {
-      clusterPanel.value = clusterPanel.value === 'roles' ? null : 'roles';
     };
 
     // 角色环点击处理 — idle时toggle选中，讨论中时打开角色面板
@@ -2769,15 +2767,13 @@ createApp({
 
     // 切换角色选择
     const toggleClusterRole = (roleId) => {
-      const maxRoles = currentModeInfo.value?.max_roles || 6;
-      const minRoles = currentModeInfo.value?.min_roles || 2;
       const idx = clusterSelectedRoles.value.indexOf(roleId);
       if (idx >= 0) {
-        if (clusterSelectedRoles.value.length > minRoles) {
+        if (clusterSelectedRoles.value.length > clusterMinRoles.value) {
           clusterSelectedRoles.value.splice(idx, 1);
         }
       } else {
-        if (clusterSelectedRoles.value.length < maxRoles) {
+        if (clusterSelectedRoles.value.length < clusterMaxRoles.value) {
           clusterSelectedRoles.value.push(roleId);
         }
       }
@@ -3001,18 +2997,7 @@ createApp({
     };
 
     const applyRecommendation = (roleId) => {
-      const maxRoles = currentModeInfo.value?.max_roles || 6;
-      const minRoles = currentModeInfo.value?.min_roles || 2;
-      if (!clusterSelectedRoles.value.includes(roleId)) {
-        if (clusterSelectedRoles.value.length < maxRoles) {
-          clusterSelectedRoles.value.push(roleId);
-        }
-      } else {
-        if (clusterSelectedRoles.value.length > minRoles) {
-          clusterSelectedRoles.value = clusterSelectedRoles.value.filter(id => id !== roleId);
-        }
-      }
-      updateClusterRoleCards();
+      toggleClusterRole(roleId);
     };
 
     const sendQuickText = async () => {
@@ -5187,6 +5172,8 @@ createApp({
       clusterRoleCards,
       clusterModes,
       currentModeInfo,
+      clusterMaxRoles,
+      clusterMinRoles,
       canStartDiscussion,
       clusterSpeakingRoleId,
       clusterAffectionMatrix,
@@ -5231,7 +5218,6 @@ createApp({
       toggleClusterChatMode,
       startClusterResize,
       exportCurrentSession,
-      onRoleStripClick,
       onRoleRingClick,
       stopClusterDiscussion,
       clusterAbortController,
