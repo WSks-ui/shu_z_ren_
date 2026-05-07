@@ -113,54 +113,12 @@ class ClusterOrchestrator:
         for round_num in range(1, max_rounds + 1):
             self.current_round = round_num
 
-            # 先发送轮次开始事件，确保前端进度同步
+            # round_start 必须在角色发言前发出，否则前端进度条长时间无更新
             yield f"data: {json.dumps({'type': 'round_start', 'round': round_num}, ensure_ascii=False)}\n\n"
 
-            # 检查中断
             if self._interrupted:
-                user_msg = self._interrupt_message
-                self._interrupted = False
-                self._interrupt_message = ""
-
-                yield f"data: {json.dumps({'type': 'interrupt', 'message': user_msg}, ensure_ascii=False)}\n\n"
-
-                # 选择1-2个最相关角色回应用户插话
-                interrupt_responders = self._select_interrupt_responders(user_msg, max_count=2)
-
-                for role_id in interrupt_responders:
-                    if self._interrupted:
-                        # 新的插话到来，停止当前回应循环
-                        break
-
-                    role = self.roles.get(role_id)
-                    if not role:
-                        continue
-
-                    yield f"data: {json.dumps({'type': 'role_start', 'role_id': role_id, 'role_name': role['name'], 'round': round_num, 'color': role['color'], 'interrupt_response': True}, ensure_ascii=False)}\n\n"
-
-                    system_prompt = self._build_interrupt_response_prompt(role_id, user_msg, topic)
-                    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_msg}]
-
-                    full_response = ""
-                    async for chunk in self._call_llm_stream(messages):
-                        if chunk:
-                            full_response += chunk
-                            yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': role_id, 'content': chunk}, ensure_ascii=False)}\n\n"
-
-                    emotion = analyze_emotion(full_response)
-                    self.update_affection_from_response(role_id, full_response)
-                    yield f"data: {json.dumps({'type': 'role_end', 'role_id': role_id, 'emotion': emotion}, ensure_ascii=False)}\n\n"
-
-                    self.history.append({
-                        "role": role["name"],
-                        "role_id": role_id,
-                        "content": full_response,
-                        "round": round_num,
-                        "interrupt_response": True
-                    })
-
-                # 插话回应完毕，将用户消息持久化供后续轮次使用
-                self._pending_user_input = user_msg
+                async for event in self._handle_interrupt(topic, round_num):
+                    yield event
 
             round_responses = []
 
@@ -226,50 +184,17 @@ class ClusterOrchestrator:
         for round_num in range(1, max_rounds + 1):
             self.current_round = round_num
 
-            # 先发送轮次开始事件，确保前端进度同步
+            # round_start 必须在角色发言前发出，否则前端进度条长时间无更新
             yield f"data: {json.dumps({'type': 'round_start', 'round': round_num}, ensure_ascii=False)}\n\n"
 
             if self._interrupted:
-                user_msg = self._interrupt_message
-                self._interrupted = False
-                self._interrupt_message = ""
-
-                yield f"data: {json.dumps({'type': 'interrupt', 'message': user_msg}, ensure_ascii=False)}\n\n"
-
-                # 正反方依次回应用户插话
-                for role_id, stance in [(pro_role_id, "正方"), (con_role_id, "反方")]:
-                    if self._interrupted:
-                        break
-
-                    role = self.roles.get(role_id)
-                    if not role:
-                        continue
-
-                    yield f"data: {json.dumps({'type': 'role_start', 'role_id': role_id, 'role_name': role['name'], 'round': round_num, 'stance': stance, 'color': role['color'], 'interrupt_response': True}, ensure_ascii=False)}\n\n"
-
-                    system_prompt = self._build_interrupt_response_prompt(role_id, user_msg, topic)
-                    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_msg}]
-
-                    full_response = ""
-                    async for chunk in self._call_llm_stream(messages):
-                        if chunk:
-                            full_response += chunk
-                            yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': role_id, 'content': chunk}, ensure_ascii=False)}\n\n"
-
-                    emotion = analyze_emotion(full_response)
-                    self.update_affection_from_response(role_id, full_response)
-                    yield f"data: {json.dumps({'type': 'role_end', 'role_id': role_id, 'emotion': emotion}, ensure_ascii=False)}\n\n"
-
-                    self.history.append({
-                        "role": role["name"],
-                        "role_id": role_id,
-                        "stance": stance,
-                        "content": full_response,
-                        "round": round_num,
-                        "interrupt_response": True
-                    })
-
-                self._pending_user_input = user_msg
+                stance_map = {pro_role_id: "正方", con_role_id: "反方"}
+                async for event in self._handle_interrupt(
+                    topic, round_num,
+                    responder_ids=[pro_role_id, con_role_id],
+                    stance_map=stance_map
+                ):
+                    yield event
 
             round_responses = []
 
@@ -760,7 +685,6 @@ class ClusterOrchestrator:
             if continuation_context:
                 messages.append({"role": "user", "content": continuation_context})
 
-        # 优先使用插话持久化的用户消息
         effective_user_input = self._pending_user_input or user_input
         if effective_user_input:
             messages.append({"role": "user", "content": effective_user_input})
