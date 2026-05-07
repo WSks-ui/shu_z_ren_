@@ -559,33 +559,91 @@ class ClusterOrchestrator:
 
         return base_prompt + interrupt_instruction
 
+    async def _handle_interrupt(self, topic: str, round_num: int, responder_ids: List[str], stance_map: Dict[str, str] = None):
+        """处理用户插话：选择角色回应、更新好感度、持久化用户消息。
+
+        Args:
+            topic: 讨论话题
+            round_num: 当前轮次
+            responder_ids: 可选的回应角色ID列表（如辩论模式的正反方）
+            stance_map: 角色ID→立场映射（如 {"pro_id": "正方", "con_id": "反方"}）
+        """
+        user_msg = self._interrupt_message
+        self._interrupted = False
+        self._interrupt_message = ""
+
+        yield f"data: {json.dumps({'type': 'interrupt', 'message': user_msg}, ensure_ascii=False)}\n\n"
+
+        # 选择回应角色
+        if responder_ids is not None:
+            respond_roles = responder_ids
+        else:
+            respond_roles = self._select_interrupt_responders(user_msg, max_count=2)
+
+        for role_id in respond_roles:
+            if self._interrupted:
+                break
+
+            role = self.roles.get(role_id)
+            if not role:
+                continue
+
+            event_data = {
+                'type': 'role_start',
+                'role_id': role_id,
+                'role_name': role['name'],
+                'round': round_num,
+                'color': role['color'],
+                'interrupt_response': True
+            }
+            if stance_map and role_id in stance_map:
+                event_data['stance'] = stance_map[role_id]
+            yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
+
+            system_prompt = self._build_interrupt_response_prompt(role_id, user_msg, topic)
+            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_msg}]
+
+            full_response = ""
+            async for chunk in self._call_llm_stream(messages):
+                if chunk:
+                    full_response += chunk
+                    yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': role_id, 'content': chunk}, ensure_ascii=False)}\n\n"
+
+            emotion = analyze_emotion(full_response)
+            self.update_affection_from_response(role_id, full_response)
+            yield f"data: {json.dumps({'type': 'role_end', 'role_id': role_id, 'emotion': emotion}, ensure_ascii=False)}\n\n"
+
+            history_entry = {
+                "role": role["name"],
+                "role_id": role_id,
+                "content": full_response,
+                "round": round_num,
+                "interrupt_response": True
+            }
+            if stance_map and role_id in stance_map:
+                history_entry["stance"] = stance_map[role_id]
+            self.history.append(history_entry)
+
+        self._pending_user_input = user_msg
+
     def _select_interrupt_responders(self, user_msg: str, max_count: int = 2) -> List[str]:
         """根据插话内容选择最相关的角色回应，最多 max_count 个"""
-        import re
-
-        # 角色专业领域关键词映射
-        role_keywords = {
-            "innovator": ["创新", "新", "想法", "创意", "突破", "尝试", "如果"],
-            "skeptic": ["问题", "风险", "质疑", "验证", "证据", "真的", "确定", "可靠"],
-            "integrator": ["综合", "总结", "整合", "对比", "联系", "共同", "关系"],
-            "practitioner": ["实践", "落地", "执行", "怎么做", "步骤", "方案", "资源", "可行性"],
-        }
-
         scored = {}
         for role_id in self.role_ids:
             role = self.roles.get(role_id)
             if not role:
                 continue
             score = 0
-            # 基于内置关键词匹配
-            keywords = role_keywords.get(role_id, [])
-            for kw in keywords:
-                if kw in user_msg:
-                    score += 2
             # 基于角色专业领域匹配
             for expertise in role.get("expertise", []):
                 if expertise in user_msg:
                     score += 3
+            # 基于角色说话风格关键词匹配
+            speaking_style = role.get("speaking_style", "")
+            for phrase in speaking_style.split("，"):
+                phrase = phrase.strip().strip("'""'")
+                if phrase and phrase in user_msg:
+                    score += 2
             # 基于好感度：对用户更友好的角色更可能回应
             avg_affection = sum(
                 self.affection_matrix.get(role_id, {}).get(other_id, 50)
@@ -594,7 +652,6 @@ class ClusterOrchestrator:
             score += (avg_affection - 50) * 0.1
             scored[role_id] = score
 
-        # 按分数排序，取前 max_count 个
         sorted_roles = sorted(scored.keys(), key=lambda rid: scored[rid], reverse=True)
         return sorted_roles[:max_count]
 
@@ -703,8 +760,8 @@ class ClusterOrchestrator:
             if continuation_context:
                 messages.append({"role": "user", "content": continuation_context})
 
-        # 添加当前用户输入或话题（优先使用插话持久化的用户消息）
-        effective_user_input = getattr(self, '_pending_user_input', '') or user_input
+        # 优先使用插话持久化的用户消息
+        effective_user_input = self._pending_user_input or user_input
         if effective_user_input:
             messages.append({"role": "user", "content": effective_user_input})
         else:
