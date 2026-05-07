@@ -28,6 +28,7 @@ class ClusterOrchestrator:
         self.current_round = 0
         self._interrupted = False
         self._interrupt_message = ""
+        self._pending_user_input = ""
 
         # 好感度矩阵：{ "innovator": { "skeptic": 50, "integrator": 50 }, ... }
         # 值范围 0-100，50 为中性
@@ -112,6 +113,9 @@ class ClusterOrchestrator:
         for round_num in range(1, max_rounds + 1):
             self.current_round = round_num
 
+            # 先发送轮次开始事件，确保前端进度同步
+            yield f"data: {json.dumps({'type': 'round_start', 'round': round_num}, ensure_ascii=False)}\n\n"
+
             # 检查中断
             if self._interrupted:
                 user_msg = self._interrupt_message
@@ -120,8 +124,14 @@ class ClusterOrchestrator:
 
                 yield f"data: {json.dumps({'type': 'interrupt', 'message': user_msg}, ensure_ascii=False)}\n\n"
 
-                # 所有角色依次回应用户插话
-                for role_id in self.role_ids:
+                # 选择1-2个最相关角色回应用户插话
+                interrupt_responders = self._select_interrupt_responders(user_msg, max_count=2)
+
+                for role_id in interrupt_responders:
+                    if self._interrupted:
+                        # 新的插话到来，停止当前回应循环
+                        break
+
                     role = self.roles.get(role_id)
                     if not role:
                         continue
@@ -138,6 +148,7 @@ class ClusterOrchestrator:
                             yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': role_id, 'content': chunk}, ensure_ascii=False)}\n\n"
 
                     emotion = analyze_emotion(full_response)
+                    self.update_affection_from_response(role_id, full_response)
                     yield f"data: {json.dumps({'type': 'role_end', 'role_id': role_id, 'emotion': emotion}, ensure_ascii=False)}\n\n"
 
                     self.history.append({
@@ -148,10 +159,8 @@ class ClusterOrchestrator:
                         "interrupt_response": True
                     })
 
-                # 插话回应完毕，将用户消息作为后续讨论的 user_input
-                user_input = user_msg
-
-            yield f"data: {json.dumps({'type': 'round_start', 'round': round_num}, ensure_ascii=False)}\n\n"
+                # 插话回应完毕，将用户消息持久化供后续轮次使用
+                self._pending_user_input = user_msg
 
             round_responses = []
 
@@ -217,6 +226,9 @@ class ClusterOrchestrator:
         for round_num in range(1, max_rounds + 1):
             self.current_round = round_num
 
+            # 先发送轮次开始事件，确保前端进度同步
+            yield f"data: {json.dumps({'type': 'round_start', 'round': round_num}, ensure_ascii=False)}\n\n"
+
             if self._interrupted:
                 user_msg = self._interrupt_message
                 self._interrupted = False
@@ -226,6 +238,9 @@ class ClusterOrchestrator:
 
                 # 正反方依次回应用户插话
                 for role_id, stance in [(pro_role_id, "正方"), (con_role_id, "反方")]:
+                    if self._interrupted:
+                        break
+
                     role = self.roles.get(role_id)
                     if not role:
                         continue
@@ -242,6 +257,7 @@ class ClusterOrchestrator:
                             yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': role_id, 'content': chunk}, ensure_ascii=False)}\n\n"
 
                     emotion = analyze_emotion(full_response)
+                    self.update_affection_from_response(role_id, full_response)
                     yield f"data: {json.dumps({'type': 'role_end', 'role_id': role_id, 'emotion': emotion}, ensure_ascii=False)}\n\n"
 
                     self.history.append({
@@ -253,9 +269,7 @@ class ClusterOrchestrator:
                         "interrupt_response": True
                     })
 
-                user_input = user_msg
-
-            yield f"data: {json.dumps({'type': 'round_start', 'round': round_num}, ensure_ascii=False)}\n\n"
+                self._pending_user_input = user_msg
 
             round_responses = []
 
@@ -545,6 +559,45 @@ class ClusterOrchestrator:
 
         return base_prompt + interrupt_instruction
 
+    def _select_interrupt_responders(self, user_msg: str, max_count: int = 2) -> List[str]:
+        """根据插话内容选择最相关的角色回应，最多 max_count 个"""
+        import re
+
+        # 角色专业领域关键词映射
+        role_keywords = {
+            "innovator": ["创新", "新", "想法", "创意", "突破", "尝试", "如果"],
+            "skeptic": ["问题", "风险", "质疑", "验证", "证据", "真的", "确定", "可靠"],
+            "integrator": ["综合", "总结", "整合", "对比", "联系", "共同", "关系"],
+            "practitioner": ["实践", "落地", "执行", "怎么做", "步骤", "方案", "资源", "可行性"],
+        }
+
+        scored = {}
+        for role_id in self.role_ids:
+            role = self.roles.get(role_id)
+            if not role:
+                continue
+            score = 0
+            # 基于内置关键词匹配
+            keywords = role_keywords.get(role_id, [])
+            for kw in keywords:
+                if kw in user_msg:
+                    score += 2
+            # 基于角色专业领域匹配
+            for expertise in role.get("expertise", []):
+                if expertise in user_msg:
+                    score += 3
+            # 基于好感度：对用户更友好的角色更可能回应
+            avg_affection = sum(
+                self.affection_matrix.get(role_id, {}).get(other_id, 50)
+                for other_id in self.role_ids if other_id != role_id
+            ) / max(1, len(self.role_ids) - 1)
+            score += (avg_affection - 50) * 0.1
+            scored[role_id] = score
+
+        # 按分数排序，取前 max_count 个
+        sorted_roles = sorted(scored.keys(), key=lambda rid: scored[rid], reverse=True)
+        return sorted_roles[:max_count]
+
     # ==================== 好感度矩阵 ====================
 
     def _init_affection_matrix(self):
@@ -650,16 +703,17 @@ class ClusterOrchestrator:
             if continuation_context:
                 messages.append({"role": "user", "content": continuation_context})
 
-        # 添加当前用户输入或话题
-        if user_input:
-            messages.append({"role": "user", "content": user_input})
+        # 添加当前用户输入或话题（优先使用插话持久化的用户消息）
+        effective_user_input = getattr(self, '_pending_user_input', '') or user_input
+        if effective_user_input:
+            messages.append({"role": "user", "content": effective_user_input})
         else:
             messages.append({"role": "user", "content": f"请就以下话题展开讨论：{topic}"})
 
         return messages
 
     def _build_continuation_context(self, topic: str) -> str:
-        """构建续聊上下文，将之前的讨论记录格式化"""
+        """构建续聊上下文，最近1轮完整保留，更早轮次截断摘要"""
         if not self.history:
             return ""
 
@@ -673,14 +727,20 @@ class ClusterOrchestrator:
                 rounds[round_num] = []
             rounds[round_num].append(msg)
 
-        for round_num in sorted(rounds.keys()):
+        sorted_rounds = sorted(rounds.keys())
+        latest_round = sorted_rounds[-1] if sorted_rounds else 1
+
+        for round_num in sorted_rounds:
             lines.append(f"### 第{round_num}轮")
+            # 最近1轮完整保留，更早轮次截断到80字
+            is_latest = (round_num == latest_round)
+            truncate_len = 150 if is_latest else 80
             for msg in rounds[round_num]:
                 role_name = msg.get("role", msg.get("role_id", "未知"))
                 content = msg.get("content", "")
                 stance = msg.get("stance", "")
                 prefix = f"[{stance}方] " if stance else ""
-                lines.append(f"- {prefix}{role_name}：{content[:150]}{'...' if len(content) > 150 else ''}")
+                lines.append(f"- {prefix}{role_name}：{content[:truncate_len]}{'...' if len(content) > truncate_len else ''}")
             lines.append("")
 
         return "\n".join(lines)
