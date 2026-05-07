@@ -2243,7 +2243,7 @@ createApp({
       clusterPanel.value = null;
       clusterChatExpanded.value = false;
       clusterCurrentRound.value = 0;
-      clusterTotalRounds.value = 3;
+      clusterTotalRounds.value = clusterModes.find(m => m.id === clusterMode.value)?.max_rounds || 3;
       clusterCurrentSpeaker.value = '';
       clusterInterruptPending.value = false;
       clusterThinkingRole.value = null;
@@ -2462,7 +2462,7 @@ createApp({
       clusterMessages.value = [];
       clusterSessionId.value = 'cluster-' + Date.now();
       clusterCurrentRound.value = 0;
-      clusterTotalRounds.value = 3;
+      clusterTotalRounds.value = clusterModes.find(m => m.id === clusterMode.value)?.max_rounds || 3;
       clusterCurrentSpeaker.value = '';
       clusterThinkingRole.value = null;
 
@@ -2481,7 +2481,7 @@ createApp({
       const abortController = new AbortController();
       clusterAbortController.value = abortController;
 
-      // 2分钟超时保护
+      // 5分钟超时保护（3轮×4角色+总结+记忆提取需要较长时间）
       const timeoutId = setTimeout(() => {
         if (clusterStatus.value === 'discussing') {
           abortController.abort();
@@ -2491,7 +2491,7 @@ createApp({
           clusterMessages.value.push({
             id: Date.now(),
             type: 'system',
-            content: '讨论超时（2分钟），已自动结束'
+            content: '讨论超时（5分钟），已自动结束'
           });
         }
       }, 120000);
@@ -2503,7 +2503,7 @@ createApp({
           topic: clusterTopic.value,
           mode: clusterMode.value,
           roles: clusterSelectedRoles.value,
-          max_rounds: 3,
+          max_rounds: clusterTotalRounds.value,
           session_id: clusterSessionId.value,
         };
         if (continueFrom) {
@@ -2598,7 +2598,7 @@ createApp({
                 clusterSpeak(currentRoleId, currentContent);
                 currentRoleId = '';
                 currentContent = '';
-                clusterSpeakingRoleId.value = '';
+                // 不清空 clusterSpeakingRoleId，让下一个 role_start 覆盖，避免角色环闪烁
                 await nextTick();
                 if (clusterMessagesRef.value) {
                   clusterMessagesRef.value.scrollTop = clusterMessagesRef.value.scrollHeight;
