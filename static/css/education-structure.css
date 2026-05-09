@@ -8477,6 +8477,10 @@ body {
   cursor: pointer;
 }
 
+.cluster-role-ring-item:active {
+  transform: scale(0.92);
+}
+
 .cluster-role-ring-item.unselected {
   opacity: 0.4;
   filter: grayscale(0.6);
@@ -8490,6 +8494,14 @@ body {
 
 .cluster-role-ring-item.selected .cluster-role-ring-avatar {
   box-shadow: 0 0 0 3px var(--glass-bg), 0 0 16px 2px var(--role-color);
+  animation: selectBounce var(--duration-slow) var(--ease-spring) forwards;
+}
+
+@keyframes selectBounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.15); }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); }
 }
 
 /* 角色环头像 */
@@ -8517,8 +8529,7 @@ body {
 .cluster-role-ring-item.speaking .cluster-role-ring-avatar {
   border-color: var(--primary-400);
   box-shadow: 0 0 0 4px var(--primary-500), var(--shadow-glow-primary);
-  transform: scale(1.12);
-  animation: rolePulse 1s ease-in-out infinite;
+  animation: rolePulse 1s ease-in-out infinite, speakingRing 1.5s ease-in-out infinite;
 }
 
 .cluster-role-ring-name {
@@ -8542,8 +8553,8 @@ body {
 }
 
 @keyframes speakingRing {
-  0%, 100% { transform: scale(1); opacity: 0.6; }
-  50% { transform: scale(1.15); opacity: 1; }
+  0%, 100% { transform: scale(1.08); }
+  50% { transform: scale(1.14); }
 }
 
 /* ---------- 讨论进度指示 ---------- */
@@ -8553,6 +8564,12 @@ body {
   align-items: flex-end;
   gap: var(--space-1);
   flex-shrink: 0;
+  animation: progressFadeIn var(--duration-normal) var(--ease-smooth) forwards;
+}
+
+@keyframes progressFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .cluster-progress-bar {
@@ -8873,6 +8890,11 @@ body {
 .recommendation-chip:hover {
   background: var(--primary-500);
   color: var(--text-on-primary);
+  transform: scale(1.05);
+}
+
+.recommendation-chip:active {
+  transform: scale(0.95);
 }
 
 /* 角色选择列表 */
@@ -9226,6 +9248,12 @@ body {
   border: 1px solid var(--glass-border-light);
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-smooth);
+  animation: chatBarSlideUp var(--duration-slow) var(--ease-smooth) forwards;
+}
+
+@keyframes chatBarSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .cluster-chat-collapsed:hover {
@@ -9288,6 +9316,12 @@ body {
   height: 100%;
   opacity: 1;
   transition: opacity var(--duration-normal) var(--ease-smooth);
+  animation: chatExpandIn var(--duration-slow) var(--ease-smooth) forwards;
+}
+
+@keyframes chatExpandIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ==================== 底部模式 - 动态高度 ==================== */
@@ -9494,6 +9528,14 @@ body {
   background: var(--primary-500);
   border-color: transparent;
   color: var(--text-on-primary);
+  animation: chipSelectBounce var(--duration-normal) var(--ease-spring) forwards;
+}
+
+@keyframes chipSelectBounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.1); }
+  70% { transform: scale(0.97); }
+  100% { transform: scale(1); }
 }
 
 /* 消息列表 */
@@ -9981,6 +10023,11 @@ body {
 .cluster-history-item:hover {
   background: var(--glass-bg-light);
   border-color: var(--glass-border-light);
+  transform: translateY(-1px);
+}
+
+.cluster-history-item:active {
+  transform: scale(0.97);
 }
 .cluster-history-topic {
   color: var(--text-primary);
@@ -10382,4 +10429,57 @@ body {
     animation: none;
     opacity: 0;
   }
+  .cluster-role-ring-item,
+  .cluster-history-item,
+  .cluster-role-chip,
+  .recommendation-chip {
+    animation: none;
+  }
+  .cluster-chat-collapsed,
+  .cluster-chat-expanded,
+  .cluster-detail-modal,
+  .cluster-detail-modal .modal-content,
+  .cluster-progress {
+    animation: none;
+  }
+  .cluster-role-ring-item.speaking .cluster-role-ring-avatar,
+  .cluster-role-ring-item.selected .cluster-role-ring-avatar,
+  .cluster-role-chip.selected {
+    animation: none;
+  }
+}
+
+/* ---------- 集群 Stagger 入场动画 ---------- */
+@keyframes clusterStaggerIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes clusterChipIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* 角色环 stagger 入场 */
+.cluster-role-ring-item {
+  animation: clusterStaggerIn var(--duration-normal) var(--ease-out) backwards;
+  animation-delay: calc(var(--stagger-i, 0) * 60ms);
+}
+
+/* 历史条目 stagger 入场 */
+.cluster-history-item {
+  animation: clusterStaggerIn var(--duration-normal) var(--ease-out) backwards;
+  animation-delay: calc(var(--stagger-i, 0) * 40ms);
+}
+
+/* 角色 chip stagger 入场 */
+.cluster-role-chip {
+  animation: clusterChipIn var(--duration-fast) var(--ease-spring) backwards;
+  animation-delay: calc(var(--stagger-i, 0) * 30ms);
+}
+
+/* 推荐 chip stagger 入场 */
+.recommendation-chip {
+  animation: clusterChipIn var(--duration-fast) var(--ease-spring) backwards;
+  animation-delay: calc(var(--stagger-i, 0) * 30ms);
 }

@@ -687,8 +687,9 @@
             </div>
           </div>
           <div class="cluster-role-ring">
-            <div v-for="role in availableRoles" :key="role.id"
+            <div v-for="(role, ri) in availableRoles" :key="role.id"
               class="cluster-role-ring-item"
+              :style="{ '--stagger-i': ri, '--role-color': role.color }"
               :class="{
                 speaking: clusterSpeakingRoleId === role.id,
                 selected: clusterSelectedRoles.includes(role.id),
@@ -697,7 +698,7 @@
               :data-role-id="role.id"
               @click="onRoleRingClick(role)"
               :title="role.personality">
-              <div class="cluster-role-ring-avatar" :style="{ '--role-color': role.color }">
+              <div class="cluster-role-ring-avatar">
                 <i :class="role.icon"></i>
               </div>
               <span class="cluster-role-ring-name">{{ role.name }}</span>
@@ -784,7 +785,7 @@
                 </div>
                 <div v-if="roleRecommendation" class="cluster-recommendation">
                   <span class="recommendation-label"><i class="fa-solid fa-lightbulb"></i> 推荐</span>
-                  <span v-for="r in roleRecommendation.recommended" :key="r.id" class="recommendation-chip" @click="applyRecommendation(r.id)" @keydown.enter="applyRecommendation(r.id)" @keydown.space.prevent="applyRecommendation(r.id)" role="button" tabindex="0" :aria-label="'选择推荐角色 ' + r.name">
+                  <span v-for="(r, ri) in roleRecommendation.recommended" :key="r.id" class="recommendation-chip" :style="{ '--stagger-i': ri }" @click="applyRecommendation(r.id)" @keydown.enter="applyRecommendation(r.id)" @keydown.space.prevent="applyRecommendation(r.id)" role="button" tabindex="0" :aria-label="'选择推荐角色 ' + r.name">
                     {{ r.name }}
                   </span>
                 </div>
@@ -912,8 +913,9 @@
               :placeholder="clusterMessages.length > 0 ? '输入新话题...' : '输入讨论话题...'"
               :aria-label="clusterMessages.length > 0 ? '新讨论话题' : '讨论话题'" />
             <div class="cluster-setup-roles">
-              <button v-for="role in availableRoles" :key="role.id"
+              <button v-for="(role, ci) in availableRoles" :key="role.id"
                 class="cluster-role-chip" :class="{ selected: clusterSelectedRoles.includes(role.id) }"
+                :style="{ '--stagger-i': ci }"
                 @click="toggleClusterRole(role.id)">
                 <i :class="role.icon"></i> {{ role.name }}
               </button>
@@ -1001,8 +1003,8 @@
           <div v-else-if="clusterHistory.length === 0" class="cluster-history-empty">
             暂无讨论记录
           </div>
-          <div v-else v-for="session in clusterHistory" :key="session.id"
-            class="cluster-history-item" @click="viewClusterHistoryDetail(session.id)">
+          <div v-else v-for="(session, si) in clusterHistory" :key="session.id"
+            class="cluster-history-item" :style="{ '--stagger-i': si }" @click="viewClusterHistoryDetail(session.id)">
             <div class="cluster-history-topic">{{ session.topic }}</div>
             <div class="cluster-history-meta">
               <span class="cluster-history-mode">{{ clusterModes.find(m => m.id === session.mode)?.name || session.mode }}</span>
