@@ -2,7 +2,7 @@
 
 ## 概述
 
-研伴是基于 super-agent-party 开源项目开发的**智能教育数字人 Web 应用**，旨在为研究者和学生提供全方位的学术研究辅助。系统集成了 3D 数字人形象、五大专业教育技能、成长激励系统、人机协作记录等核心功能，实现有温度的智能伴学体验。
+研伴是基于 super-agent-party 开源项目开发的**智能教育数字人 Web 应用**，旨在为研究者和学生提供全方位的学术研究辅助。系统集成了 3D 数字人形象、五大专业教育技能、三大辅助技能、成长激励系统、人机协作记录等核心功能，实现有温度的智能伴学体验。
 
 **项目用途**：普通高等教育组竞赛演示
 
@@ -27,6 +27,7 @@
 - **认证方式**：MD5 签名（`MD5(url + method + json_data + app_secret + timestamp)`）
 - 支持连接/断开控制
 - 支持快速文本播报
+- 支持 VRM 模型桥接（通过 `vrm_bridge.py`）
 
 #### 数字人形象配置
 
@@ -231,6 +232,53 @@
 
 **可用工具**：query_knowledge_base、time_async
 
+### 3. 三大辅助技能
+
+除五大专业教育技能外，系统还提供三个辅助技能：
+
+| 技能 | 功能 | 说明 |
+|------|------|------|
+| **Office CLI** | Office 文档处理 | 支持 Word/Excel/PPT 文档的读取、编辑、创建，采用三层操作策略（L1 读取 → L2 DOM 编辑 → L3 原始 XML） |
+| **技能发现** | 搜索和安装技能 | 通过 `npx skills find` 搜索社区技能，`npx skills add` 安装技能 |
+| **技能创建器** | 创建自定义技能 | 6 步创建流程：理解需求 → 规划内容 → 初始化 → 编辑实现 → 打包 → 迭代改进 |
+
+#### 3.1 Office CLI
+
+**定位**：Office 文档智能处理工具
+
+**三层操作策略**：
+
+| 层级 | 方式 | 适用场景 |
+|------|------|----------|
+| L1 | 读取模式 | 查看文档内容、提取信息 |
+| L2 | DOM 编辑 | 修改文本、调整格式、增删元素 |
+| L3 | 原始 XML | 精确控制底层结构 |
+
+**支持子命令**：create、view、get、query、validate、set、add、move、swap、remove、batch、raw、raw-set、add-part、open、close
+
+#### 3.2 技能发现
+
+**定位**：搜索和安装社区技能
+
+**4 步流程**：理解用户需求 → 搜索技能 → 展示选项 → 提供安装
+
+**支持命令**：`npx skills find`、`npx skills add`、`npx skills check`、`npx skills update`、`npx skills init`
+
+#### 3.3 技能创建器
+
+**定位**：创建自定义技能
+
+**6 步创建流程**：
+
+| 步骤 | 内容 |
+|------|------|
+| 1 | 通过具体示例理解技能需求 |
+| 2 | 规划可复用的技能内容（scripts、references、assets） |
+| 3 | 初始化技能（运行 `init_skill.py`） |
+| 4 | 编辑技能（实现资源并编写 SKILL.md） |
+| 5 | 打包技能（运行 `package_skill.py`） |
+| 6 | 基于实际使用迭代改进 |
+
 #### 技能通用特性
 
 - 支持图片识别（公式、文献、笔记、图表等）
@@ -241,7 +289,7 @@
 - 每个技能独立追踪使用次数
 - 区分用户手动跳转和 AI 触发跳转，AI 向前推进阶段时触发经验奖励
 
-### 3. 成长与成就系统
+### 4. 成长与成就系统
 
 #### 经验与等级
 
@@ -277,7 +325,7 @@
 - 解锁时自动发放经验奖励
 - 成就进度实时追踪
 
-### 4. 人机协作记录
+### 5. 人机协作记录
 
 - **协作类型**：论文协作、实验协作、综述协作、辅导协作
 - **贡献追踪**：分别记录 AI 和用户的贡献内容
@@ -296,23 +344,54 @@
 | **技能使用趋势** | 各技能使用次数条形图、最常用技能标注 |
 | **智能学习建议** | 优势领域、改进建议、下一步目标、学习技巧 |
 
-### 5. 情绪映射引擎
+### 6. 好感度与情绪系统
 
-- **情绪提取**：从 AI 回复中解析 `<user=用户名 属性1=数值 属性2=数值>` 格式的情绪标签
+系统内置好感度与情绪映射引擎，数字人会根据交互历史展现不同的情绪状态和回复语气：
+
+#### 好感度等级
+
+| 等级 | 范围 | 表现 |
+|------|------|------|
+| 冷淡 | 0-19 | 简短回复，无主动互动 |
+| 疏远 | 20-39 | 礼貌但保持距离 |
+| 普通 | 40-59 | 正常交流，偶有互动 |
+| 友好 | 60-79 | 主动关心，积极建议 |
+| 亲密 | 80-100 | 深度互动，情感共鸣 |
+
+- **好感度范围**：0-100，初始值 50
+- **自然衰减**：每自然日衰减 0.1 点
+- **交互增减**：不同交互类型影响不同（如 chat +0.5, praise +2.0, long_absence -5.0）
+
+#### 情绪状态
+
+| 情绪 | 触发场景 |
+|------|----------|
+| neutral（中性） | 默认状态 |
+| happy（开心） | 受到表扬、完成任务 |
+| sad（难过） | 长时间未互动 |
+| angry（生气） | 负面交互 |
+| surprised（惊讶） | 收到礼物 |
+| shy（害羞） | 收到礼物 |
+| worried（担心） | 学习进度落后 |
+| excited（兴奋） | 取得突破性进展 |
+
+#### 情绪映射特性
+
+- **属性提取**：从 AI 回复中解析 `<user=用户名 属性1=数值 属性2=数值>` 格式的情绪标签
 - **属性格式**：支持中英文属性名（如 `love=12`、`familiarity=15`），支持负数值
 - **表情联动**：数字人根据情绪状态展现不同表情
 - **历史记录**：记录对话过程中的情绪变化
 - **玻璃态 UI**：实时显示当前情绪状态
-- **数据持久化**：情绪数据存储在 `affection/affection_data.json`
+- **数据持久化**：情绪数据存储在 `affection_records` 表中
 
-### 6. 数学公式支持
+### 7. 数学公式支持
 
 #### 双引擎识别
 
-| 引擎 | 说明 | 置信度 |
-|------|------|--------|
-| **SimpleTex**（主方案） | 标准/加速两种模式，API Key 从环境变量 `SIMPLETEX_API_KEY` 获取 | 原始置信度 |
-| **多模态 LLM**（回退方案） | 使用 GPT-4o 等多模态模型识别，SimpleTex 失败时自动切换 | 固定 0.85 |
+| 引擎 | 说明 | 适用场景 |
+|------|------|----------|
+| **PaddleOCR**（主方案） | 使用 PaddleOCR 进行图片文字识别，通过正则匹配和 LLM 后处理提取数学公式 | 通用场景，本地运行 |
+| **Mathpix**（备选方案） | 调用 Mathpix API 直接获取 LaTeX 格式公式 | 需要高精度识别时 |
 
 **识别返回格式**：
 ```json
@@ -321,22 +400,24 @@
   "confidence": 0.95,
   "success": true,
   "error": null,
-  "method": "simpletex"
+  "method": "paddle"
 }
 ```
 
 - **KaTeX 渲染**：实时渲染 LaTeX 数学公式
 - **分步解答**：每一步标注数学依据
 - **多格式支持**：支持代数、微积分、线性代数、概率统计等
+- **批量识别**：支持批量处理多张公式图片
+- **LLM 后处理**：将 OCR 原始文本发送给 LLM 进行公式结构修复
 
-### 7. 智能笔记系统
+### 8. 智能笔记系统
 
 - **AI 生成笔记**：对话中输入 `[生成笔记]` 自动从对话生成笔记
 - **Markdown 编辑**：支持富文本编辑和预览
 - **Word 导出**：支持导出为 Word 文档
 - **笔记管理**：按技能分类、搜索、删除
 
-### 8. 番茄钟时间管理
+### 9. 番茄钟时间管理
 
 - **AI 触发**：对话中输入 `[设置番茄:25分钟][开始番茄]` 自动启动
 - **计时功能**：工作时间/休息时间自动切换
@@ -344,7 +425,7 @@
 - **背景音乐**：可选专注音乐（26 首 MP3）
 - **统计追踪**：完成番茄钟计入成长统计
 
-### 9. 教育知识库
+### 10. 教育知识库
 
 基于 RAG 技术的向量化知识库，支持增量更新：
 
@@ -357,22 +438,31 @@
 
 **知识库技术特性**：
 - 文件哈希去重，支持增量更新检测
-- 向量化语义搜索（默认 k=3）
+- 向量化语义搜索（默认 k=5，可配置）
+- 嵌入模型：`paraphrase-multilingual-MiniLM-L12-v2`
+- 向量维度：768（配置可调）
+- 文本分块：chunk_size=512, chunk_overlap=64
 - 上下文关联增强（最大长度 2000 字符）
 - 预加载 + 懒加载双模式
+- 预置学科知识库：数学、物理、化学、生物、语文
 
-### 10. 学术 API 集成
+### 11. 学术工具集成
 
-| API | 工具名 | 用途 | 参数 |
-|-----|--------|------|------|
-| Semantic Scholar | `search_semantic_scholar` | 论文搜索 | query, max_results(1-100), year_range, fields |
-| Semantic Scholar | `get_paper_citations` | 引用查询 | paper_id(支持DOI/ArXiv/SS ID), max_results |
-| CrossRef | `search_crossref` | 文献搜索 | query, max_results(1-100), filter_type, sort |
-| CrossRef | `get_doi_metadata` | DOI 元数据 | doi |
-| OpenAlex | `search_openalex` | 开放学图谱 | query, max_results(1-200), filter_query |
-| 趋势分析 | `analyze_research_trends` | 研究趋势 | topic, years(默认5) |
+系统提供 11 个学术工具，覆盖从文献检索到论文格式化的完整学术工作流：
 
-**趋势分析返回**：topic、time_range、total_papers、average_growth_rate、trend（上升/下降/平稳）、yearly_data
+| 工具名 | 用途 | 输入参数 |
+|--------|------|----------|
+| `web_search` | 网络搜索 | query, max_results |
+| `paper_search` | 论文搜索 | query, database(arxiv/semantic_scholar), max_results |
+| `citation_format` | 引用格式化 | paper_info, style(apa/mla/chicago/gb7714) |
+| `reference_check` | 参考文献检查 | references_text |
+| `plagiarism_check` | 查重分析 | text, threshold |
+| `abstract_generate` | 摘要生成 | paper_content, language |
+| `outline_generate` | 大纲生成 | topic, paper_type, requirements |
+| `data_analyze` | 数据分析 | data, analysis_type, options |
+| `chart_generate` | 图表生成 | data, chart_type, options |
+| `format_check` | 格式检查 | document, format_requirements |
+| `translate` | 学术翻译 | text, source_lang, target_lang |
 
 ---
 
@@ -380,10 +470,15 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      前端 (Vue.js 3 + Element Plus)          │
+│                      前端 (静态 HTML + JS)                    │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐   │
 │  │ 3D 数字人    │  │ 对话界面     │  │ 教育功能面板      │   │
 │  │ 魔珐星云SDK  │  │ Markdown     │  │ 成长/协作/情绪    │   │
+│  └──────────────┘  └──────────────┘  └───────────────────┘   │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐   │
+│  │ app.js       │  │ digital-     │  │ knowledge.js      │   │
+│  │ 主应用逻辑   │  │ human.js     │  │ 知识库管理        │   │
+│  │              │  │ 数字人渲染   │  │                   │   │
 │  └──────────────┘  └──────────────┘  └───────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                               ↓ HTTP / WebSocket / SSE
@@ -391,17 +486,22 @@
 │                     服务层 (Python FastAPI)                   │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐   │
 │  │ education_api│  │ xingyun_     │  │ edu_knowledge_base│   │
-│  │ 成长/协作    │  │ digital_human│  │ RAG 向量检索      │   │
-│  │ 成就/笔记    │  │ MD5认证      │  │ 增量更新/哈希去重  │   │
+│  │ 课程/会话    │  │ digital_human│  │ RAG 向量检索      │   │
+│  │ 学习路径     │  │ MD5认证      │  │ 增量更新/哈希去重  │   │
 │  └──────────────┘  └──────────────┘  └───────────────────┘   │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐   │
 │  │ affection_   │  │ academic_    │  │ edu_storage       │   │
-│  │ system 情绪  │  │ tools 学术API│  │ 内存缓存+SQLite   │   │
-│  │ 属性提取     │  │ 6个工具函数  │  │ 5秒批量写入       │   │
+│  │ system+api   │  │ tools 学术API│  │ 内存缓存+SQLite   │   │
+│  │ 好感度/情绪  │  │ 11个工具函数 │  │ 7张表             │   │
+│  └──────────────┘  └──────────────┘  └───────────────────┘   │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐   │
+│  │ formula_ocr  │  │ tts_service  │  │ skill_engine +    │   │
+│  │ PaddleOCR +  │  │ EdgeTTS      │  │ skill_manager     │   │
+│  │ Mathpix      │  │ 语音合成     │  │ 技能引擎/管理     │   │
 │  └──────────────┘  └──────────────┘  └───────────────────┘   │
 │  ┌──────────────┐  ┌──────────────┐                           │
-│  │ formula_ocr  │  │ tts_*        │                           │
-│  │ 双引擎回退   │  │ 语音合成     │                           │
+│  │ vrm_bridge   │  │ weather_tool │                           │
+│  │ VRM模型桥接  │  │ 天气查询     │                           │
 │  └──────────────┘  └──────────────┘                           │
 └─────────────────────────────────────────────────────────────┘
                               ↓
@@ -409,7 +509,7 @@
 │                     外部服务                                   │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐   │
 │  │ 魔珐星云     │  │ 学术 API      │  │ 公式识别          │   │
-│  │ nebula-agent │  │ Scholar/Cross │  │ SimpleTex/GPT-4o  │   │
+│  │ nebula-agent │  │ Scholar/Cross │  │ PaddleOCR/Mathpix │   │
 │  └──────────────┘  └──────────────┘  └───────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -420,32 +520,25 @@
 
 ```
 shu_z_ren_/
-├── server.py                          # FastAPI 服务入口 (10820行, 84个API端点)
+├── server.py                          # FastAPI 服务入口
 ├── main.js                            # Electron 桌面应用主进程
 ├── start.js                           # 启动脚本
 │
-├── py/                                # Python 后端核心模块 (70个文件)
-│   ├── education_api.py               # 教育系统主API (5063行, 56个端点)
+├── py/                                # Python 后端核心模块 (14个文件)
+│   ├── education_api.py               # 教育系统API (课程/会话/学习路径/知识图谱)
+│   ├── edu_storage.py                 # 数据存储层（内存缓存+SQLite, 7张表）
 │   ├── xingyun_digital_human.py       # 魔珐星云数字人客户端 (MD5认证)
 │   ├── edu_knowledge_base.py          # 教育知识库（RAG, 增量更新）
-│   ├── edu_storage.py                 # 数据存储层（内存缓存+SQLite, 5秒批量写入）
-│   ├── affection_system.py            # 情绪映射系统（属性标签提取）
-│   ├── affection_api.py               # 情绪API接口
-│   ├── academic_tools.py              # 学术 API 工具（6个工具函数）
-│   ├── formula_ocr.py                 # 公式OCR识别（SimpleTex+多模态LLM双引擎）
-│   ├── tts_tool.py                    # TTS语音合成
-│   ├── tts_streaming.py               # 流式TTS
-│   ├── tts_policy.py                  # TTS策略
-│   ├── agent.py / sub_agent.py        # Agent核心逻辑
-│   ├── skills.py                      # 技能加载
-│   ├── behavior_engine.py             # 行为引擎
-│   ├── llm_tool.py                    # LLM工具
-│   ├── mcp_clients.py                 # MCP协议客户端
-│   ├── a2a_tool.py                    # Agent-to-Agent工具
-│   ├── sherpa_asr.py                  # Sherpa ASR语音识别
-│   ├── web_search.py                  # 网页搜索
-│   ├── code_interpreter.py            # 代码解释器
-│   └── ...
+│   ├── affection_system.py            # 好感度与情绪系统核心逻辑
+│   ├── affection_api.py               # 好感度/情绪API接口
+│   ├── academic_tools.py              # 学术工具集（11个工具函数）
+│   ├── formula_ocr.py                 # 公式OCR识别（PaddleOCR+Mathpix双引擎）
+│   ├── skill_engine.py                # 技能引擎
+│   ├── skill_manager.py               # 技能管理器
+│   ├── tts_service.py                 # TTS语音合成服务（EdgeTTS）
+│   ├── vrm_bridge.py                  # VRM模型桥接
+│   ├── weather_tool.py                # 天气查询工具
+│   └── __init__.py                    # 包初始化
 │
 ├── skills/                            # 技能模块
 │   ├── research-assistant/            # 科研助手 (v2.1.0, 4阶段, 9工具)
@@ -453,49 +546,39 @@ shu_z_ren_/
 │   ├── paper-writing/                 # 论文写作 (v2.1.0, 4阶段, 5工具)
 │   ├── academic-tutoring/             # 虚拟导师 (v2.0.0, 4阶段, 5工具)
 │   ├── math-assistant/                # 数学助手 (v1.0.0, 4阶段, 2工具)
-│   ├── skill-creator/                 # 技能创建器
-│   ├── officeCLI/                     # 办公CLI
-│   └── web-design-skill-main/         # Web设计技能
+│   ├── officeCLI/                     # Office文档处理 (三层操作策略)
+│   ├── find-skills/                   # 技能发现 (搜索和安装社区技能)
+│   └── skill-creator/                 # 技能创建器 (6步创建流程)
 │
 ├── static/                            # 前端静态资源
-│   ├── education-digital-human.html   # 教育数字人主界面
-│   ├── education-digital-human-v2.html # 教育数字人增强界面
-│   ├── js/
-│   │   └── education-app.js           # Vue 应用逻辑 (4311行)
+│   ├── index.html                     # 主页面
 │   ├── css/
-│   │   ├── education-glass.css        # 玻璃态 UI 样式
-│   │   └── education-structure.css    # 教育结构样式
-│   └── libs/                          # 第三方库
-│       ├── element-plus + vue         # UI框架
-│       ├── katex/                     # 数学公式渲染
-│       ├── marked / mermaid           # Markdown与图表
-│       └── ...
+│   │   └── style.css                  # 样式表
+│   └── js/
+│       ├── app.js                     # 主应用逻辑
+│       ├── digital-human.js           # 数字人渲染与交互
+│       ├── knowledge.js               # 知识库管理界面
+│       └── chat.js                    # 聊天界面逻辑
 │
 ├── education_digital_human/           # 教育数字人配置
-│   ├── 知识库/                        # 教育知识库文档 (4份)
-│   │   ├── AI局限性与学术伦理.md
-│   │   ├── 学术写作规范.md
-│   │   ├── 教育研究方法.md
-│   │   └── 跨学科研究方法.md
-│   ├── 角色卡/                        # 数字人角色配置
-│   │   └── 虚拟科研导师.json          # Character Card V2 规范
-│   ├── 学习跟踪/                      # 研究进展记录
-│   ├── 工具链/                        # 工具链配置
-│   ├── 向量库/                        # 向量数据库
-│   └── 数据/                          # 用户数据
-│       ├── education_data.db          # SQLite 数据库 (5张表)
-│       ├── growth_data.json           # 成长数据 (旧格式, 自动迁移)
-│       ├── achievement_data.json      # 成就数据 (旧格式)
-│       ├── collaboration_data.json    # 协作记录 (旧格式)
-│       ├── chat_history.json          # 对话历史 (旧格式)
-│       └── notes_data.json            # 笔记数据
+│   ├── 数据/                          # 用户数据与配置
+│   │   ├── edu_database.db            # SQLite 数据库 (7张表)
+│   │   ├── 学科知识库/                # 预置学科知识 (数学/物理/化学/生物/语文)
+│   │   ├── 教学策略.json              # 教学策略配置
+│   │   ├── 学习路径模板.json          # 学习路径模板
+│   │   └── 用户配置模板.json          # 用户配置模板
+│   ├── VRM配置/                       # VRM 模型配置
+│   │   └── 默认模型配置.json
+│   ├── 向量库/                        # 向量数据库（运行时生成）
+│   └── 工具链/                        # 工具链配置
+│       └── 教育研究工具配置.json
 │
+├── config/                            # 配置文件
+│   └── settings_template.json         # 配置模板
 ├── mp3/                               # 背景音乐 (26首)
 ├── certs/                             # SSL证书
 │   ├── cert.pem
 │   └── key.pem
-├── config/                            # 配置文件
-├── extensions/                        # 扩展插件
 └── README_教育数字人.md               # 本文档
 ```
 
@@ -503,46 +586,62 @@ shu_z_ren_/
 
 ## API 端点
 
-### 教育系统 API (`/api/education`)
+### 主服务 API (`server.py`)
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/growth` | GET/POST | 获取/保存成长数据 |
-| `/growth/add_exp` | POST | 增加经验值 |
-| `/growth/skill_usage` | POST | 记录技能使用 |
-| `/achievements` | GET | 获取成就列表（含分类、奖励、进度） |
-| `/achievements/unlock` | POST | 解锁成就（自动发放经验奖励） |
-| `/collaboration` | GET/POST | 获取/保存协作记录 |
-| `/collaboration/start_session` | POST | 开始协作会话 |
-| `/collaboration/add_contribution` | POST | 添加贡献记录 |
-| `/collaboration/end_session` | POST | 结束协作会话 |
-| `/collaboration/export` | POST | 导出协作记录 |
-| `/collaboration/stats` | GET | 获取协作统计 |
-| `/report/generate` | GET | 生成学习报告（含时间线、趋势、建议） |
-| `/report/export` | POST | 导出学习报告为 Word |
-| `/emotion/record` | POST | 记录情绪状态 |
-| `/chat/stream` | POST | 流式对话接口 |
-| `/chat` | POST | 非流式对话接口 |
-| `/chat/history` | GET/POST | 获取/保存对话历史 |
-| `/knowledge/search` | GET | 搜索知识库 |
-| `/knowledge/stats` | GET | 获取知识库统计 |
-| `/notes` | GET/POST | 获取/保存笔记 |
-| `/notes/generate` | POST | AI 生成笔记 |
-
-### 魔珐星云 API (`/api/xingyun_digital_human`)
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/config` | GET | 获取 SDK 配置（appId, appSecret, gatewayServer） |
-| `/ka_summary` | GET | 查询 KA 动作列表 |
-| `/consume_record` | GET | 查询消耗记录 |
+| `/` | GET | 主页面，返回 index.html |
 | `/health` | GET | 健康检查 |
+| `/api/chat` | POST | 聊天接口 |
+| `/api/skills` | GET | 获取技能列表 |
+| `/api/skills/{skill_id}/execute` | POST | 执行指定技能 |
+| `/api/digital-human/status` | GET | 数字人状态 |
+| `/api/digital-human/action` | POST | 数字人动作控制 |
+| `/api/knowledge/status` | GET | 知识库状态 |
+| `/api/knowledge/search` | POST | 知识库搜索 |
+| `/api/knowledge/add` | POST | 添加知识条目 |
+| `/api/config` | GET | 获取配置 |
+| `/api/config` | POST | 更新配置 |
+| `/api/academic/tools` | GET | 学术工具列表 |
+| `/api/academic/execute` | POST | 执行学术工具 |
+| `/api/formula/recognize` | POST | 公式识别 |
+| `/api/weather` | GET | 天气查询 |
 
-### 公式识别 API
+### 教育系统 API (`/api/edu`)
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/formula_ocr` | POST | 识别数学公式图片（SimpleTex + 多模态LLM 双引擎） |
+| `/courses` | GET | 获取课程列表 |
+| `/courses` | POST | 创建课程 |
+| `/courses/{course_id}` | GET | 获取课程详情 |
+| `/courses/{course_id}` | PUT | 更新课程 |
+| `/courses/{course_id}` | DELETE | 删除课程 |
+| `/courses/{course_id}/progress` | GET | 获取学习进度 |
+| `/courses/{course_id}/progress` | POST | 更新学习进度 |
+| `/students/{student_id}/profile` | GET | 获取学生档案 |
+| `/students/{student_id}/profile` | POST | 创建/更新学生档案 |
+| `/students/{student_id}/learning-path` | GET | 获取学习路径 |
+| `/students/{student_id}/learning-path` | POST | 生成学习路径 |
+| `/knowledge-graph` | GET | 获取知识图谱 |
+| `/knowledge-graph/search` | POST | 知识图谱搜索 |
+| `/sessions` | GET | 获取会话列表 |
+| `/sessions` | POST | 创建会话 |
+| `/sessions/{session_id}` | GET | 获取会话详情 |
+| `/sessions/{session_id}/interact` | POST | 会话交互 |
+| `/analyze` | POST | 学习分析 |
+| `/recommendations/{student_id}` | GET | 获取推荐 |
+| `/feedback` | POST | 提交反馈 |
+
+### 好感度系统 API (`/api/affection`)
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/{student_id}/status` | GET | 获取好感度状态 |
+| `/{student_id}/interact` | POST | 执行交互 |
+| `/{student_id}/history` | GET | 获取交互历史 |
+| `/{student_id}/emotion` | GET | 获取当前情绪 |
+| `/{student_id}/reset` | POST | 重置好感度 |
+| `/{student_id}/level-info` | GET | 获取等级详情 |
 
 ---
 
@@ -555,15 +654,14 @@ shu_z_ren_/
 │         内存缓存 (MemoryCache)       │
 │  • dict 存储，低延迟读写             │
 │  • 脏数据追踪 (_dirty)              │
-│  • 5秒批量刷新到 SQLite             │
 │  • 深度合并，避免覆盖嵌套字段        │
 └──────────────┬──────────────────────┘
-               ↓ 每5秒 / 立即写入
+               ↓ 按需/立即写入
 ┌─────────────────────────────────────┐
 │         SQLite 持久化               │
-│  • education_data.db                │
-│  • 5张表 + 2个索引                  │
-│  • 自动迁移旧 JSON 数据             │
+│  • edu_database.db                  │
+│  • 7张表                            │
+│  • 外键关联，数据完整性约束          │
 └─────────────────────────────────────┘
 ```
 
@@ -571,11 +669,13 @@ shu_z_ren_/
 
 | 表名 | 主键 | 说明 |
 |------|------|------|
-| `growth_data` | id (固定=1) | 成长数据（单行表） |
-| `collaboration_data` | id (固定=1) | 协作数据（单行表） |
-| `achievement_data` | id (固定=1) | 成就数据（单行表） |
-| `chat_history` | session_id | 对话历史（按会话索引） |
-| `collaboration_sessions` | id | 协作会话（按 type/start_time 索引） |
+| `students` | id (TEXT) | 学生信息（姓名、年级） |
+| `courses` | id (TEXT) | 课程信息（名称、学科、难度） |
+| `learning_progress` | id (TEXT) | 学习进度（关联学生和课程） |
+| `sessions` | id (TEXT) | 会话记录（关联学生、课程、技能） |
+| `knowledge_items` | id (TEXT) | 知识条目（学科、主题、向量ID） |
+| `affection_records` | id (TEXT) | 好感度记录（等级、情绪、交互类型） |
+| `feedback` | id (TEXT) | 反馈记录（评分、内容） |
 
 ### 数据自动清理
 
@@ -584,6 +684,23 @@ shu_z_ren_/
 | 协作记录 | 500 条 |
 | 对话历史会话 | 100 个 |
 | 每会话消息 | 100 条 |
+
+---
+
+## 配置说明
+
+系统通过 `config/settings_template.json` 提供配置模板，包含以下配置节：
+
+| 配置节 | 关键参数 | 说明 |
+|--------|----------|------|
+| `server` | host(0.0.0.0), port(8765), debug(false) | 服务配置 |
+| `digital_human` | enabled(true), model_path, auto_start(true) | 数字人配置 |
+| `knowledge_base` | db_path, vector_dim(768), chunk_size(512), chunk_overlap(64) | 知识库配置 |
+| `affection` | enabled(true), initial_level(50), max_level(100), decay_rate(0.1) | 好感度配置 |
+| `tts` | enabled(true), voice, speed(1.0), provider("edge-tts") | 语音合成配置 |
+| `ocr` | enabled(true), provider("paddle"), language("chi_sim+eng") | OCR 配置 |
+| `llm` | provider("openai"), model, api_key, base_url | LLM 配置 |
+| `skills` | auto_load(true), directories(["skills/"]) | 技能配置 |
 
 ---
 
@@ -677,12 +794,6 @@ pip install -r requirements.txt
 uv sync
 ```
 
-#### Node.js 依赖（桌面端需要）
-
-```bash
-npm install
-```
-
 ### 2. 启动服务
 
 #### 方式一：命令行启动
@@ -691,17 +802,17 @@ npm install
 python server.py
 ```
 
-#### 方式二：桌面端启动
+#### 方式二：npm 启动
 
 ```bash
 npm run dev
 ```
 
-服务将在 `http://localhost:3456` 启动
+服务将在 `http://localhost:8765` 启动
 
 ### 3. 访问界面
 
-打开浏览器访问 `http://localhost:3456`，在左侧菜单选择「教育数字人」
+打开浏览器访问 `http://localhost:8765`
 
 ### 4. 配置数字人（可选）
 
@@ -760,58 +871,18 @@ export SSL_KEYFILE=/path/to/key.pem
 export SSL_CERTFILE=/path/to/cert.pem
 ```
 
-### 3. Electron 下载超时（国内网络）
+### 3. 端口被占用
 
-**错误信息**: `RequestError: connect ETIMEDOUT` 或 `npm install` 卡住
-
-**原因**: Electron 二进制文件下载超时
-
-**解决方案**:
-```bash
-# 使用国内镜像
-# Windows CMD
-set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-npm install
-
-# Windows PowerShell
-$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
-npm install
-
-# Linux/Mac
-ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install
-```
-
-### 4. node_modules 目录被锁定
-
-**错误信息**: `EBUSY: resource busy or locked`
-
-**原因**: 有进程占用了 node_modules 目录
-
-**解决方案**:
-1. 关闭所有可能占用的程序（VS Code、其他终端、资源管理器等）
-2. 重新打开终端，删除 node_modules 后重新安装：
-```bash
-# Windows
-rmdir /s /q node_modules
-npm install
-
-# Linux/Mac
-rm -rf node_modules
-npm install
-```
-
-### 5. 端口被占用
-
-**错误信息**: `Address already in use` 或 `端口 3456 被占用`
+**错误信息**: `Address already in use` 或 `端口 8765 被占用`
 
 **解决方案**:
 ```bash
 # Windows - 查找并结束占用端口的进程
-netstat -ano | findstr :3456
+netstat -ano | findstr :8765
 taskkill /PID <进程ID> /F
 
 # Linux/Mac
-lsof -i :3456
+lsof -i :8765
 kill -9 <进程ID>
 ```
 
@@ -865,7 +936,7 @@ kill -9 <进程ID>
 | 评分项 | 权重 | 本系统实现 |
 |--------|------|------------|
 | 教育价值与场景契合度 | 30% | 科研助手、虚拟导师、数学助手、跨学科教学技能 |
-| 技术融合与智能水平 | 25% | 魔珐星云数字人、情绪映射、学术 API 集成、公式识别 |
+| 技术融合与智能水平 | 25% | 魔珐星云数字人、好感度情绪映射、学术工具集成、公式识别 |
 | 共创机制与成长成效 | 25% | 人机协作记录、成长系统、成就系统、技能成长追踪 |
 | 反思深度与呈现规范 | 20% | AI 局限性文档、学术伦理规范、人机边界说明 |
 
@@ -881,11 +952,9 @@ kill -9 <进程ID>
 
 ### 高性能数据存储
 - 内存缓存 + SQLite 双层架构
-- 5 秒批量写入，减少 IO
 - 脏数据追踪，按需刷新
 - 深度合并，避免覆盖嵌套字段
-- 自动迁移旧 JSON 数据到 SQLite
-- 并发安全（asyncio.Lock）
+- 外键关联，数据完整性约束
 
 ### 实时通信
 - SSE 流式响应
@@ -894,21 +963,42 @@ kill -9 <进程ID>
 - 低延迟消息传输
 
 ### RAG 知识检索
-- 向量化语义搜索（默认 k=3）
+- 向量化语义搜索（默认 k=5，可配置）
+- 嵌入模型：paraphrase-multilingual-MiniLM-L12-v2
+- 向量维度 768，FAISS 索引
 - 文件哈希去重
 - 增量更新检测
 - 上下文关联增强（最大 2000 字符）
+- 预置学科知识库（数学/物理/化学/生物/语文）
 
 ### 对话系统
 - 技能提示词自动选择
 - RAG 知识库增强
-- 语音模式优化（跳过 RAG，30 字以内回复）
 - 学术工具 function calling
-- 共享 httpx 连接池（100 连接，禁用 HTTP/2）
+- 好感度影响回复语气
+
+### 好感度系统
+- 5 级好感度等级（冷淡/疏远/普通/友好/亲密）
+- 8 种情绪状态映射
+- 自然衰减机制
+- 交互增减好感度
+- 情绪联动数字人表情
 
 ---
 
 ## 更新日志
+
+### 2026-05-10
+- **README 全面更新**：根据项目实际代码同步更新文档
+- **新增三大辅助技能**：Office CLI（文档处理）、技能发现（搜索安装）、技能创建器（自定义技能）
+- **学术工具扩展**：从 6 个工具扩展到 11 个，新增论文搜索、引用格式化、参考文献检查、查重分析、摘要生成、大纲生成、数据分析、图表生成、格式检查、学术翻译
+- **好感度系统**：独立 API 路由，5 级好感度等级，8 种情绪状态，自然衰减机制
+- **公式识别引擎更新**：从 SimpleTex+多模态LLM 变更为 PaddleOCR+Mathpix 双引擎
+- **数据存储架构更新**：7 张表（students/courses/learning_progress/sessions/knowledge_items/affection_records/feedback），外键关联
+- **前端结构更新**：4 个 JS 模块（app/digital-human/knowledge/chat）
+- **Python 模块更新**：14 个文件，新增 skill_engine/skill_manager/vrm_bridge/weather_tool/tts_service
+- **配置模板**：新增 config/settings_template.json 配置说明
+- **服务端口**：从 3456 变更为 8765
 
 ### 2026-05-02
 - **README 全面更新**：根据项目实际代码完善技术细节，补充数据存储架构、学术伦理决策树、技能工具列表、公式识别双引擎等详细说明
