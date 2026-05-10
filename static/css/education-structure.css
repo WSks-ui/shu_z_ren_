@@ -8481,27 +8481,31 @@ body {
   transform: scale(0.92);
 }
 
-.cluster-role-ring-item.unselected {
-  opacity: 0.4;
-  filter: grayscale(0.6);
+/* TransitionGroup 进入/离开动画 */
+.ring-item-enter-active {
+  transition: all var(--duration-slow) var(--ease-spring);
 }
-
-.cluster-role-ring-item.unselected:hover {
-  opacity: 0.7;
-  filter: grayscale(0.3);
-  transform: scale(1.05);
+.ring-item-leave-active {
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.ring-item-enter-from {
+  opacity: 0;
+  transform: scale(0.3) translateY(-12px);
+}
+.ring-item-enter-to {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+.ring-item-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
+}
+.ring-item-move {
+  transition: transform var(--duration-normal) var(--ease-out);
 }
 
 .cluster-role-ring-item.selected .cluster-role-ring-avatar {
   box-shadow: 0 0 0 3px var(--glass-bg), 0 0 16px 2px var(--role-color);
-  animation: selectBounce var(--duration-slow) var(--ease-spring) forwards;
-}
-
-@keyframes selectBounce {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.15); }
-  70% { transform: scale(0.95); }
-  100% { transform: scale(1); }
 }
 
 /* 角色环头像 */
@@ -8545,6 +8549,33 @@ body {
 .cluster-role-ring-item.speaking .cluster-role-ring-name {
   color: var(--primary-300);
   font-weight: 600;
+}
+
+/* 角色环 "+" 添加按钮 */
+.cluster-role-ring-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  border: 2px dashed var(--glass-border-light);
+  background: var(--glass-bg);
+  color: var(--text-tertiary);
+  font-size: var(--text-lg);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-out);
+  flex-shrink: 0;
+}
+.cluster-role-ring-add:hover {
+  border-color: var(--primary-400);
+  color: var(--primary-400);
+  background: var(--glass-bg-heavy);
+  transform: scale(1.08);
+  box-shadow: 0 0 16px oklch(0.72 0.15 160 / 0.12);
+}
+.cluster-role-ring-add:active {
+  transform: scale(0.95);
 }
 
 @keyframes rolePulse {
@@ -9114,6 +9145,15 @@ body {
   gap: var(--space-4);
   animation: setupFadeIn var(--duration-normal) var(--ease-smooth) forwards;
   overflow: hidden;
+  transition: transform var(--duration-slow) var(--ease-spring),
+              box-shadow var(--duration-slow) var(--ease-out),
+              border-color var(--duration-slow) var(--ease-out);
+}
+
+.cluster-setup-card:hover {
+  transform: translate(-50%, -50%) scale(1.02);
+  box-shadow: var(--shadow-xl), 0 0 40px oklch(0.72 0.15 160 / 0.08);
+  border-color: var(--primary-500);
 }
 
 /* 顶部渐变装饰条 */
@@ -9887,6 +9927,12 @@ body {
     font-size: var(--text-md);
   }
 
+  .cluster-role-ring-add {
+    width: 40px;
+    height: 40px;
+    font-size: var(--text-md);
+  }
+
   .cluster-role-ring-name {
     display: none;
   }
@@ -9921,6 +9967,12 @@ body {
   }
 
   .cluster-role-ring-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: var(--text-sm);
+  }
+
+  .cluster-role-ring-add {
     width: 36px;
     height: 36px;
     font-size: var(--text-sm);
@@ -10446,6 +10498,14 @@ body {
   .cluster-role-ring-item.selected .cluster-role-ring-avatar,
   .cluster-role-chip.selected {
     animation: none;
+  }
+  .ring-item-enter-active,
+  .ring-item-leave-active,
+  .ring-item-move {
+    transition: none;
+  }
+  .cluster-role-ring-add {
+    transition: none;
   }
 }
 
