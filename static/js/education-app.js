@@ -2162,7 +2162,10 @@ createApp({
     const availableRoles = ref([]);
     const clusterMessagesRef = ref(null);
     const clusterSessionId = ref('');
-    const clusterRoleCards = ref([]);  // 当前参与角色的展示信息
+    const clusterRoleCards = computed(() => {
+      const selected = new Set(clusterSelectedRoles.value);
+      return availableRoles.value.filter(r => selected.has(r.id));
+    });  // 当前参与角色的展示信息（自动响应选择变化）
     const clusterSpeakingRoleId = ref('');  // 当前正在播报的角色ID
     const clusterAffectionMatrix = ref({});  // 好感度矩阵
     const clusterPanel = ref(null);  // 当前浮动面板: 'mode' | 'roles' | 'affection' | null
@@ -2230,8 +2233,6 @@ createApp({
       clusterActive.value = true;
       // 3. 加载可用角色
       await loadClusterRoles();
-      // 4. 更新参与角色的展示信息
-      updateClusterRoleCards();
     };
 
     // 退出集群页面
@@ -2380,15 +2381,10 @@ createApp({
       }
     };
 
-    // 更新参与角色的展示卡片
-    const updateClusterRoleCards = () => {
-      if (!availableRoles.value.length) return;
-      clusterRoleCards.value = availableRoles.value.filter(
-        r => clusterSelectedRoles.value.includes(r.id)
-      );
+    // 集群语音播报（使用火山引擎 TTS，不使用数字人SDK）
+    const toggleClusterPanel = (name) => {
+      clusterPanel.value = clusterPanel.value === name ? null : name;
     };
-
-    // 角色环点击处理 — idle时toggle选中，讨论中时打开角色面板
     const onRoleRingClick = (role) => {
       if (clusterStatus.value === 'idle') {
         toggleClusterRole(role.id);
@@ -2463,9 +2459,6 @@ createApp({
       clusterTotalRounds.value = clusterModes.find(m => m.id === clusterMode.value)?.max_rounds || 3;
       clusterCurrentSpeaker.value = '';
       clusterThinkingRole.value = null;
-
-      // 更新角色卡片
-      updateClusterRoleCards();
 
       // 添加系统消息
       const modeName = clusterModes.find(m => m.id === clusterMode.value)?.name || '讨论';
@@ -2777,7 +2770,6 @@ createApp({
           clusterSelectedRoles.value.push(roleId);
         }
       }
-      updateClusterRoleCards();
     };
 
     // ==================== 集群历史 ====================
@@ -2830,7 +2822,6 @@ createApp({
       clusterSelectedRoles.value = session.roles || [];
       showClusterHistoryDetail.value = false;
       showClusterHistory.value = false;
-      updateClusterRoleCards();
       // 延迟启动，确保状态更新
       nextTick(() => {
         startClusterDiscussion(session.id);
@@ -2955,7 +2946,6 @@ createApp({
         if (idx >= 0) clusterSelectedRoles.value.splice(idx, 1);
         // 重新加载角色列表
         await loadClusterRoles();
-        updateClusterRoleCards();
         closeRoleEditor();
       } catch (e) {
         console.error('删除角色失败:', e);
@@ -2989,7 +2979,6 @@ createApp({
         // 自动选中推荐的角色
         if (data.recommended && data.recommended.length > 0) {
           clusterSelectedRoles.value = data.recommended.map(r => r.id);
-          updateClusterRoleCards();
         }
       } catch (e) {
         console.error('获取角色推荐失败:', e);
@@ -5218,6 +5207,7 @@ createApp({
       toggleClusterChatMode,
       startClusterResize,
       exportCurrentSession,
+      toggleClusterPanel,
       onRoleRingClick,
       stopClusterDiscussion,
       clusterAbortController,
