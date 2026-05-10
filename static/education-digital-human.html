@@ -686,15 +686,11 @@
               <p>Cluster Discussion</p>
             </div>
           </div>
-          <div class="cluster-role-ring">
-            <div v-for="(role, ri) in availableRoles" :key="role.id"
-              class="cluster-role-ring-item"
-              :style="{ '--stagger-i': ri, '--role-color': role.color }"
-              :class="{
-                speaking: clusterSpeakingRoleId === role.id,
-                selected: clusterSelectedRoles.includes(role.id),
-                unselected: !clusterSelectedRoles.includes(role.id) && clusterStatus === 'idle'
-              }"
+          <transition-group name="ring-item" tag="div" class="cluster-role-ring">
+            <div v-for="role in clusterRoleCards" :key="role.id"
+              class="cluster-role-ring-item selected"
+              :style="{ '--role-color': role.color }"
+              :class="{ speaking: clusterSpeakingRoleId === role.id }"
               :data-role-id="role.id"
               @click="onRoleRingClick(role)"
               :title="role.personality">
@@ -703,7 +699,15 @@
               </div>
               <span class="cluster-role-ring-name">{{ role.name }}</span>
             </div>
-          </div>
+            <button v-if="clusterStatus === 'idle' && clusterSelectedRoles.length < clusterMaxRoles"
+              key="__add-btn"
+              class="cluster-role-ring-add"
+              @click="toggleClusterPanel('roles')"
+              title="添加角色"
+              aria-label="添加角色">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </transition-group>
           <div class="cluster-progress" v-if="clusterStatus === 'discussing'">
             <div class="cluster-progress-bar">
               <div class="cluster-progress-fill" :style="{ width: (clusterCurrentRound / clusterTotalRounds * 100) + '%' }"></div>
