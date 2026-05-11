@@ -2169,8 +2169,7 @@ createApp({
       return availableRoles.value.filter(r => selected.has(r.id));
     });  // 当前参与角色的展示信息（自动响应选择变化）
     const clusterSpeakingRoleId = ref('');  // 当前正在播报的角色ID
-    const clusterAffectionMatrix = ref({});  // 好感度矩阵
-    const clusterPanel = ref(null);  // 当前浮动面板: 'mode' | 'roles' | 'affection' | null
+    const clusterPanel = ref(null);  // 当前浮动面板: 'mode' | 'roles' | null
     const clusterChatExpanded = ref(false);  // 对话栏默认展开
     const clusterChatMode = ref(localStorage.getItem('cluster-chat-mode') || 'bottom');  // 'bottom' | 'sidebar'
     const clusterChatHeight = ref(parseInt(localStorage.getItem('cluster-chat-height')) || 450);  // 底部模式高度
@@ -2245,7 +2244,6 @@ createApp({
       clusterStatus.value = 'idle';
       clusterTopic.value = '';
       clusterInput.value = '';
-      clusterAffectionMatrix.value = {};
       clusterPanel.value = null;
       clusterChatExpanded.value = false;
       clusterCurrentRound.value = 0;
@@ -2696,20 +2694,6 @@ createApp({
                   type: 'summary',
                   content: summaryContent
                 });
-              } else if (data.type === 'affection_update') {
-                const oldMatrix = clusterAffectionMatrix.value;
-                const newMatrix = data.matrix || {};
-                // 比较差异，触发浮动动画
-                for (const [fromId, targets] of Object.entries(newMatrix)) {
-                  for (const [toId, newVal] of Object.entries(targets)) {
-                    const oldVal = (oldMatrix[fromId] && oldMatrix[fromId][toId]) || 50;
-                    const delta = newVal - oldVal;
-                    if (Math.abs(delta) >= 2) {
-                      triggerAffectionFloat(fromId, toId, delta);
-                    }
-                  }
-                }
-                clusterAffectionMatrix.value = newMatrix;
               } else if (data.type === 'error') {
                 clusterMessages.value.push({
                   id: Date.now(),
@@ -5243,7 +5227,6 @@ createApp({
       clusterMinRoles,
       canStartDiscussion,
       clusterSpeakingRoleId,
-      clusterAffectionMatrix,
       clusterPanel,
       clusterChatExpanded,
       clusterCurrentRound,

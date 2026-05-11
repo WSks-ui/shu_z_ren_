@@ -732,9 +732,6 @@
           <button class="quick-btn" :class="{ active: clusterPanel === 'roles' }" @click="clusterPanel = clusterPanel === 'roles' ? null : 'roles'" title="参与角色" aria-label="参与角色">
             <i class="fa-solid fa-users"></i><span>角色</span>
           </button>
-          <button class="quick-btn" :class="{ active: clusterPanel === 'affection' }" @click="clusterPanel = clusterPanel === 'affection' ? null : 'affection'" title="好感度" aria-label="好感度" v-if="Object.keys(clusterAffectionMatrix).length > 0">
-            <i class="fa-solid fa-heart"></i><span>好感</span>
-          </button>
           <button class="quick-btn" @click="showClusterHistory = true" title="讨论历史" aria-label="讨论历史">
             <i class="fa-solid fa-clock-rotate-left"></i><span>历史</span>
           </button>

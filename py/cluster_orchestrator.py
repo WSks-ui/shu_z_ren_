@@ -31,11 +31,6 @@ class ClusterOrchestrator:
         self._pending_user_input = ""
         self._llm_config: Optional[Dict[str, Any]] = None  # 延迟加载的 LLM 配置缓存
 
-        # 好感度矩阵：{ "innovator": { "skeptic": 50, "integrator": 50 }, ... }
-        # 值范围 0-100，50 为中性
-        self.affection_matrix: Dict[str, Dict[str, int]] = {}
-        self._init_affection_matrix()
-
     def interrupt(self, message: str):
         """用户插话中断"""
         self._interrupted = True
@@ -181,9 +176,6 @@ class ClusterOrchestrator:
                 # 情绪分析
                 emotion = analyze_emotion(full_response)
 
-                # 更新好感度矩阵
-                self.update_affection_from_response(role_id, full_response)
-
                 # 发送角色结束事件
                 yield f"data: {json.dumps({'type': 'role_end', 'role_id': role_id, 'emotion': emotion}, ensure_ascii=False)}\n\n"
 
@@ -200,9 +192,6 @@ class ClusterOrchestrator:
                     "content": full_response,
                     "round": round_num
                 })
-
-            # 每轮结束发送好感度更新事件
-            yield f"data: {json.dumps({'type': 'affection_update', 'matrix': self.affection_matrix}, ensure_ascii=False)}\n\n"
 
             yield f"data: {json.dumps({'type': 'round_end', 'round': round_num}, ensure_ascii=False)}\n\n"
 
@@ -282,9 +271,6 @@ class ClusterOrchestrator:
                 yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': role_id, 'content': chunk}, ensure_ascii=False)}\n\n"
 
         emotion = analyze_emotion(full_response)
-
-        # 更新好感度矩阵
-        self.update_affection_from_response(role_id, full_response)
 
         yield f"data: {json.dumps({'type': 'role_end', 'role_id': role_id, 'emotion': emotion}, ensure_ascii=False)}\n\n"
 
@@ -413,11 +399,6 @@ class ClusterOrchestrator:
         if user_input:
             cluster_instruction += f"\n\n用户插话：{user_input}"
 
-        # 注入好感度上下文
-        affection_ctx = self._build_affection_context(role_id)
-        if affection_ctx:
-            cluster_instruction += affection_ctx
-
         # 注入角色记忆
         role_memory = getattr(self, '_role_memories', {}).get(role_id, "")
         if role_memory:
@@ -461,11 +442,6 @@ class ClusterOrchestrator:
         if previous_responses:
             for resp in previous_responses:
                 debate_instruction += f"\n{resp['stance']}方({resp['role_name']})：{resp['content'][:150]}..."
-
-        # 注入好感度上下文
-        affection_ctx = self._build_affection_context(role_id)
-        if affection_ctx:
-            debate_instruction += affection_ctx
 
         return base_prompt + debate_instruction
 
@@ -606,104 +582,10 @@ class ClusterOrchestrator:
                 phrase = phrase.strip().strip("'""'")
                 if phrase and phrase in user_msg:
                     score += 2
-            # 基于好感度：对用户更友好的角色更可能回应
-            avg_affection = sum(
-                self.affection_matrix.get(role_id, {}).get(other_id, 50)
-                for other_id in self.role_ids if other_id != role_id
-            ) / max(1, len(self.role_ids) - 1)
-            score += (avg_affection - 50) * 0.1
             scored[role_id] = score
 
         sorted_roles = sorted(scored.keys(), key=lambda rid: scored[rid], reverse=True)
         return sorted_roles[:max_count]
-
-    # ==================== 好感度矩阵 ====================
-
-    def _init_affection_matrix(self):
-        """初始化好感度矩阵，所有角色间初始值为 50（中性）"""
-        for rid in self.role_ids:
-            self.affection_matrix[rid] = {}
-            for other_rid in self.role_ids:
-                if other_rid != rid:
-                    self.affection_matrix[rid][other_rid] = 50
-
-    def update_affection_from_response(self, speaker_id: str, content: str):
-        """根据发言内容更新好感度矩阵
-
-        规则：
-        - 赞同/引用他人观点 → 对该角色好感 +3~5
-        - 反驳/质疑他人观点 → 对该角色好感 -2~3（辩论模式除外）
-        - 辩论模式中反驳不降低好感
-        - 好感度范围 0-100
-        """
-        import re
-
-        for other_id in self.role_ids:
-            if other_id == speaker_id:
-                continue
-
-            other_role = self.roles.get(other_id)
-            if not other_role:
-                continue
-
-            other_name = other_role["name"]
-            delta = 0
-
-            # 检测赞同/引用
-            agree_patterns = [
-                rf"{other_name}.*说得对", rf"同意{other_name}", rf"赞同{other_name}",
-                rf"正如{other_name}.*所说", rf"{other_name}.*的观点.*正确",
-                rf"我认同{other_name}", rf"{other_name}.*很有道理",
-            ]
-            for pat in agree_patterns:
-                if re.search(pat, content):
-                    delta += 4
-                    break
-
-            # 检测反驳/质疑（辩论模式不降好感）
-            if self.mode != "debate":
-                disagree_patterns = [
-                    rf"不认同{other_name}", rf"{other_name}.*不对", rf"反对{other_name}",
-                    rf"{other_name}.*有误", rf"我不同意{other_name}",
-                ]
-                for pat in disagree_patterns:
-                    if re.search(pat, content):
-                        delta -= 2
-                        break
-
-            if delta != 0:
-                current = self.affection_matrix.get(speaker_id, {}).get(other_id, 50)
-                new_val = max(0, min(100, current + delta))
-                self.affection_matrix.setdefault(speaker_id, {})[other_id] = new_val
-
-    def get_affection_matrix(self) -> Dict[str, Dict[str, int]]:
-        """获取当前好感度矩阵"""
-        return self.affection_matrix
-
-    def _build_affection_context(self, role_id: str) -> str:
-        """为角色构建好感度上下文，影响发言倾向"""
-        affections = self.affection_matrix.get(role_id, {})
-        if not affections:
-            return ""
-
-        lines = []
-        for other_id, value in affections.items():
-            other_role = self.roles.get(other_id)
-            if not other_role:
-                continue
-            if value >= 70:
-                lines.append(f"你很欣赏{other_role['name']}的观点")
-            elif value >= 55:
-                lines.append(f"你比较认同{other_role['name']}")
-            elif value <= 30:
-                lines.append(f"你对{other_role['name']}的观点持保留态度")
-            elif value <= 45:
-                lines.append(f"你与{other_role['name']}存在一些分歧")
-
-        if not lines:
-            return ""
-
-        return "\n### 你对其他角色的态度\n" + "；".join(lines) + "。"
 
     def _build_messages(
         self,

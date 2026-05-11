@@ -130,17 +130,6 @@ async def cluster_interrupt(request: ClusterInterruptRequest = Body(...)):
     return {"status": "ok", "message": "已插入用户消息"}
 
 
-@router.get("/affection/{session_id}")
-async def get_cluster_affection(session_id: str):
-    """获取集群会话的好感度矩阵"""
-
-    orchestrator = get_orchestrator(session_id)
-    if not orchestrator:
-        raise HTTPException(status_code=404, detail="会话不存在或已结束")
-
-    return {"matrix": orchestrator.get_affection_matrix()}
-
-
 @router.delete("/session/{session_id}")
 async def end_cluster_session(session_id: str):
     """结束集群会话"""

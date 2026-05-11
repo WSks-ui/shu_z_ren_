@@ -8626,25 +8626,6 @@ body {
   font-weight: 600;
 }
 
-/* 好感度浮动提示 */
-.cluster-affection-float {
-  position: absolute;
-  z-index: var(--z-float);
-  animation: affectionFloatUp 1.5s ease-out forwards;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.cluster-affection-float.positive { color: var(--success-400); }
-.cluster-affection-float.negative { color: var(--danger-400); }
-
-@keyframes affectionFloatUp {
-  0% { opacity: 1; transform: translateY(0) scale(1); }
-  70% { opacity: 0.6; }
-  100% { opacity: 0; transform: translateY(-48px) scale(0.8); }
-}
 
 /* ---------- 功能层 ---------- */
 .cluster-function-layer {
@@ -9042,84 +9023,6 @@ body {
   color: var(--primary-400);
 }
 
-/* 好感度矩阵 — 色彩编码 */
-.cluster-affection-matrix {
-  padding: var(--space-3) var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.matrix-header {
-  display: flex;
-  gap: var(--space-1);
-  padding-left: 48px;
-}
-
-.matrix-corner {
-  /* 占位 */
-}
-
-.matrix-col-label {
-  width: 48px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.matrix-row {
-  display: flex;
-  gap: var(--space-1);
-  align-items: center;
-}
-
-.matrix-row-label {
-  width: 48px;
-  text-align: right;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding-right: var(--space-1);
-}
-
-.matrix-cell {
-  width: 48px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-primary);
-  background: oklch(
-    calc(0.25 + var(--cell-value) * 0.004)
-    calc(0.02 + var(--cell-value) * 0.002)
-    160
-  );
-  transition: all var(--duration-fast) var(--ease-out);
-}
-
-.matrix-cell.positive {
-  background: oklch(
-    calc(0.35 + var(--cell-value) * 0.003)
-    calc(0.08 + var(--cell-value) * 0.001)
-    160
-  );
-}
-
-.matrix-cell.negative {
-  background: oklch(
-    calc(0.25 + var(--cell-value) * 0.003)
-    calc(0.06 + var(--cell-value) * 0.001)
-    25
-  );
-}
 
 /* ---------- 准备阶段居中设置卡片 ---------- */
 .cluster-setup-card {

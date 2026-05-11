@@ -2094,72 +2094,6 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
 
         content_append(request.messages, 'system', Motion_messages)
 
-    # ==================== 好感度/数值系统注入 ====================
-    love_settings = settings.get('loveSettings', {})
-    if love_settings.get('enabled', False) and not request.is_app_bot and not request.is_sub_agent:
-        
-        # 1. 获取默认的管理员/主用户名称
-        default_user = settings.get("memorySettings", {}).get("userName", "").strip() or "User"
-        
-        # 2. 读取数据库
-        from py.affection_system import load_affection_data 
-        affection_data = await load_affection_data()
-
-        dimensions = love_settings.get("dimensions", ["love", "Familiarity"])
-        custom_prompt = love_settings.get("prompt", "根据当前对话的内容、情感色彩以及你的角色设定，合理地评估或微调这些数值（每次增减幅度建议在-5到+5之间）。")
-        
-        # 3. 扫描当前用户输入，提取数据库中已知的用户数据
-        user_prompt = ""
-        if request.messages and request.messages[-1]['role'] == 'user':
-            user_prompt = str(request.messages[-1].get('content', ''))
-
-        relevant_users = set()
-        # 如果输入中提到了数据库里已经存在的人，把他们的数据提取出来
-        for known_name in affection_data.keys():
-            if known_name and known_name in user_prompt:
-                relevant_users.add(known_name)
-        
-        # 默认用户的数据也给它作为兜底参考
-        if default_user in affection_data:
-            relevant_users.add(default_user)
-            
-        status_block = ""
-        if relevant_users:
-            status_block = "目前的已知羁绊数据参考：\n"
-            for ru in relevant_users:
-                user_stats = affection_data.get(ru, {})
-                stats_str = ", ".join([f"{dim}: {user_stats.get(dim, 0)}" for dim in dimensions])
-                status_block += f"- {ru}: {stats_str}\n"
-
-        # 生成示例标签（极其关键：这里用占位符，不写死任何名字，引导AI自己填）
-        tag_example = "<user=发言者的真实名字"
-        for dim in dimensions:
-            tag_example += f" {dim}=1"
-        tag_example += ">"
-
-        # 4. 构建最终提示词（引入“动态识别发言者”指令）
-        affection_message = f"""
-
-# 角色羁绊与数值系统
-{status_block}
-【更新规则】
-{custom_prompt}
-
-【动态识别发言者】
-请准确识别当前最新消息的**实际发言者**：
-- 如果消息是类似“某某发送弹幕：”、“某某说：”的格式，发言者就是该名字（例如“小包”）。
-- 如果没有带有这种特定的名字前缀，则默认当前的发言者是“{default_user}”。
-
-你必须在每次回复的**绝对最末尾**（所有正文、代码、表情都输出完毕之后），输出一个隐藏的数据标签来记录**该发言者**的最新数值（如果是第一次见面的新用户，请直接给一个合理的初始值）。
-格式必须严格遵守以下示例（将“发言者的真实名字”替换为你识别出的真实名字，且必须包含所有维度）：
-{tag_example}
-
-注意：系统会自动隐藏<>包裹的文本，请直接输出标签，绝对不要在标签前后加任何解释、加粗或Markdown代码块包裹！
-"""
-        # 将提示词追加到 system prompt 中
-        content_append(request.messages, 'system', affection_message)
-    # ==================== 好感度系统注入结束 ====================
-
     if settings['tools']['a2ui']['enabled'] and not request.is_app_bot and not request.is_sub_agent:
         A2UI_messages = """
 除了使用自然语言回答用户问题外，你还拥有一个特殊能力：**渲染 A2UI 界面**。
@@ -4723,13 +4657,6 @@ async def generate_stream_response(client, reasoner_client, request: ChatRequest
                             )
                 logger.info(f"all msg: {request.messages}")
                 yield "data: [DONE]\n\n"
-                if settings.get('loveSettings', {}).get('enabled', False) and not request.is_sub_agent:
-                    try:
-                        from py.affection_system import extract_and_update_affection
-                        # full_content 是当前轮次 AI 的完整回复文本
-                        await extract_and_update_affection(full_content)
-                    except Exception as e:
-                        print(f"解析好感度标签出错: {e}")
                 if m0 and not request.is_sub_agent:
                     print("记忆更新任务开始提交")
                     messages = f"用户说：{user_prompt}\n\n---\n\n你说：{full_content}"
@@ -10748,9 +10675,6 @@ app.include_router(minilm_router)
 
 from py.ebd_api import router as embedding_router
 app.include_router(embedding_router)
-
-from py.affection_api import router as affection_router
-app.include_router(affection_router)
 
 from py.education_api import router as education_router
 app.include_router(education_router)
