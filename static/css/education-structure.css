@@ -8383,10 +8383,6 @@ body {
   pointer-events: auto;
 }
 
-.cluster-avatar-layer > * {
-  pointer-events: auto;
-}
-
 .cluster-avatar-overlay {
   position: absolute;
   inset: 0;
@@ -8406,7 +8402,7 @@ body {
   z-index: var(--z-ring);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   padding: var(--space-4) var(--space-6);
   gap: var(--space-4);
   flex-wrap: wrap;
@@ -8414,12 +8410,13 @@ body {
 
 /* 品牌标识 */
 .cluster-brand-mark {
+  position: absolute;
+  left: var(--space-6);
   display: flex;
   align-items: center;
   gap: var(--space-3);
   pointer-events: none;
   transition: opacity var(--duration-normal) var(--ease-out);
-  flex-shrink: 0;
 }
 
 .cluster-brand-mark.hidden {
@@ -8463,7 +8460,6 @@ body {
   justify-content: center;
   align-items: center;
   gap: var(--space-5);
-  flex: 1;
   min-width: 0;
 }
 
@@ -8473,8 +8469,8 @@ body {
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
-  transition: all var(--duration-normal) var(--ease-out);
   cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 
 .cluster-role-ring-item:active {
@@ -8483,18 +8479,17 @@ body {
 
 /* TransitionGroup 进入/离开动画 */
 .ring-item-enter-active {
-  transition: all var(--duration-slow) var(--ease-spring);
+  transition: opacity var(--duration-slow) var(--ease-spring),
+              transform var(--duration-slow) var(--ease-spring);
 }
 .ring-item-leave-active {
-  transition: all var(--duration-fast) var(--ease-out);
+  position: absolute;
+  transition: opacity var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
 }
 .ring-item-enter-from {
   opacity: 0;
   transform: scale(0.3) translateY(-12px);
-}
-.ring-item-enter-to {
-  opacity: 1;
-  transform: scale(1) translateY(0);
 }
 .ring-item-leave-to {
   opacity: 0;
@@ -9145,13 +9140,18 @@ body {
   gap: var(--space-4);
   animation: setupFadeIn var(--duration-normal) var(--ease-smooth) forwards;
   overflow: hidden;
-  transition: transform var(--duration-slow) var(--ease-spring),
-              box-shadow var(--duration-slow) var(--ease-out),
+  transition: box-shadow var(--duration-slow) var(--ease-out),
+              border-color var(--duration-slow) var(--ease-out);
+}
+
+/* 拖拽后由 JS 设置 left/top，取消 translate 居中 */
+.cluster-setup-card[style*="left:"] {
+  transform: none;
+  transition: box-shadow var(--duration-slow) var(--ease-out),
               border-color var(--duration-slow) var(--ease-out);
 }
 
 .cluster-setup-card:hover {
-  transform: translate(-50%, -50%) scale(1.02);
   box-shadow: var(--shadow-xl), 0 0 40px oklch(0.72 0.15 160 / 0.08);
   border-color: var(--primary-500);
 }
@@ -10518,12 +10518,6 @@ body {
 @keyframes clusterChipIn {
   from { opacity: 0; transform: scale(0.8); }
   to { opacity: 1; transform: scale(1); }
-}
-
-/* 角色环 stagger 入场 */
-.cluster-role-ring-item {
-  animation: clusterStaggerIn var(--duration-normal) var(--ease-out) backwards;
-  animation-delay: calc(var(--stagger-i, 0) * 60ms);
 }
 
 /* 历史条目 stagger 入场 */
