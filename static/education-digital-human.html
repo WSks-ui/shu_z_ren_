@@ -850,8 +850,13 @@
 
       <!-- 准备阶段：居中设置卡片 -->
       <transition name="setup-fade">
-        <div class="cluster-setup-card" v-if="clusterStatus === 'idle' && clusterMessages.length === 0">
-          <div class="cluster-setup-card-header">
+        <div class="cluster-setup-card" ref="clusterSetupCardRef"
+          :style="clusterSetupPos"
+          v-if="clusterStatus === 'idle' && clusterMessages.length === 0">
+          <div class="cluster-setup-card-header"
+            @mousedown.prevent="startSetupDrag"
+            @touchstart.prevent="startSetupDragTouch">
+            <i class="fa-solid fa-grip-vertical cluster-setup-drag-icon"></i>
             <i class="fa-solid fa-comments"></i>
             <h2>开始集群讨论</h2>
           </div>
