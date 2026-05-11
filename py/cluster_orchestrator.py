@@ -29,6 +29,7 @@ class ClusterOrchestrator:
         self._interrupted = False
         self._interrupt_message = ""
         self._pending_user_input = ""
+        self._llm_config: Optional[Dict[str, Any]] = None  # 延迟加载的 LLM 配置缓存
 
         # 好感度矩阵：{ "innovator": { "skeptic": 50, "integrator": 50 }, ... }
         # 值范围 0-100，50 为中性
@@ -39,6 +40,42 @@ class ClusterOrchestrator:
         """用户插话中断"""
         self._interrupted = True
         self._interrupt_message = message
+
+    async def _resolve_llm_config(self) -> Dict[str, Any]:
+        """加载并缓存 LLM 配置，首次调用后不再重复读取"""
+        if self._llm_config is not None:
+            return self._llm_config
+
+        settings = await load_settings()
+        config = {
+            "api_key": settings.get("apiKey", ""),
+            "base_url": settings.get("baseUrl", "https://api.openai.com/v1"),
+            "model": settings.get("model", "gpt-3.5-turbo"),
+            "temperature": settings.get("temperature", 0.7),
+            "max_tokens": settings.get("max_tokens", 512),
+        }
+
+        selected_provider = settings.get("selectedProvider", None)
+        model_providers = settings.get("modelProviders", [])
+        if selected_provider and model_providers:
+            for provider in model_providers:
+                if str(provider.get("id", "")) == str(selected_provider):
+                    if provider.get("apiKey"):
+                        config["api_key"] = provider["apiKey"]
+                    elif provider.get("api_key"):
+                        config["api_key"] = provider["api_key"]
+                    if provider.get("url"):
+                        config["base_url"] = provider["url"]
+                    elif provider.get("base_url"):
+                        config["base_url"] = provider["base_url"]
+                    if provider.get("modelId"):
+                        config["model"] = provider["modelId"]
+                    elif provider.get("model"):
+                        config["model"] = provider["model"]
+                    break
+
+        self._llm_config = config
+        return config
 
     async def run_discussion(
         self,
@@ -726,118 +763,55 @@ class ClusterOrchestrator:
 
         return "\n".join(lines)
 
-    async def _call_llm_stream(
-        self,
-        messages: List[Dict[str, str]]
-    ) -> AsyncGenerator[str, None]:
-        """流式调用 LLM，返回文本块"""
-
-        # 获取 LLM 配置
-        settings = await load_settings()
-        api_key = settings.get("apiKey", "")
-        base_url = settings.get("baseUrl", "https://api.openai.com/v1")
-        model = settings.get("model", "gpt-3.5-turbo")
-        temperature = settings.get("temperature", 0.7)
-        max_tokens = settings.get("max_tokens", 512)  # 集群讨论限制 token
-
-        # Provider 选择逻辑（复用 education_api 的模式）
-        selected_provider = settings.get("selectedProvider", None)
-        model_providers = settings.get("modelProviders", [])
-
-        if selected_provider and model_providers:
-            for provider in model_providers:
-                provider_id = str(provider.get("id", ""))
-                if provider_id == str(selected_provider):
-                    if provider.get("apiKey"):
-                        api_key = provider["apiKey"]
-                    elif provider.get("api_key"):
-                        api_key = provider["api_key"]
-                    if provider.get("url"):
-                        base_url = provider["url"]
-                    elif provider.get("base_url"):
-                        base_url = provider["base_url"]
-                    if provider.get("modelId"):
-                        model = provider["modelId"]
-                    elif provider.get("model"):
-                        model = provider["model"]
-                    break
-
-        if not api_key:
-            yield "⚠️ 未配置 API Key，无法进行集群讨论。"
+    async def _call_llm_stream(self, messages: List[Dict[str, str]]):
+        """流式调用 LLM，使用缓存的配置"""
+        config = await self._resolve_llm_config()
+        if not config["api_key"]:
+            yield "⚠️ 未配置 API Key"
             return
 
-        # 构建请求体
         request_body = {
-            "model": model,
+            "model": config["model"],
             "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
+            "temperature": config["temperature"],
+            "max_tokens": config["max_tokens"],
             "stream": True
         }
 
-        # 使用全局客户端（复用连接池）
-        global_client = get_global_http_client()
+        use_global = get_global_http_client() is not None
+        client = get_global_http_client() or httpx.AsyncClient(timeout=60.0)
 
         try:
-            if global_client:
-                async with global_client.stream(
-                    "POST",
-                    f"{base_url.rstrip('/')}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json=request_body,
-                    timeout=60.0
-                ) as response:
-                    async for line in response.aiter_lines():
-                        # 用户插话时立即停止读取当前角色的流式输出
-                        if self._interrupted:
-                            break
-                        if not line or line == "data: [DONE]":
+            async with client.stream(
+                "POST",
+                f"{config['base_url'].rstrip('/')}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {config['api_key']}",
+                    "Content-Type": "application/json"
+                },
+                json=request_body,
+                timeout=60.0
+            ) as response:
+                async for line in response.aiter_lines():
+                    if self._interrupted:
+                        break
+                    if not line or line == "data: [DONE]":
+                        continue
+                    if line.startswith("data: "):
+                        try:
+                            chunk = json.loads(line[6:])
+                            content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                            if content:
+                                yield content
+                        except json.JSONDecodeError:
                             continue
-                        if line.startswith("data: "):
-                            try:
-                                chunk = json.loads(line[6:])
-                                delta = chunk.get("choices", [{}])[0].get("delta", {})
-                                content = delta.get("content", "")
-                                if content:
-                                    yield content
-                            except json.JSONDecodeError:
-                                continue
-            else:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    async with client.stream(
-                        "POST",
-                        f"{base_url.rstrip('/')}/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {api_key}",
-                            "Content-Type": "application/json"
-                        },
-                        json=request_body
-                    ) as response:
-                        async for line in response.aiter_lines():
-                            # 用户插话时立即停止读取当前角色的流式输出
-                            if self._interrupted:
-                                break
-                            if not line or line == "data: [DONE]":
-                                continue
-                            if line.startswith("data: "):
-                                try:
-                                    chunk = json.loads(line[6:])
-                                    delta = chunk.get("choices", [{}])[0].get("delta", {})
-                                    content = delta.get("content", "")
-                                    if content:
-                                        yield content
-                                except json.JSONDecodeError:
-                                    continue
-
         except httpx.TimeoutException:
-            yield "⏱️ 响应超时，请稍后重试。"
+            yield "⏱️ 响应超时"
         except Exception as e:
-            error_msg = str(e)
-            print(f"[集群编排] LLM调用失败: {error_msg}")
-            yield f"❌ 对话失败: {error_msg[:50]}"
+            yield f"❌ 对话失败: {str(e)[:50]}"
+        finally:
+            if not use_global:
+                await client.aclose()
 
     async def _generate_summary(
         self,
@@ -872,66 +846,31 @@ class ClusterOrchestrator:
         ]
 
         # 非流式调用
-        settings = await load_settings()
-        api_key = settings.get("apiKey", "")
-        base_url = settings.get("baseUrl", "https://api.openai.com/v1")
-        model = settings.get("model", "gpt-3.5-turbo")
-
-        selected_provider = settings.get("selectedProvider", None)
-        model_providers = settings.get("modelProviders", [])
-        if selected_provider and model_providers:
-            for provider in model_providers:
-                if str(provider.get("id", "")) == str(selected_provider):
-                    if provider.get("apiKey"):
-                        api_key = provider["apiKey"]
-                    elif provider.get("api_key"):
-                        api_key = provider["api_key"]
-                    if provider.get("url"):
-                        base_url = provider["url"]
-                    elif provider.get("base_url"):
-                        base_url = provider["base_url"]
-                    if provider.get("modelId"):
-                        model = provider["modelId"]
-                    elif provider.get("model"):
-                        model = provider["model"]
-                    break
-
-        if not api_key:
+        config = await self._resolve_llm_config()
+        if not config["api_key"]:
             return "未配置 API Key，无法生成总结。"
 
         try:
-            global_client = get_global_http_client()
-            client = global_client or httpx.AsyncClient(timeout=30.0)
+            use_global = get_global_http_client() is not None
+            client = get_global_http_client() or httpx.AsyncClient(timeout=30.0)
 
             request_body = {
-                "model": model,
+                "model": config["model"],
                 "messages": messages,
                 "temperature": 0.3,
                 "max_tokens": 300,
                 "stream": False
             }
 
-            if global_client:
-                response = await client.post(
-                    f"{base_url.rstrip('/')}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json=request_body,
-                    timeout=30.0
-                )
-            else:
-                async with client as c:
-                    response = await c.post(
-                        f"{base_url.rstrip('/')}/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {api_key}",
-                            "Content-Type": "application/json"
-                        },
-                        json=request_body,
-                        timeout=30.0
-                    )
+            response = await client.post(
+                f"{config['base_url'].rstrip('/')}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {config['api_key']}",
+                    "Content-Type": "application/json"
+                },
+                json=request_body,
+                timeout=30.0
+            )
 
             result = response.json()
             return result.get("choices", [{}])[0].get("message", {}).get("content", "总结生成失败")
@@ -939,6 +878,9 @@ class ClusterOrchestrator:
         except Exception as e:
             print(f"[集群编排] 总结生成失败: {e}")
             return "总结生成失败，请查看各角色观点自行总结。"
+        finally:
+            if not use_global:
+                await client.aclose()
 
     async def _save_session(self, topic: str, session_id: str, summary: str = ""):
         """保存讨论记录到数据库"""

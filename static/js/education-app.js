@@ -2162,7 +2162,6 @@ createApp({
     const availableRoles = ref([]);
     const clusterMessagesRef = ref(null);
     const clusterSetupCardRef = ref(null);
-    const clusterSetupDragging = ref(false);
     const clusterSetupPos = ref(null);  // null = 居中, { left, top } = 拖拽后的位置
     const clusterSessionId = ref('');
     const clusterRoleCards = computed(() => {
@@ -2397,25 +2396,21 @@ createApp({
     };
 
     // 设置卡片拖拽
-    const setupDragState = { startX: 0, startY: 0, startLeft: 0, startTop: 0 };
+    const setupDragState = { startX: 0, startY: 0, startLeft: 0, startTop: 0, maxLeft: 0, maxTop: 0 };
 
     const onSetupDragMove = (e) => {
       const cx = e.touches ? e.touches[0].clientX : e.clientX;
       const cy = e.touches ? e.touches[0].clientY : e.clientY;
       const dx = cx - setupDragState.startX;
       const dy = cy - setupDragState.startY;
-      const card = clusterSetupCardRef.value;
-      if (!card) return;
-      const parent = card.parentElement;
-      const maxLeft = parent.clientWidth - card.offsetWidth;
-      const maxTop = parent.clientHeight - card.offsetHeight;
-      const newLeft = Math.max(0, Math.min(maxLeft, setupDragState.startLeft + dx));
-      const newTop = Math.max(0, Math.min(maxTop, setupDragState.startTop + dy));
+      const newLeft = Math.max(0, Math.min(setupDragState.maxLeft, setupDragState.startLeft + dx));
+      const newTop = Math.max(0, Math.min(setupDragState.maxTop, setupDragState.startTop + dy));
+      const cur = clusterSetupPos.value;
+      if (cur && parseInt(cur.left, 10) === newLeft && parseInt(cur.top, 10) === newTop) return;
       clusterSetupPos.value = { left: newLeft + 'px', top: newTop + 'px' };
     };
 
     const onSetupDragEnd = () => {
-      clusterSetupDragging.value = false;
       document.removeEventListener('mousemove', onSetupDragMove);
       document.removeEventListener('mouseup', onSetupDragEnd);
       document.removeEventListener('touchmove', onSetupDragMove);
@@ -2427,49 +2422,68 @@ createApp({
     const initSetupDrag = (clientX, clientY) => {
       const card = clusterSetupCardRef.value;
       if (!card) return;
-      clusterSetupDragging.value = true;
-      // 首次拖拽：从居中 translate 转为 left/top 绝对定位
+      const parent = card.parentElement;
       if (!clusterSetupPos.value) {
-        const parent = card.parentElement;
         const left = (parent.clientWidth - card.offsetWidth) / 2;
         const top = (parent.clientHeight - card.offsetHeight) / 2;
         clusterSetupPos.value = { left: left + 'px', top: top + 'px' };
       }
+      card.dataset.dragged = '';
       setupDragState.startX = clientX;
       setupDragState.startY = clientY;
-      setupDragState.startLeft = parseInt(clusterSetupPos.value.left);
-      setupDragState.startTop = parseInt(clusterSetupPos.value.top);
+      setupDragState.startLeft = parseInt(clusterSetupPos.value.left, 10);
+      setupDragState.startTop = parseInt(clusterSetupPos.value.top, 10);
+      setupDragState.maxLeft = parent.clientWidth - card.offsetWidth;
+      setupDragState.maxTop = parent.clientHeight - card.offsetHeight;
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'grabbing';
     };
 
     const startSetupDrag = (e) => {
-      initSetupDrag(e.clientX, e.clientY);
+      const cx = e.touches ? e.touches[0].clientX : e.clientX;
+      const cy = e.touches ? e.touches[0].clientY : e.clientY;
+      initSetupDrag(cx, cy);
       document.addEventListener('mousemove', onSetupDragMove);
       document.addEventListener('mouseup', onSetupDragEnd);
+      if (e.touches) {
+        document.addEventListener('touchmove', onSetupDragMove, { passive: false });
+        document.addEventListener('touchend', onSetupDragEnd);
+      }
     };
 
-    const startSetupDragTouch = (e) => {
-      initSetupDrag(e.touches[0].clientX, e.touches[0].clientY);
-      document.addEventListener('touchmove', onSetupDragMove, { passive: false });
-      document.addEventListener('touchend', onSetupDragEnd);
-    };
+    // TTS 播报队列：确保角色播报按顺序不重叠
+    const ttsQueue = [];
+    let ttsPlaying = false;
 
-    // 集群语音播报（使用火山引擎 TTS，不使用数字人SDK）
-    const clusterSpeak = async (roleId, text) => {
-      const clean = cleanTextForSpeak(text);
-      if (!clean) return;
-
+    const dequeueTTS = async () => {
+      if (ttsQueue.length === 0) { ttsPlaying = false; return; }
+      ttsPlaying = true;
+      const { roleId, text } = ttsQueue.shift();
       clusterSpeakingRoleId.value = roleId;
-
       try {
-        // 使用火山引擎 TTS 播报
-        await clusterTTSSpeak(roleId, clean);
+        await clusterTTSSpeak(roleId, text);
       } catch (e) {
         console.error(`集群TTS播报失败[${roleId}]:`, e);
       }
-
       clusterSpeakingRoleId.value = '';
+      dequeueTTS();
+    };
+
+    const enqueueTTS = (roleId, text) => {
+      const clean = cleanTextForSpeak(text);
+      if (!clean) return;
+      ttsQueue.push({ roleId, text: clean });
+      if (!ttsPlaying) dequeueTTS();
+    };
+
+    const clearTTSQueue = () => {
+      ttsQueue.length = 0;
+      ttsPlaying = false;
+    };
+
+    // 集群语音播报（入队，按顺序播报）
+    const clusterSpeak = (roleId, text) => {
+      enqueueTTS(roleId, text);
     };
 
     // 火山引擎 TTS 播报
@@ -2534,17 +2548,18 @@ createApp({
       const abortController = new AbortController();
       clusterAbortController.value = abortController;
 
-      // 5分钟超时保护（3轮×4角色+总结+记忆提取需要较长时间）
+      // 2分钟超时保护
       const timeoutId = setTimeout(() => {
         if (clusterStatus.value === 'discussing') {
           abortController.abort();
+          clearTTSQueue();
           clusterCurrentSpeaker.value = '';
           clusterSpeakingRoleId.value = '';
           clusterThinkingRole.value = null;
           clusterMessages.value.push({
             id: Date.now(),
             type: 'system',
-            content: '讨论超时（5分钟），已自动结束'
+            content: '讨论超时（2分钟），已自动结束'
           });
         }
       }, 120000);
@@ -2789,6 +2804,7 @@ createApp({
         clusterAbortController.value.abort();
         clusterAbortController.value = null;
       }
+      clearTTSQueue();
       clusterStatus.value = 'idle';
       clusterCurrentSpeaker.value = '';
       clusterSpeakingRoleId.value = '';
@@ -5274,7 +5290,6 @@ createApp({
       clusterSetupCardRef,
       clusterSetupPos,
       startSetupDrag,
-      startSetupDragTouch,
       stopClusterDiscussion,
       clusterAbortController,
       loadClusterRoles,
