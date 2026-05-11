@@ -9144,11 +9144,10 @@ body {
               border-color var(--duration-slow) var(--ease-out);
 }
 
-/* 拖拽后由 JS 设置 left/top，取消 translate 居中 */
-.cluster-setup-card[style*="left:"] {
+/* 拖拽后取消 translate 居中 */
+.cluster-setup-card[data-dragged] {
   transform: none;
-  transition: box-shadow var(--duration-slow) var(--ease-out),
-              border-color var(--duration-slow) var(--ease-out);
+  animation: none;
 }
 
 .cluster-setup-card:hover {
@@ -9178,10 +9177,12 @@ body {
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
-.setup-fade-enter-active { transition: all var(--duration-normal) var(--ease-smooth); }
-.setup-fade-leave-active { transition: all var(--duration-fast) var(--ease-in); }
+.setup-fade-enter-active { transition: opacity var(--duration-normal) var(--ease-smooth); }
+.setup-fade-leave-active { transition: opacity var(--duration-fast) var(--ease-in); }
 .setup-fade-enter-from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
 .setup-fade-leave-to { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+.cluster-setup-card[data-dragged].setup-fade-enter-from { transform: scale(0.95); }
+.cluster-setup-card[data-dragged].setup-fade-leave-to { transform: scale(0.95); }
 
 .cluster-setup-card-header {
   display: flex;
@@ -10470,6 +10471,10 @@ body {
   .setup-fade-enter-from,
   .setup-fade-leave-to {
     transform: translate(-50%, -50%);
+  }
+  .cluster-setup-card[data-dragged].setup-fade-enter-from,
+  .cluster-setup-card[data-dragged].setup-fade-leave-to {
+    transform: none;
   }
   .cluster-role-ring-item {
     transition: none;
