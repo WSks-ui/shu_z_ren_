@@ -2161,6 +2161,9 @@ createApp({
     const clusterSelectedRoles = ref(['innovator', 'skeptic']);
     const availableRoles = ref([]);
     const clusterMessagesRef = ref(null);
+    const clusterSetupCardRef = ref(null);
+    const clusterSetupDragging = ref(false);
+    const clusterSetupPos = ref(null);  // null = 居中, { left, top } = 拖拽后的位置
     const clusterSessionId = ref('');
     const clusterRoleCards = computed(() => {
       const selected = new Set(clusterSelectedRoles.value);
@@ -2391,6 +2394,65 @@ createApp({
       } else {
         clusterPanel.value = clusterPanel.value === 'roles' ? null : 'roles';
       }
+    };
+
+    // 设置卡片拖拽
+    const setupDragState = { startX: 0, startY: 0, startLeft: 0, startTop: 0 };
+
+    const onSetupDragMove = (e) => {
+      const cx = e.touches ? e.touches[0].clientX : e.clientX;
+      const cy = e.touches ? e.touches[0].clientY : e.clientY;
+      const dx = cx - setupDragState.startX;
+      const dy = cy - setupDragState.startY;
+      const card = clusterSetupCardRef.value;
+      if (!card) return;
+      const parent = card.parentElement;
+      const maxLeft = parent.clientWidth - card.offsetWidth;
+      const maxTop = parent.clientHeight - card.offsetHeight;
+      const newLeft = Math.max(0, Math.min(maxLeft, setupDragState.startLeft + dx));
+      const newTop = Math.max(0, Math.min(maxTop, setupDragState.startTop + dy));
+      clusterSetupPos.value = { left: newLeft + 'px', top: newTop + 'px' };
+    };
+
+    const onSetupDragEnd = () => {
+      clusterSetupDragging.value = false;
+      document.removeEventListener('mousemove', onSetupDragMove);
+      document.removeEventListener('mouseup', onSetupDragEnd);
+      document.removeEventListener('touchmove', onSetupDragMove);
+      document.removeEventListener('touchend', onSetupDragEnd);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+
+    const initSetupDrag = (clientX, clientY) => {
+      const card = clusterSetupCardRef.value;
+      if (!card) return;
+      clusterSetupDragging.value = true;
+      // 首次拖拽：从居中 translate 转为 left/top 绝对定位
+      if (!clusterSetupPos.value) {
+        const parent = card.parentElement;
+        const left = (parent.clientWidth - card.offsetWidth) / 2;
+        const top = (parent.clientHeight - card.offsetHeight) / 2;
+        clusterSetupPos.value = { left: left + 'px', top: top + 'px' };
+      }
+      setupDragState.startX = clientX;
+      setupDragState.startY = clientY;
+      setupDragState.startLeft = parseInt(clusterSetupPos.value.left);
+      setupDragState.startTop = parseInt(clusterSetupPos.value.top);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'grabbing';
+    };
+
+    const startSetupDrag = (e) => {
+      initSetupDrag(e.clientX, e.clientY);
+      document.addEventListener('mousemove', onSetupDragMove);
+      document.addEventListener('mouseup', onSetupDragEnd);
+    };
+
+    const startSetupDragTouch = (e) => {
+      initSetupDrag(e.touches[0].clientX, e.touches[0].clientY);
+      document.addEventListener('touchmove', onSetupDragMove, { passive: false });
+      document.addEventListener('touchend', onSetupDragEnd);
     };
 
     // 集群语音播报（使用火山引擎 TTS，不使用数字人SDK）
@@ -5209,6 +5271,10 @@ createApp({
       exportCurrentSession,
       toggleClusterPanel,
       onRoleRingClick,
+      clusterSetupCardRef,
+      clusterSetupPos,
+      startSetupDrag,
+      startSetupDragTouch,
       stopClusterDiscussion,
       clusterAbortController,
       loadClusterRoles,
