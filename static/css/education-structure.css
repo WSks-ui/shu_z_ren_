@@ -9566,6 +9566,26 @@ body {
   color: var(--text-secondary);
 }
 
+.cluster-msg-thinking {
+  display: inline-block;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  background: var(--glass-bg);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+
+.cluster-msg-thinking i {
+  margin-right: 4px;
+}
+
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 .cluster-msg-system {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
