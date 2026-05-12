@@ -243,7 +243,6 @@ class ClusterOrchestrator:
         for round_num in range(1, max_rounds + 1):
             self.current_round = round_num
 
-            # round_start 必须在角色发言前发出，否则前端进度条长时间无更新
             yield f"data: {json.dumps({'type': 'round_start', 'round': round_num}, ensure_ascii=False)}\n\n"
 
             if self._interrupted:
@@ -271,7 +270,23 @@ class ClusterOrchestrator:
             ):
                 yield event
 
+            # 每轮结束后，由总结者总结并判断是否继续
+            should_end = False
+            async for event in self._moderator_summarize(topic, round_num, round_responses, max_rounds):
+                yield event
+                if event.startswith("data: "):
+                    try:
+                        evt_data = json.loads(event[6:])
+                        if evt_data.get("type") == "round_summary" and evt_data.get("should_end"):
+                            should_end = True
+                    except (json.JSONDecodeError, Exception):
+                        pass
+
             yield f"data: {json.dumps({'type': 'round_end', 'round': round_num}, ensure_ascii=False)}\n\n"
+
+            if should_end:
+                _log("辩论", f"总结者判断辩论已充分，提前结束")
+                break
 
     async def _debate_role_turn(
         self,
