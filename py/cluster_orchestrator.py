@@ -16,6 +16,14 @@ from py.education_api import get_global_http_client, analyze_emotion
 from py.get_setting import load_settings, USER_DATA_DIR
 
 
+# ── 运行状态日志 ──
+def _log(tag: str, msg: str):
+    t = time.time()
+    ms = int((t % 1) * 1000)
+    ts = f"{time.strftime('%H:%M:%S', time.localtime(t))}.{ms:03d}"
+    print(f"[集群 {ts}] [{tag}] {msg}")
+
+
 class ClusterOrchestrator:
     """集群对话编排器"""
 
@@ -70,6 +78,7 @@ class ClusterOrchestrator:
                     break
 
         self._llm_config = config
+        _log("配置", f"LLM配置已加载 model={config['model']} base_url={config['base_url'][:30]}...")
         return config
 
     async def run_discussion(
@@ -87,6 +96,7 @@ class ClusterOrchestrator:
         self._session_id = session_id or f"cluster-{int(time.time())}"
         self._topic = topic
         self._created_at = time.time()
+        _log("讨论开始", f"话题=\"{topic[:30]}\" 模式={self.mode} 角色={self.role_ids} 最大轮次={self.max_rounds} 续聊={bool(history)}")
 
         mode_config = CLUSTER_MODES.get(self.mode)
         if not mode_config:
@@ -106,8 +116,10 @@ class ClusterOrchestrator:
         # 限制最大轮次
         effective_max_rounds = min(self.max_rounds, mode_config["max_rounds"])
 
-        # 加载角色记忆
-        self._role_memories = await self._load_role_memories()
+        # 加载角色记忆（如果尚未预加载）
+        if not hasattr(self, '_role_memories') or self._role_memories is None:
+            self._role_memories = await self._load_role_memories()
+        _log("记忆加载", f"已加载 {len(self._role_memories)} 个角色的记忆")
 
         if self.mode == "roundtable":
             async for event in self._roundtable(topic, user_input, effective_max_rounds):
@@ -140,12 +152,13 @@ class ClusterOrchestrator:
         user_input: str,
         max_rounds: int
     ) -> AsyncGenerator[str, None]:
-        """圆桌讨论：按角色顺序发言，可引用前人观点"""
+        """圆桌讨论：按角色顺序发言，可引用前人观点。每轮结束后由总结者总结并判断是否继续。"""
+        _log("圆桌", f"开始 场次={self._session_id[:12]} 最大轮次={max_rounds}")
 
         for round_num in range(1, max_rounds + 1):
             self.current_round = round_num
 
-            # round_start 必须在角色发言前发出，否则前端进度条长时间无更新
+            _log("圆桌", f"第{round_num}轮开始")
             yield f"data: {json.dumps({'type': 'round_start', 'round': round_num}, ensure_ascii=False)}\n\n"
 
             if self._interrupted:
@@ -154,32 +167,34 @@ class ClusterOrchestrator:
 
             round_responses = []
 
-            for role_id in self.role_ids:
+            for i, role_id in enumerate(self.role_ids):
                 role = self.roles.get(role_id)
                 if not role:
                     continue
 
-                # 发送角色开始事件
-                yield f"data: {json.dumps({'type': 'role_start', 'role_id': role_id, 'role_name': role['name'], 'round': round_num, 'color': role['color']}, ensure_ascii=False)}\n\n"
+                role_name = role['name']
 
-                # 构建角色提示词
+                _log("圆桌", f"第{round_num}轮 角色={role_name}({role_id}) 开始发言")
+                yield f"data: {json.dumps({'type': 'role_start', 'role_id': role_id, 'role_name': role_name, 'round': round_num, 'color': role['color']}, ensure_ascii=False)}\n\n"
+
+                full_response = ""
+                _log("LLM", f"角色={role_name} 调用LLM")
+                t0 = time.time()
                 system_prompt = self._build_role_prompt(role_id, topic, round_responses, user_input)
                 messages = self._build_messages(system_prompt, topic, user_input, round_responses)
-
-                # 流式调用 LLM
-                full_response = ""
                 async for chunk in self._call_llm_stream(messages):
-                    if chunk:
+                    if isinstance(chunk, tuple) and chunk[0] == "reasoning":
+                        yield f"data: {json.dumps({'type': 'role_reasoning', 'role_id': role_id, 'content': chunk[1]}, ensure_ascii=False)}\n\n"
+                    elif chunk:
                         full_response += chunk
                         yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': role_id, 'content': chunk}, ensure_ascii=False)}\n\n"
+                _log("LLM", f"角色={role_name} 流式输出完成 耗时={time.time()-t0:.2f}s 字数={len(full_response)}")
 
-                # 情绪分析
                 emotion = analyze_emotion(full_response)
 
-                # 发送角色结束事件
+                _log("圆桌", f"第{round_num}轮 角色={role_name} 发言结束 情绪={emotion} 字数={len(full_response)}")
                 yield f"data: {json.dumps({'type': 'role_end', 'role_id': role_id, 'emotion': emotion}, ensure_ascii=False)}\n\n"
 
-                # 记录到历史
                 round_responses.append({
                     "role_id": role_id,
                     "role_name": role["name"],
@@ -193,7 +208,25 @@ class ClusterOrchestrator:
                     "round": round_num
                 })
 
+            # 每轮结束后，由总结者总结并判断是否继续
+            should_end = False
+            async for event in self._moderator_summarize(topic, round_num, round_responses, max_rounds):
+                yield event
+                # 从 round_summary 事件中提取 should_end
+                if event.startswith("data: "):
+                    try:
+                        evt_data = json.loads(event[6:])
+                        if evt_data.get("type") == "round_summary" and evt_data.get("should_end"):
+                            should_end = True
+                    except (json.JSONDecodeError, Exception):
+                        pass
+
+            _log("圆桌", f"第{round_num}轮结束")
             yield f"data: {json.dumps({'type': 'round_end', 'round': round_num}, ensure_ascii=False)}\n\n"
+
+            if should_end:
+                _log("圆桌", f"总结者判断讨论已充分，提前结束")
+                break
 
     async def _debate(
         self,
@@ -238,9 +271,6 @@ class ClusterOrchestrator:
             ):
                 yield event
 
-            # 每轮结束发送好感度更新事件
-            yield f"data: {json.dumps({'type': 'affection_update', 'matrix': self.affection_matrix}, ensure_ascii=False)}\n\n"
-
             yield f"data: {json.dumps({'type': 'round_end', 'round': round_num}, ensure_ascii=False)}\n\n"
 
     async def _debate_role_turn(
@@ -266,7 +296,9 @@ class ClusterOrchestrator:
 
         full_response = ""
         async for chunk in self._call_llm_stream(messages):
-            if chunk:
+            if isinstance(chunk, tuple) and chunk[0] == "reasoning":
+                yield f"data: {json.dumps({'type': 'role_reasoning', 'role_id': role_id, 'content': chunk[1]}, ensure_ascii=False)}\n\n"
+            elif chunk:
                 full_response += chunk
                 yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': role_id, 'content': chunk}, ensure_ascii=False)}\n\n"
 
@@ -295,6 +327,7 @@ class ClusterOrchestrator:
         user_input: str
     ) -> AsyncGenerator[str, None]:
         """会诊模式：各角色独立并行回答，然后顺序输出"""
+        _log("会诊", f"开始 话题=\"{topic[:30]}\" 角色数={len(self.role_ids)} 并行调用")
 
         yield f"data: {json.dumps({'type': 'round_start', 'round': 1}, ensure_ascii=False)}\n\n"
 
@@ -313,6 +346,8 @@ class ClusterOrchestrator:
 
             full_response = ""
             async for chunk in self._call_llm_stream(messages):
+                if isinstance(chunk, tuple):
+                    continue  # 跳过 reasoning 内容
                 if chunk:
                     full_response += chunk
 
@@ -361,6 +396,110 @@ class ClusterOrchestrator:
 
         # 汇总
         yield f"data: {json.dumps({'type': 'round_end', 'round': 1}, ensure_ascii=False)}\n\n"
+
+    async def _moderator_summarize(
+        self,
+        topic: str,
+        round_num: int,
+        round_responses: List[Dict],
+        max_rounds: int
+    ) -> AsyncGenerator[str, None]:
+        """每轮结束后由总结者总结讨论并判断是否继续。yield SSE事件，最后一个事件包含 should_end 判断。"""
+
+        moderator_role = CLUSTER_ROLES.get("moderator")
+        if not moderator_role:
+            if round_num >= max_rounds:
+                yield f"data: {json.dumps({'type': 'round_summary', 'should_end': True}, ensure_ascii=False)}\n\n"
+            return
+
+        # 发送总结者开始事件
+        yield f"data: {json.dumps({'type': 'role_start', 'role_id': 'moderator', 'role_name': moderator_role['name'], 'round': round_num, 'color': moderator_role['color']}, ensure_ascii=False)}\n\n"
+
+        # 构建总结者提示词
+        discussion_summary = f"讨论话题：{topic}\n当前是第{round_num}轮（最多{max_rounds}轮）\n\n"
+        discussion_summary += "本轮各角色发言：\n"
+        for resp in round_responses:
+            name = resp.get("role_name", "未知")
+            content = resp.get("content", "")
+            discussion_summary += f"- {name}：{content[:300]}\n"
+
+        # 如果有历史记录，也包含之前的讨论
+        if len(self.history) > len(round_responses):
+            discussion_summary += "\n之前轮次的发言摘要：\n"
+            prev_msgs = self.history[:-len(round_responses)]
+            seen = set()
+            for msg in prev_msgs:
+                key = f"{msg.get('role_id', '')}-{msg.get('round', 0)}"
+                if key not in seen:
+                    seen.add(key)
+                    discussion_summary += f"- 第{msg.get('round', '?')}轮 {msg.get('role', '未知')}：{msg.get('content', '')[:150]}...\n"
+
+        system_prompt = moderator_role["system_prompt"] + f"""
+
+## 当前任务
+请总结本轮讨论的进展，并判断是否需要继续讨论。
+
+你必须严格用以下 JSON 格式输出，不要包含任何其他文字：
+{{
+  "summary": "本轮讨论的简要总结（2-3句话，概括共识和分歧）",
+  "should_continue": true或false
+}}
+
+判断 should_continue 为 false 的条件（满足任一即可）：
+1. 各角色观点已趋于一致，没有新的分歧点
+2. 核心问题已有明确答案或方案
+3. 角色开始重复已有观点，讨论陷入循环
+
+判断 should_continue 为 true 的条件：
+1. 还有未解决的重要分歧
+2. 某些角度尚未被充分探讨
+3. 需要更多轮次来验证或深化观点
+
+注意：第{max_rounds}轮是最后一轮，无论如何必须结束。"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": discussion_summary}
+        ]
+
+        full_response = ""
+        async for chunk in self._call_llm_stream(messages):
+            if isinstance(chunk, tuple):
+                continue  # 跳过 reasoning
+            elif chunk:
+                full_response += chunk
+                yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': 'moderator', 'content': chunk}, ensure_ascii=False)}\n\n"
+
+        emotion = analyze_emotion(full_response)
+
+        # 解析 should_continue
+        should_end = round_num >= max_rounds  # 最后一轮必须结束
+        try:
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', full_response)
+            if json_match:
+                result = json.loads(json_match.group())
+                should_continue = result.get("should_continue", True)
+                if not should_continue:
+                    should_end = True
+                    _log("总结者", f"判断讨论已充分，建议结束")
+                else:
+                    _log("总结者", f"判断讨论需继续")
+        except (json.JSONDecodeError, Exception) as e:
+            _log("总结者", f"解析判断结果失败: {e}，默认继续")
+
+        yield f"data: {json.dumps({'type': 'role_end', 'role_id': 'moderator', 'emotion': emotion}, ensure_ascii=False)}\n\n"
+
+        # 发送轮次总结事件（包含是否结束的判断）
+        yield f"data: {json.dumps({'type': 'round_summary', 'should_end': should_end, 'round': round_num}, ensure_ascii=False)}\n\n"
+
+        # 记录总结者发言到历史
+        self.history.append({
+            "role": moderator_role["name"],
+            "role_id": "moderator",
+            "content": full_response,
+            "round": round_num
+        })
 
     def _build_role_prompt(
         self,
@@ -498,7 +637,7 @@ class ClusterOrchestrator:
         return base_prompt + interrupt_instruction
 
     async def _handle_interrupt(self, topic: str, round_num: int, responder_ids: List[str], stance_map: Dict[str, str] = None):
-        """处理用户插话：选择角色回应、更新好感度、持久化用户消息。
+        """处理用户插话：选择角色回应、持久化用户消息。
 
         Args:
             topic: 讨论话题
@@ -517,6 +656,7 @@ class ClusterOrchestrator:
             respond_roles = responder_ids
         else:
             respond_roles = self._select_interrupt_responders(user_msg, max_count=2)
+        _log("插话", f"用户插话=\"{user_msg[:30]}\" 回应角色={[r for r in respond_roles]}")
 
         for role_id in respond_roles:
             if self._interrupted:
@@ -543,12 +683,13 @@ class ClusterOrchestrator:
 
             full_response = ""
             async for chunk in self._call_llm_stream(messages):
-                if chunk:
+                if isinstance(chunk, tuple) and chunk[0] == "reasoning":
+                    yield f"data: {json.dumps({'type': 'role_reasoning', 'role_id': role_id, 'content': chunk[1]}, ensure_ascii=False)}\n\n"
+                elif chunk:
                     full_response += chunk
                     yield f"data: {json.dumps({'type': 'role_chunk', 'role_id': role_id, 'content': chunk}, ensure_ascii=False)}\n\n"
 
             emotion = analyze_emotion(full_response)
-            self.update_affection_from_response(role_id, full_response)
             yield f"data: {json.dumps({'type': 'role_end', 'role_id': role_id, 'emotion': emotion}, ensure_ascii=False)}\n\n"
 
             history_entry = {
@@ -649,15 +790,24 @@ class ClusterOrchestrator:
         """流式调用 LLM，使用缓存的配置"""
         config = await self._resolve_llm_config()
         if not config["api_key"]:
+            _log("LLM", "❌ 未配置 API Key，跳过调用")
             yield "⚠️ 未配置 API Key"
             return
+
+        _log("LLM", f"发起请求 model={config['model']} base_url={config['base_url'][:30]}... 消息数={len(messages)}")
+        t0 = time.time()
+        first_chunk_time = None
+        total_content = ""
 
         request_body = {
             "model": config["model"],
             "messages": messages,
             "temperature": config["temperature"],
             "max_tokens": config["max_tokens"],
-            "stream": True
+            "stream": True,
+            # 思考模型（如 qwen3.5-plus）默认会先输出 reasoning_content 再输出 content，
+            # 导致首 token 延迟 20-30 秒。集群讨论中关闭思考以获得即时响应。
+            "enable_thinking": False
         }
 
         use_global = get_global_http_client() is not None
@@ -676,24 +826,45 @@ class ClusterOrchestrator:
             ) as response:
                 async for line in response.aiter_lines():
                     if self._interrupted:
+                        _log("LLM", "⚠️ 被用户插话中断")
                         break
                     if not line or line == "data: [DONE]":
                         continue
                     if line.startswith("data: "):
                         try:
                             chunk = json.loads(line[6:])
-                            content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                            choices = chunk.get("choices", [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get("delta", {})
+                            # 思考模型（如 qwen3.5-plus）先输出 reasoning_content，再输出 content
+                            reasoning = delta.get("reasoning_content", "")
+                            if reasoning:
+                                if first_chunk_time is None:
+                                    first_chunk_time = time.time()
+                                    _log("LLM", f"首reasoning token到达 延迟={first_chunk_time - t0:.2f}s")
+                                # 将思考内容作为特殊事件输出，前端可选择性展示
+                                yield ("reasoning", reasoning)
+                            content = delta.get("content", "")
                             if content:
+                                if first_chunk_time is None:
+                                    first_chunk_time = time.time()
+                                    _log("LLM", f"首token到达 首token延迟={first_chunk_time - t0:.2f}s")
+                                total_content += content
                                 yield content
                         except json.JSONDecodeError:
                             continue
         except httpx.TimeoutException:
+            _log("LLM", "⏱️ 响应超时")
             yield "⏱️ 响应超时"
         except Exception as e:
+            _log("LLM", f"❌ 调用失败: {e}")
             yield f"❌ 对话失败: {str(e)[:50]}"
         finally:
             if not use_global:
                 await client.aclose()
+            elapsed = time.time() - t0
+            _log("LLM", f"调用结束 总耗时={elapsed:.2f}s 输出字数={len(total_content)} 首token延迟={first_chunk_time - t0 if first_chunk_time else elapsed:.2f}s")
 
     async def _generate_summary(
         self,
@@ -741,7 +912,8 @@ class ClusterOrchestrator:
                 "messages": messages,
                 "temperature": 0.3,
                 "max_tokens": 300,
-                "stream": False
+                "stream": False,
+                "enable_thinking": False
             }
 
             response = await client.post(
@@ -755,7 +927,10 @@ class ClusterOrchestrator:
             )
 
             result = response.json()
-            return result.get("choices", [{}])[0].get("message", {}).get("content", "总结生成失败")
+            choices = result.get("choices", [])
+            if not choices:
+                return "总结生成失败"
+            return choices[0].get("message", {}).get("content", "总结生成失败")
 
         except Exception as e:
             print(f"[集群编排] 总结生成失败: {e}")
@@ -829,6 +1004,8 @@ class ClusterOrchestrator:
                 try:
                     result = ""
                     async for chunk in self._call_llm_stream(messages):
+                        if isinstance(chunk, tuple):
+                            continue  # 跳过 reasoning 内容
                         if chunk:
                             result += chunk
 
