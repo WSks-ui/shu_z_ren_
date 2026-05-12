@@ -820,27 +820,6 @@
                 </button>
               </div>
             </template>
-            <!-- 好感度面板 -->
-            <template v-if="clusterPanel === 'affection'">
-              <div class="cluster-panel-header">
-                <h3>角色好感度</h3>
-                <button class="cluster-close-btn cluster-panel-close" @click="clusterPanel = null" aria-label="关闭面板"><i class="fa-solid fa-xmark"></i></button>
-              </div>
-              <div class="cluster-affection-matrix" role="grid" aria-label="角色好感度矩阵">
-                <div class="matrix-header">
-                  <span class="matrix-corner"></span>
-                  <span v-for="role in clusterRoleCards" :key="'h-' + role.id" class="matrix-col-label">{{ role.name }}</span>
-                </div>
-                <div v-for="fromRole in clusterRoleCards" :key="'r-' + fromRole.id" class="matrix-row">
-                  <span class="matrix-row-label">{{ fromRole.name }}</span>
-                  <span v-for="toRole in clusterRoleCards" :key="'c-' + fromRole.id + '-' + toRole.id" class="matrix-cell"
-                    :class="{ positive: (clusterAffectionMatrix[fromRole.id]?.[toRole.id] || 50) > 55, negative: (clusterAffectionMatrix[fromRole.id]?.[toRole.id] || 50) < 45 }"
-                    :style="{ '--cell-value': clusterAffectionMatrix[fromRole.id]?.[toRole.id] || 50 }">
-                    {{ clusterAffectionMatrix[fromRole.id]?.[toRole.id] || '-' }}
-                  </span>
-                </div>
-              </div>
-            </template>
           </div>
         </transition>
       </div>
@@ -933,6 +912,9 @@
               <template v-if="msg.type === 'role'">
                 <div class="cluster-msg-bubble role-bubble" :style="{ '--msg-role-color': msg.color }">
                   <span class="cluster-msg-name" :style="{ color: msg.color }">{{ msg.name }}</span>
+                  <span v-if="msg.reasoning" class="cluster-msg-thinking">
+                    <i class="fa-solid fa-brain"></i> 思考中...
+                  </span>
                   <span class="cluster-msg-text">{{ msg.content }}</span>
                 </div>
               </template>
