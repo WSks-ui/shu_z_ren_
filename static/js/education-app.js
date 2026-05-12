@@ -2449,22 +2449,98 @@ createApp({
       }
     };
 
+    // ── 集群运行状态日志 ──
+    const _clog = (tag, msg) => {
+      const d = new Date();
+      const ts = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}.${d.getMilliseconds().toString().padStart(3,'0')}`;
+      console.log(`[集群 ${ts}] [${tag}] ${msg}`);
+    };
+
+    // 按句子边界查找切分点
+    const findSentenceEnd = (text, minPos) => {
+      const endings = ['。', '！', '？', '；', '.', '!', '?', ';', '\n'];
+      for (let i = Math.max(minPos, 0); i < text.length; i++) {
+        if (endings.includes(text[i])) return i;
+      }
+      return -1;
+    };
+
+    // 按句子边界切分文字为 TTS 段落
+    const splitTextForTTS = (text, maxLen = 150) => {
+      const segments = [];
+      let remaining = text;
+      while (remaining.length > 0) {
+        if (remaining.length <= maxLen) {
+          segments.push(remaining);
+          break;
+        }
+        const splitIdx = findSentenceEnd(remaining, Math.floor(maxLen * 0.6));
+        if (splitIdx > 0) {
+          segments.push(remaining.substring(0, splitIdx + 1));
+          remaining = remaining.substring(splitIdx + 1);
+        } else {
+          segments.push(remaining.substring(0, maxLen));
+          remaining = remaining.substring(maxLen);
+        }
+      }
+      return segments;
+    };
+
     // TTS 播报队列：确保角色播报按顺序不重叠
+    let _currentClusterAudio = null;
     const ttsQueue = [];
     let ttsPlaying = false;
+    let _ttsFinishResolve = null;  // role_end 等待 TTS 播完的 resolve
 
     const dequeueTTS = async () => {
-      if (ttsQueue.length === 0) { ttsPlaying = false; return; }
-      ttsPlaying = true;
-      const { roleId, text } = ttsQueue.shift();
-      clusterSpeakingRoleId.value = roleId;
-      try {
-        await clusterTTSSpeak(roleId, text);
-      } catch (e) {
-        console.error(`集群TTS播报失败[${roleId}]:`, e);
+      while (ttsQueue.length > 0) {
+        ttsPlaying = true;
+        const item = ttsQueue.shift();
+        const { roleId, text } = item;
+        clusterSpeakingRoleId.value = roleId;
+        _clog('TTS', `开始播报 角色=${roleId} 文字="${text.substring(0, 20)}..." 队列剩余=${ttsQueue.length}`);
+        const t0 = performance.now();
+
+        // 预合成：在播报当前段的同时，提前合成下一段
+        let preloadedNext = null;
+        if (ttsQueue.length > 0) {
+          const nextItem = ttsQueue[0];
+          if (!nextItem._preloadedUrl) {
+            preloadedNext = clusterTTSFetch(nextItem.roleId, nextItem.text).catch(() => null);
+            _clog('TTS', `预合成下一段 角色=${nextItem.roleId} 字数=${nextItem.text.length}`);
+          }
+        }
+
+        try {
+          await clusterTTSSpeak(roleId, text, item._preloadedUrl || null);
+        } catch (e) {
+          console.error(`集群TTS播报失败[${roleId}]:`, e);
+        }
+        _clog('TTS', `播报完成 角色=${roleId} 耗时=${((performance.now()-t0)/1000).toFixed(2)}s`);
+        clusterSpeakingRoleId.value = '';
+
+        if (preloadedNext) {
+          const nextUrl = await preloadedNext;
+          if (nextUrl && ttsQueue.length > 0) {
+            ttsQueue[0]._preloadedUrl = nextUrl;
+            _clog('TTS', `预合成完成 下一段已缓存`);
+          }
+        }
       }
-      clusterSpeakingRoleId.value = '';
-      dequeueTTS();
+      ttsPlaying = false;
+      // 队列播完，通知等待者
+      if (_ttsFinishResolve) {
+        _ttsFinishResolve();
+        _ttsFinishResolve = null;
+      }
+    };
+
+    // 等待 TTS 队列全部播完
+    const waitForTTSFinish = () => {
+      if (!ttsPlaying && ttsQueue.length === 0) return Promise.resolve();
+      return new Promise(resolve => {
+        _ttsFinishResolve = resolve;
+      });
     };
 
     const enqueueTTS = (roleId, text) => {
@@ -2477,6 +2553,14 @@ createApp({
     const clearTTSQueue = () => {
       ttsQueue.length = 0;
       ttsPlaying = false;
+      if (_currentClusterAudio) {
+        _currentClusterAudio.pause();
+        _currentClusterAudio = null;
+      }
+      if (_ttsFinishResolve) {
+        _ttsFinishResolve();
+        _ttsFinishResolve = null;
+      }
     };
 
     // 集群语音播报（入队，按顺序播报）
@@ -2484,41 +2568,37 @@ createApp({
       enqueueTTS(roleId, text);
     };
 
-    // 火山引擎 TTS 播报
-    const clusterTTSSpeak = async (roleId, text) => {
+    // TTS 合成（只请求合成，返回音频 URL）
+    const clusterTTSFetch = async (roleId, text) => {
+      if (!text || !text.trim()) return null;
+      _clog('TTS-API', `请求合成 角色=${roleId} 字数=${text.length}`);
+      const t0 = performance.now();
       try {
-        const response = await fetch('/api/cluster/tts', {
+        const resp = await fetch('/api/cluster/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: text,
-            role_id: roleId
-          })
+          body: JSON.stringify({ text, role_id: roleId })
         });
-
-        if (!response.ok) {
-          throw new Error(`TTS HTTP ${response.status}`);
-        }
-
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-
-        return new Promise((resolve, reject) => {
-          audio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-            resolve();
-          };
-          audio.onerror = () => {
-            URL.revokeObjectURL(audioUrl);
-            reject(new Error('音频播放失败'));
-          };
-          audio.play().catch(reject);
-        });
+        if (!resp.ok) throw new Error(`TTS ${resp.status}`);
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        _clog('TTS-API', `合成完成 角色=${roleId} 耗时=${((performance.now()-t0)/1000).toFixed(2)}s`);
+        return url;
       } catch (e) {
-        console.error(`集群TTS失败[${roleId}]:`, e);
-        throw e;
+        _clog('TTS-API', `❌ 合成失败 角色=${roleId}: ${e}`);
+        return null;
       }
+    };
+
+    // TTS 合成+播放
+    const clusterTTSSpeak = async (roleId, text, preloadedUrl = null) => {
+      const url = preloadedUrl || await clusterTTSFetch(roleId, text);
+      if (!url) return;
+      const audio = new Audio(url);
+      _currentClusterAudio = audio;
+      await audio.play();
+      await new Promise(resolve => { audio.onended = resolve; audio.onerror = resolve; });
+      _currentClusterAudio = null;
     };
 
     // 开始集群讨论
@@ -2594,25 +2674,19 @@ createApp({
         let currentRoleName = '';
         let currentColor = '';
         let currentContent = '';
+        let currentReasoning = '';
+        let ttsPendingBuffer = '';  // TTS 分段缓冲区
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-              const data = JSON.parse(line.slice(6));
-
-              if (data.type === 'role_start') {
-                currentRoleId = data.role_id;
+        // 处理单个 SSE 事件
+        const processSSEEvent = async (data) => {
+          if (data.type === 'role_start') {
+            currentRoleId = data.role_id;
                 currentRoleName = data.role_name;
                 currentColor = data.color || '#a5b4fc';
                 currentContent = '';
+            currentReasoning = '';
+            ttsPendingBuffer = '';
+                _clog('SSE', `role_start 角色=${currentRoleName}(${currentRoleId}) 轮=${data.round}`);
                 // 设置 thinking 指示器
                 clusterThinkingRole.value = {
                   roleId: currentRoleId,
@@ -2628,11 +2702,52 @@ createApp({
                 if (clusterMessagesRef.value) {
                   clusterMessagesRef.value.scrollTop = clusterMessagesRef.value.scrollHeight;
                 }
+              } else if (data.type === 'role_reasoning') {
+                // 思考模型（如 qwen3.5-plus）的推理过程，显示为折叠的思考状态
+                if (!currentReasoning) {
+                  currentReasoning = '';
+                  // 首次收到 reasoning，创建带"思考中"标记的消息气泡
+                  clusterThinkingRole.value = null;  // 清除通用 thinking 指示器
+                  clusterMessages.value.push({
+                    id: Date.now() + Math.random(),
+                    type: 'role',
+                    roleId: currentRoleId,
+                    name: currentRoleName,
+                    color: currentColor,
+                    content: '',
+                    reasoning: true
+                  });
+                  await nextTick();
+                  if (clusterMessagesRef.value) {
+                    clusterMessagesRef.value.scrollTop = clusterMessagesRef.value.scrollHeight;
+                  }
+                }
+                currentReasoning += data.content;
+                _clog('SSE', `role_reasoning 角色=${currentRoleName} 思考字数=${currentReasoning.length}`);
               } else if (data.type === 'role_chunk') {
-                currentContent += data.content;
-                const lastMsg = clusterMessages.value[clusterMessages.value.length - 1];
-                // 首次收到内容时，清除 thinking 并添加实际角色消息
+            currentContent += data.content;
+            // 思考结束，开始正式输出 — 清除 reasoning 标记
+            if (currentReasoning) {
+              currentReasoning = '';
+              const lastMsg = clusterMessages.value[clusterMessages.value.length - 1];
+              if (lastMsg?.reasoning) {
+                lastMsg.reasoning = false;
+              }
+            }
+            // 分段 TTS：文字流式显示的同时，按句子切分入队语音
+            ttsPendingBuffer += data.content;
+            if (ttsPendingBuffer.length >= 100) {
+              const splitIdx = findSentenceEnd(ttsPendingBuffer, 60);
+              if (splitIdx > 0) {
+                const segment = ttsPendingBuffer.substring(0, splitIdx + 1);
+                ttsPendingBuffer = ttsPendingBuffer.substring(splitIdx + 1);
+                enqueueTTS(currentRoleId, segment);
+              }
+            }
+            const lastMsg = clusterMessages.value[clusterMessages.value.length - 1];
+                // 首次收到内容时，清除 thinking 并添加/更新实际角色消息
                 if (clusterThinkingRole.value && clusterThinkingRole.value.roleId === currentRoleId) {
+                  // 无 reasoning 阶段（非思考模型），创建新消息气泡
                   clusterThinkingRole.value = null;
                   clusterMessages.value.push({
                     id: Date.now() + Math.random(),
@@ -2643,6 +2758,7 @@ createApp({
                     content: currentContent
                   });
                 } else if (lastMsg?.roleId === currentRoleId) {
+                  // 已有消息气泡（可能是 reasoning 阶段创建的），更新内容
                   lastMsg.content = currentContent;
                 }
                 // 节流滚动（每 300ms 一次，不阻塞数据接收）
@@ -2655,17 +2771,21 @@ createApp({
                   }, 300);
                 }
               } else if (data.type === 'role_end') {
-                // 清除节流，立即滚动
-                if (_scrollThrottle) {
-                  clearTimeout(_scrollThrottle);
-                  _scrollThrottle = null;
-                }
-                // 播报异步执行，不阻塞 SSE 读取
-                clusterSpeak(currentRoleId, currentContent);
-                currentRoleId = '';
-                currentContent = '';
-                // 不清空 clusterSpeakingRoleId，让下一个 role_start 覆盖，避免角色环闪烁
-                await nextTick();
+            if (_scrollThrottle) {
+              clearTimeout(_scrollThrottle);
+              _scrollThrottle = null;
+            }
+            // 发送剩余 TTS 缓冲区
+            if (ttsPendingBuffer.trim()) {
+              enqueueTTS(currentRoleId, ttsPendingBuffer);
+              ttsPendingBuffer = '';
+            }
+            _clog('SSE', `role_end 角色=${currentRoleName} 等待TTS播完...`);
+            await waitForTTSFinish();
+            _clog('SSE', `role_end 角色=${currentRoleName} TTS播完 总字数=${currentContent.length}`);
+            currentRoleId = '';
+            currentContent = '';
+            await nextTick();
                 if (clusterMessagesRef.value) {
                   clusterMessagesRef.value.scrollTop = clusterMessagesRef.value.scrollHeight;
                 }
@@ -2708,6 +2828,8 @@ createApp({
                   content: `💬 角色正在回应你的插话：${data.message}`
                 });
               } else if (data.type === 'done') {
+                // 等最后一个角色的 TTS 播完
+                await waitForTTSFinish();
                 clusterCurrentSpeaker.value = '';
                 clusterSpeakingRoleId.value = '';
                 clusterInterruptPending.value = false;
@@ -2718,6 +2840,21 @@ createApp({
                   content: '讨论结束'
                 });
               }
+        };  // processSSEEvent 结束
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              await processSSEEvent(data);
             } catch (parseErr) {
               // 忽略解析错误
             }
@@ -2799,25 +2936,6 @@ createApp({
         type: 'system',
         content: '讨论已手动停止'
       });
-    };
-
-    // 好感度浮动提示（缓存 DOM 查询）
-    let _affectionRingCache = null;
-    const triggerAffectionFloat = (fromId, toId, delta) => {
-      if (!_affectionRingCache || !_affectionRingCache.isConnected) {
-        _affectionRingCache = document.querySelector('.cluster-role-ring');
-      }
-      if (!_affectionRingCache) return;
-      const targetItem = _affectionRingCache.querySelector(`[data-role-id="${toId}"]`);
-      if (!targetItem) return;
-
-      const float = document.createElement('span');
-      float.className = 'cluster-affection-float ' + (delta >= 0 ? 'positive' : 'negative');
-      float.textContent = (delta >= 0 ? '+' : '') + delta;
-      targetItem.appendChild(float);
-
-      float.addEventListener('animationend', () => float.remove());
-      setTimeout(() => { if (float.parentElement) float.remove(); }, 2500);
     };
 
     // 切换角色选择
