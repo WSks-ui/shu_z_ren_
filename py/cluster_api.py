@@ -83,13 +83,18 @@ async def cluster_discuss_stream(request: ClusterDiscussRequest = Body(...)):
             if not request.mode:
                 request.mode = prev_session.get("mode", request.mode)
 
-    # 创建编排器
+    # 创建编排器（预加载配置和记忆，减少首token前的等待）
+    t0 = time.time()
     orchestrator = await create_orchestrator(
         session_id=session_id,
         mode=request.mode,
         role_ids=request.roles,
         max_rounds=request.max_rounds
     )
+    # 预热：提前加载 LLM 配置和角色记忆，避免首个角色发言前的串行等待
+    await orchestrator._resolve_llm_config()
+    orchestrator._role_memories = await orchestrator._load_role_memories()
+    print(f"[集群 API] 预热完成 耗时={time.time()-t0:.2f}s")
 
     async def generate_stream():
         try:
@@ -193,7 +198,7 @@ async def _volcengine_tts(request: ClusterTTSRequest, tts_settings: dict):
         "req_params": {
             "text": request.text,
             "speaker": voice,
-            "speed_ratio": 1.0,
+            "speed_ratio": 1.5,
             "audio_params": {"format": "mp3", "sample_rate": 24000},
             "additions": json.dumps({"disable_markdown_filter": True})
         }
