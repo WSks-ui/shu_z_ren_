@@ -2622,25 +2622,9 @@ createApp({
         content: continueFrom ? `继续讨论：${clusterTopic.value}` : `开始${modeName}：${clusterTopic.value}`
       });
 
-      // 创建 AbortController 用于超时和手动停止
+      // 创建 AbortController 用于手动停止
       const abortController = new AbortController();
       clusterAbortController.value = abortController;
-
-      // 2分钟超时保护
-      const timeoutId = setTimeout(() => {
-        if (clusterStatus.value === 'discussing') {
-          abortController.abort();
-          clearTTSQueue();
-          clusterCurrentSpeaker.value = '';
-          clusterSpeakingRoleId.value = '';
-          clusterThinkingRole.value = null;
-          clusterMessages.value.push({
-            id: Date.now(),
-            type: 'system',
-            content: '讨论超时（2分钟），已自动结束'
-          });
-        }
-      }, 120000);
 
       let _scrollThrottle = null;
 
@@ -2734,14 +2718,16 @@ createApp({
                 lastMsg.reasoning = false;
               }
             }
-            // 分段 TTS：文字流式显示的同时，按句子切分入队语音
-            ttsPendingBuffer += data.content;
-            if (ttsPendingBuffer.length >= 100) {
-              const splitIdx = findSentenceEnd(ttsPendingBuffer, 60);
-              if (splitIdx > 0) {
-                const segment = ttsPendingBuffer.substring(0, splitIdx + 1);
-                ttsPendingBuffer = ttsPendingBuffer.substring(splitIdx + 1);
-                enqueueTTS(currentRoleId, segment);
+            // 分段 TTS：文字流式显示的同时，按句子切分入队语音（总结者不需要TTS）
+            if (currentRoleId !== 'moderator') {
+              ttsPendingBuffer += data.content;
+              if (ttsPendingBuffer.length >= 100) {
+                const splitIdx = findSentenceEnd(ttsPendingBuffer, 60);
+                if (splitIdx > 0) {
+                  const segment = ttsPendingBuffer.substring(0, splitIdx + 1);
+                  ttsPendingBuffer = ttsPendingBuffer.substring(splitIdx + 1);
+                  enqueueTTS(currentRoleId, segment);
+                }
               }
             }
             const lastMsg = clusterMessages.value[clusterMessages.value.length - 1];
@@ -2791,6 +2777,9 @@ createApp({
                 }
               } else if (data.type === 'round_start') {
                 clusterCurrentRound.value = data.round;
+              } else if (data.type === 'round_summary') {
+                // 总结者判断结果（不需要显示，仅内部使用）
+                _clog('SSE', `round_summary 轮=${data.round} should_end=${data.should_end}`);
               } else if (data.type === 'round_end') {
                 // 轮次结束，添加分隔线
                 clusterMessages.value.push({
@@ -2876,7 +2865,6 @@ createApp({
           });
         }
       } finally {
-        clearTimeout(timeoutId);
         if (_scrollThrottle) clearTimeout(_scrollThrottle);
         clusterAbortController.value = null;
         clusterStatus.value = 'idle';
@@ -4812,9 +4800,11 @@ createApp({
         console.error('语音识别错误:', event.error);
         isRecording.value = false;
         if (event.error === 'not-allowed') {
-          alert('请允许浏览器访问麦克风权限。');
+          // 先关闭连续模式，再提示（alert阻塞期间onend可能触发）
+          continuousVoiceMode.value = false;
+          setTimeout(() => alert('请允许浏览器访问麦克风权限。'), 0);
         } else if (event.error !== 'aborted') {
-          alert('语音识别失败，请重试。');
+          setTimeout(() => alert('语音识别失败，请重试。'), 0);
         }
       };
 
