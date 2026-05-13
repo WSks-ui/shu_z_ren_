@@ -5,6 +5,7 @@
 """
 
 import json
+import re
 import time
 import os
 import httpx
@@ -181,7 +182,7 @@ class ClusterOrchestrator:
                 _log("LLM", f"角色={role_name} 调用LLM")
                 t0 = time.time()
                 system_prompt = self._build_role_prompt(role_id, topic, round_responses, user_input)
-                messages = self._build_messages(system_prompt, topic, user_input, round_responses)
+                messages = self._build_messages(system_prompt, topic, user_input, round_responses, current_round=round_num)
                 async for chunk in self._call_llm_stream(messages):
                     if isinstance(chunk, tuple) and chunk[0] == "reasoning":
                         yield f"data: {json.dumps({'type': 'role_reasoning', 'role_id': role_id, 'content': chunk[1]}, ensure_ascii=False)}\n\n"
@@ -307,7 +308,7 @@ class ClusterOrchestrator:
 
         # 构建辩论提示词
         system_prompt = self._build_debate_prompt(role_id, stance, topic, round_responses)
-        messages = self._build_messages(system_prompt, topic, user_input, round_responses)
+        messages = self._build_messages(system_prompt, topic, user_input, round_responses, current_round=round_num)
 
         full_response = ""
         async for chunk in self._call_llm_stream(messages):
@@ -409,6 +410,11 @@ class ClusterOrchestrator:
                 "round": 1
             })
 
+        # 会诊模式只有1轮，结束后由总结者总结
+        round_responses_for_moderator = [{"role_id": r["role_id"], "role_name": r["role_name"], "content": r["content"]} for r in all_responses]
+        async for event in self._moderator_summarize(topic, 1, round_responses_for_moderator, 1):
+            yield event
+
         # 汇总
         yield f"data: {json.dumps({'type': 'round_end', 'round': 1}, ensure_ascii=False)}\n\n"
 
@@ -436,41 +442,16 @@ class ClusterOrchestrator:
         for resp in round_responses:
             name = resp.get("role_name", "未知")
             content = resp.get("content", "")
-            discussion_summary += f"- {name}：{content[:300]}\n"
+            discussion_summary += f"【{name}】{content[:500]}\n\n"
 
         # 如果有历史记录，也包含之前的讨论
         if len(self.history) > len(round_responses):
-            discussion_summary += "\n之前轮次的发言摘要：\n"
+            discussion_summary += "\n之前轮次的讨论：\n"
             prev_msgs = self.history[:-len(round_responses)]
-            seen = set()
             for msg in prev_msgs:
-                key = f"{msg.get('role_id', '')}-{msg.get('round', 0)}"
-                if key not in seen:
-                    seen.add(key)
-                    discussion_summary += f"- 第{msg.get('round', '?')}轮 {msg.get('role', '未知')}：{msg.get('content', '')[:150]}...\n"
+                discussion_summary += f"【第{msg.get('round', '?')}轮·{msg.get('role', '未知')}】{msg.get('content', '')[:300]}\n"
 
-        system_prompt = moderator_role["system_prompt"] + f"""
-
-## 当前任务
-请总结本轮讨论的进展，并判断是否需要继续讨论。
-
-你必须严格用以下 JSON 格式输出，不要包含任何其他文字：
-{{
-  "summary": "本轮讨论的简要总结（2-3句话，概括共识和分歧）",
-  "should_continue": true或false
-}}
-
-判断 should_continue 为 false 的条件（满足任一即可）：
-1. 各角色观点已趋于一致，没有新的分歧点
-2. 核心问题已有明确答案或方案
-3. 角色开始重复已有观点，讨论陷入循环
-
-判断 should_continue 为 true 的条件：
-1. 还有未解决的重要分歧
-2. 某些角度尚未被充分探讨
-3. 需要更多轮次来验证或深化观点
-
-注意：第{max_rounds}轮是最后一轮，无论如何必须结束。"""
+        system_prompt = moderator_role["system_prompt"].replace("{max_rounds}", str(max_rounds))
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -490,7 +471,6 @@ class ClusterOrchestrator:
         # 解析 should_continue
         should_end = round_num >= max_rounds  # 最后一轮必须结束
         try:
-            import re
             json_match = re.search(r'\{[\s\S]*\}', full_response)
             if json_match:
                 result = json.loads(json_match.group())
@@ -534,11 +514,14 @@ class ClusterOrchestrator:
 ## 集群讨论规则
 你正在参与一个多角色学术讨论，讨论话题是：{topic}
 
-### 重要约束
-- 你的回复应简洁有力，不超过 200 字
-- 不要重复前面角色已经说过的观点
-- 如果前面角色提出了有价值的观点，可以引用并在此基础上延伸
-- 保持你作为{role['name']}的专业视角和独特风格
+### 讨论目标
+通过多角度的深入对话，逐步逼近问题的本质，最终形成有价值的结论或行动方案。
+
+### 核心规则
+- **必须回应前人**：你不能自说自话，必须先回应前面角色的观点（赞同、补充、质疑或延伸），再展开你自己的论述
+- **推进讨论**：你的发言要让讨论往前走一步，而不是换个角度重新陈述同一件事
+- **保持角色独特性**：保持你作为{role['name']}的专业视角和独特风格，不要变成通用助手
+- **简洁有力**：回复不超过200字，直击要点，不要展开过多
 - 如果用户插话，优先回应用户的问题
 
 ### 当前讨论上下文
@@ -547,8 +530,8 @@ class ClusterOrchestrator:
         if previous_responses:
             context_lines = []
             for resp in previous_responses:
-                context_lines.append(f"- {resp['role_name']}：{resp['content'][:150]}...")
-            cluster_instruction += "\n前面角色的发言摘要：\n" + "\n".join(context_lines)
+                context_lines.append(f"【{resp['role_name']}】{resp['content'][:500]}")
+            cluster_instruction += "\n前面角色的发言：\n" + "\n\n".join(context_lines)
 
         if user_input:
             cluster_instruction += f"\n\n用户插话：{user_input}"
@@ -583,19 +566,19 @@ class ClusterOrchestrator:
 你正在参与一场学术辩论，辩论话题是：{topic}
 你的立场是：{stance_instruction[stance]}
 
-### 重要约束
-- 你的回复应简洁有力，不超过 200 字
-- 作为{stance}方，必须坚持你的立场，提出有力的论据
-- 如果对方提出了观点，你需要针对性地反驳或回应
-- 保持学术辩论的理性，不要攻击对方
+### 核心规则
+- **针对性反驳**：如果对方已经发言，你必须先回应对方的核心论点，指出其逻辑漏洞或证据不足之处，再提出你自己的论据
+- **坚持立场**：作为{stance}方，必须坚持你的立场，提出有力的论据
+- **简洁有力**：回复不超过200字，直击要点
 - 保持你作为{role['name']}的专业视角
+- 保持学术辩论的理性，不要攻击对方
 
 ### 当前辩论上下文
 """
 
         if previous_responses:
             for resp in previous_responses:
-                debate_instruction += f"\n{resp['stance']}方({resp['role_name']})：{resp['content'][:150]}..."
+                debate_instruction += f"\n【{resp['stance']}方·{resp['role_name']}】{resp['content'][:500]}"
 
         return base_prompt + debate_instruction
 
@@ -614,11 +597,11 @@ class ClusterOrchestrator:
 ## 导师会诊规则
 你正在参与导师会诊，从你的专业角度独立回答以下问题：{topic}
 
-### 重要约束
+### 核心规则
 - 你独立回答，不需要参考其他角色的观点
 - 从你作为{role['name']}的专业领域出发给出建议
-- 回复不超过 300 字
-- 给出具体、可操作的建议
+- 给出具体、有深度的分析和可操作的建议
+- 回复不超过300字
 """
 
         return base_prompt + consultation_instruction
@@ -748,15 +731,17 @@ class ClusterOrchestrator:
         system_prompt: str,
         topic: str,
         user_input: str = "",
-        previous_responses: List[Dict] = None
+        previous_responses: List[Dict] = None,
+        current_round: int = 0
     ) -> List[Dict[str, str]]:
         """构建 LLM 调用的消息列表"""
 
         messages = [{"role": "system", "content": system_prompt}]
 
-        # 如果有历史上下文（续聊模式），添加之前的讨论记录
+        # 如果有之前轮次的历史上下文（续聊或多轮讨论），添加之前的讨论记录
+        # 当前轮次的发言已通过 round_responses → _build_role_prompt 传入，不重复注入
         if self.history and len(self.history) > 0:
-            continuation_context = self._build_continuation_context(topic)
+            continuation_context = self._build_continuation_context(topic, current_round)
             if continuation_context:
                 messages.append({"role": "user", "content": continuation_context})
 
@@ -768,29 +753,37 @@ class ClusterOrchestrator:
 
         return messages
 
-    def _build_continuation_context(self, topic: str) -> str:
-        """构建续聊上下文，最近1轮完整保留，更早轮次截断摘要"""
+    def _build_continuation_context(self, topic: str, current_round: int = 0) -> str:
+        """构建续聊上下文，只注入之前轮次的讨论记录（当前轮次通过 round_responses 传入）。
+        过滤掉总结者的发言（JSON格式的总结对讨论角色是噪音）。"""
         if not self.history:
             return ""
 
-        lines = ["这是之前我们讨论过的内容，请在此基础上继续深入：\n"]
+        # 过滤掉总结者的发言，且只保留当前轮次之前的内容
+        filtered_history = [
+            msg for msg in self.history
+            if msg.get("role_id") != "moderator"
+            and (current_round == 0 or msg.get("round", 0) < current_round)
+        ]
+
+        if not filtered_history:
+            return ""
+
+        lines = ["这是之前轮次的讨论内容，请在此基础上继续深入：\n"]
 
         # 按轮次分组
         rounds = {}
-        for msg in self.history:
+        for msg in filtered_history:
             round_num = msg.get("round", 1)
             if round_num not in rounds:
                 rounds[round_num] = []
             rounds[round_num].append(msg)
 
         sorted_rounds = sorted(rounds.keys())
-        latest_round = sorted_rounds[-1] if sorted_rounds else 1
 
         for round_num in sorted_rounds:
             lines.append(f"### 第{round_num}轮")
-            # 最近1轮完整保留，更早轮次截断到80字
-            is_latest = (round_num == latest_round)
-            truncate_len = 150 if is_latest else 80
+            truncate_len = 80
             for msg in rounds[round_num]:
                 role_name = msg.get("role", msg.get("role_id", "未知"))
                 content = msg.get("content", "")
