@@ -1441,7 +1441,10 @@ async def education_chat(request: ChatRequest = Body(...)):
                 if line.startswith("data: "):
                     try:
                         chunk = json.loads(line[6:])
-                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        choices = chunk.get("choices", [])
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta", {})
                         content = delta.get("content", "")
                         if content:
                             if first_chunk_time is None:
@@ -1922,7 +1925,10 @@ async def education_chat_stream(request: ChatRequest = Body(...)):
                         if line.startswith("data: "):
                             try:
                                 chunk = json.loads(line[6:])
-                                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                choices = chunk.get("choices", [])
+                                if not choices:
+                                    continue
+                                delta = choices[0].get("delta", {})
 
                                 # 处理思考过程 (reasoning_content) - 实时输出
                                 reasoning_content = delta.get("reasoning_content", "")
